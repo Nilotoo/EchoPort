@@ -2,6 +2,7 @@
 //! ephemeral `UiState`; actions are collected as `Command`s and dispatched by
 //! the shell after the frame has been laid out.
 
+mod album;
 mod artist;
 mod downloads;
 mod home;
@@ -48,6 +49,7 @@ fn draw_page(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Ve
         Page::Downloads => downloads::draw(ui, app, theme, pending),
         Page::NowPlaying => now_playing::draw(ui, app, theme, pending),
         Page::Artist => artist::draw(ui, app, theme, pending),
+        Page::Album => album::draw(ui, app, theme, pending),
         Page::Profile => profile::draw(ui, app, theme, pending),
         Page::Settings => settings::draw(ui, app, theme, pending),
     }

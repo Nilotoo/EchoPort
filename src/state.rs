@@ -26,12 +26,13 @@ pub enum Page {
     Downloads,
     NowPlaying,
     Artist,
+    Album,
     Profile,
     Settings,
 }
 
 impl Page {
-    pub const PRIMARY: [Self; 9] = [
+    pub const PRIMARY: [Self; 10] = [
         Self::Home,
         Self::Search,
         Self::Library,
@@ -39,6 +40,7 @@ impl Page {
         Self::Downloads,
         Self::NowPlaying,
         Self::Artist,
+        Self::Album,
         Self::Profile,
         Self::Settings,
     ];
@@ -52,6 +54,7 @@ impl Page {
             Self::Downloads => "downloads",
             Self::NowPlaying => "now_playing",
             Self::Artist => "artist",
+            Self::Album => "album",
             Self::Profile => "profile",
             Self::Settings => "settings",
         }
@@ -109,6 +112,15 @@ impl ToolingStatus {
     }
 }
 
+/// Search result category shown by the search page.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum SearchTab {
+    #[default]
+    All,
+    Artists,
+    Albums,
+}
+
 #[derive(Clone, Debug)]
 pub struct SearchView {
     /// Text currently in the search box.
@@ -121,6 +133,7 @@ pub struct SearchView {
     pub loading_more: Option<Platform>,
     pub results: Option<SearchResults>,
     pub error: Option<String>,
+    pub tab: SearchTab,
 }
 
 impl Default for SearchView {
@@ -133,6 +146,7 @@ impl Default for SearchView {
             loading_more: None,
             results: None,
             error: None,
+            tab: SearchTab::All,
         }
     }
 }
@@ -180,6 +194,16 @@ pub struct UpdateView {
     /// Downloading/installing the available update.
     pub downloading: bool,
     pub progress: Option<f32>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct AlbumPageView {
+    pub album: Option<crate::model::Album>,
+    pub tracks: Vec<crate::model::Track>,
+    pub bio: Option<crate::model::ArtistBio>,
+    pub series: Vec<crate::model::Album>,
+    pub loading: bool,
+    pub error: Option<String>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -234,6 +258,7 @@ pub struct AppState {
     pub downloads: DownloadsView,
     pub background: BackgroundView,
     pub artist_page: ArtistPageView,
+    pub album_page: AlbumPageView,
     pub updates: UpdateView,
     pub cover: CoverView,
     pub tooling: ToolingStatus,
@@ -261,6 +286,8 @@ pub struct AppState {
     pub now_playing_tab: NowPlayingTab,
     pub queue_panel_open: bool,
     pub toasts: Vec<Toast>,
+    /// Tracks dropped onto the window; the UI asks whether to save them.
+    pub drop_prompt: Option<Vec<Track>>,
 
     /// True when running with the offline demo data (used for screenshots).
     pub demo: bool,
@@ -291,6 +318,7 @@ impl AppState {
             downloads: DownloadsView::default(),
             background: BackgroundView::default(),
             artist_page: ArtistPageView::default(),
+            album_page: AlbumPageView::default(),
             updates: UpdateView::default(),
             cover: CoverView::default(),
             tooling: ToolingStatus::default(),
@@ -310,6 +338,7 @@ impl AppState {
             now_playing_tab: NowPlayingTab::Track,
             queue_panel_open: false,
             toasts: Vec::new(),
+            drop_prompt: None,
             demo: false,
         }
     }
@@ -462,6 +491,12 @@ pub enum Command {
     RemoveFromQueue(usize),
     /// Open a producer/artist page and load bio + platform tracks.
     OpenArtist(Box<Artist>),
+    /// Open an album page and load its tracks + same-artist albums.
+    OpenAlbum(Box<crate::model::Album>),
+    /// Add/remove an album from the current profile's favourite albums.
+    ToggleFavoriteAlbum(Box<crate::model::Album>),
+    /// Save drag-and-dropped local files into the library.
+    SaveDroppedToLibrary(Vec<Track>),
     /// Return from the artist page to the search results.
     BackToSearch,
     /// Load more results for one platform (keeps the current query).
@@ -478,6 +513,14 @@ pub enum Command {
     RenamePlaylist {
         id: String,
         name: String,
+    },
+    SetPlaylistDescription {
+        id: String,
+        description: String,
+    },
+    SetPlaylistCover {
+        id: String,
+        source: Option<PathBuf>,
     },
     DeletePlaylist(String),
     AddToPlaylist {
@@ -517,10 +560,6 @@ pub enum Command {
     ExportProfile,
     /// Import a shared profile file as a new local profile and switch to it.
     ImportProfile,
-    /// Show/hide the always-on-top mini player window.
-    ToggleMiniPlayer,
-    /// Bring the main window back from the mini player.
-    RestoreMainWindow,
     /// Query GitHub Releases for a newer version.
     CheckForUpdates,
     /// Keep the current version (dismiss the startup update prompt).
@@ -557,6 +596,22 @@ pub enum AppEvent {
     SearchMoreDone(SearchResults),
     /// Artist/producer page data (bio + platform tracks).
     ArtistDetailReady(Box<ArtistDetail>),
+    /// Album page data (metadata + ordered tracks + same-artist albums).
+    AlbumDetailReady(Box<crate::model::AlbumDetail>),
+    /// Best-effort artist portrait URL found by a background lookup.
+    ArtistPortrait {
+        artist_id: String,
+        url: String,
+    },
+    /// A page cover (home/profile/library/playlist) finished downloading.
+    CoverPrefetched,
+    /// An artist avatar finished downloading.
+    ArtistImageReady,
+    /// A low-resolution search cover finished downloading.
+    SearchCoverReady {
+        generation: u64,
+        path: std::path::PathBuf,
+    },
     /// Result of the GitHub update check.
     UpdateCheckDone(Result<Option<UpdateInfo>, String>),
     /// Update asset download progress (0..1 when the size is known).

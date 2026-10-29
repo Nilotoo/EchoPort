@@ -11,7 +11,8 @@
 //! * yt-dlp work is delegated to `resolver` (which caps global concurrency).
 
 use crate::model::{
-    Artist, ArtistDetail, Platform, PlatformArtistResults, PlatformResults, SongBackground, Track,
+    Artist, ArtistDetail, Platform, PlatformAlbumResults, PlatformArtistResults, PlatformResults,
+    SongBackground, Track,
 };
 use crate::net::Http;
 use crate::resolver::{self, ResolveConfig, ResolveError};
@@ -344,6 +345,157 @@ fn artist_search_platform(
     }
 }
 
+/// Best-effort artist portrait for platforms whose search response has no
+/// portrait (currently Apple Music; Netease returns one directly).
+pub fn artist_portrait(http: &Http, artist: &crate::model::Artist) -> Option<String> {
+    match artist.platform {
+        Platform::AppleMusic => apple::artist_portrait(http, artist),
+        _ => None,
+    }
+}
+
+/// Derive creator cards from already-fetched track results for platforms
+/// without a public artist API (YouTube / SoundCloud / Bilibili). Reusing the
+/// track search avoids a second, duplicate yt-dlp search.
+pub fn artists_from_tracks(
+    query: &str,
+    results: &[PlatformResults],
+    limit: usize,
+) -> Vec<PlatformArtistResults> {
+    results
+        .iter()
+        .filter(|group| {
+            matches!(
+                group.platform,
+                Platform::YouTube | Platform::SoundCloud | Platform::Bilibili
+            )
+        })
+        .map(|group| {
+            let derived = artists::derive_creators(group.platform, query, &group.tracks, 2);
+            let mut cards = artists::finalize_artists(derived, query, limit);
+            // yt-dlp search rows do not expose channel avatars; use the first
+            // matching track thumbnail as a useful, cacheable fallback.
+            for card in &mut cards {
+                if card.image_url.is_none() {
+                    if let Some(track) = group.tracks.iter().find(|track| {
+                        artists::clean_creator_name(&track.artist).as_deref()
+                            == Some(card.name.as_str())
+                    }) {
+                        card.image_url = track.art_url.clone();
+                    }
+                }
+            }
+            PlatformArtistResults {
+                platform: group.platform,
+                artists: cards,
+                error: None,
+            }
+        })
+        .collect()
+}
+
+/// Search albums across the requested platforms (Apple / Netease only).
+pub fn search_albums(
+    http: &Http,
+    query: &str,
+    platforms: &[Platform],
+    limit: usize,
+) -> Vec<PlatformAlbumResults> {
+    let query = query.trim();
+    let limit = limit.clamp(1, 50);
+    let mut selected = Vec::new();
+    for platform in platforms {
+        if !selected.contains(platform) {
+            selected.push(*platform);
+        }
+    }
+    if query.is_empty() {
+        return selected
+            .into_iter()
+            .map(|platform| PlatformAlbumResults {
+                platform,
+                albums: Vec::new(),
+                error: None,
+            })
+            .collect();
+    }
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = selected
+            .iter()
+            .map(|platform| {
+                let platform = *platform;
+                let handle = scope.spawn(move || {
+                    let outcome: Result<Vec<crate::model::Album>, String> = match platform {
+                        Platform::AppleMusic => apple::search_albums(http, query, limit),
+                        Platform::Netease => netease::search_albums(http, query, limit),
+                        _ => Ok(Vec::new()),
+                    };
+                    PlatformAlbumResults {
+                        platform,
+                        albums: outcome.unwrap_or_default(),
+                        error: None,
+                    }
+                });
+                (platform, handle)
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|(platform, handle)| {
+                handle.join().unwrap_or_else(|_| PlatformAlbumResults {
+                    platform,
+                    albums: Vec::new(),
+                    error: Some("This platform failed unexpectedly.".to_owned()),
+                })
+            })
+            .collect()
+    })
+}
+
+/// Load an album page and its same-artist follow-up albums. Track, series
+/// and Wikipedia/background work run concurrently so the page does not wait
+/// for the slowest source sequentially.
+pub fn album_detail(http: &Http, album: &crate::model::Album) -> crate::model::AlbumDetail {
+    let (bio, (fetched_album, tracks), series) = std::thread::scope(|scope| {
+        let bio_handle =
+            scope.spawn(|| crate::background::album_bio_for(http, &album.artist, &album.title));
+        let tracks_handle = scope.spawn(|| -> (Option<crate::model::Album>, Vec<Track>) {
+            match album.platform {
+                Platform::AppleMusic => {
+                    (None, apple::album_tracks(http, album).unwrap_or_default())
+                }
+                Platform::Netease => match netease::album_detail(http, album) {
+                    Ok((meta, tracks)) => (Some(meta), tracks),
+                    Err(_) => (None, Vec::new()),
+                },
+                _ => (None, Vec::new()),
+            }
+        });
+        let series_handle = scope.spawn(|| match album.platform {
+            Platform::AppleMusic => {
+                apple::artist_albums(http, &album.artist, 12).unwrap_or_default()
+            }
+            Platform::Netease => {
+                netease::artist_albums(http, &album.artist, 12).unwrap_or_default()
+            }
+            _ => Vec::new(),
+        });
+        (
+            bio_handle.join().unwrap_or(None),
+            tracks_handle.join().unwrap_or_default(),
+            series_handle.join().unwrap_or_default(),
+        )
+    });
+    let mut detail = crate::model::AlbumDetail {
+        album: Some(fetched_album.unwrap_or_else(|| album.clone())),
+        tracks,
+        bio,
+        series,
+    };
+    detail.series.retain(|candidate| candidate.id != album.id);
+    detail
+}
+
 /// Load an artist/producer page: Wikipedia bio (strict relevance) plus hot
 /// tracks from the artist's own platform. No accounts, no DRM.
 pub fn artist_detail(http: &Http, config: &ResolveConfig, artist: &Artist) -> ArtistDetail {
@@ -373,6 +525,24 @@ pub fn artist_detail(http: &Http, config: &ResolveConfig, artist: &Artist) -> Ar
         Platform::Spotify | Platform::Local => Vec::new(),
     };
     detail.hot_tracks = finalize_hot_tracks(tracks, artist, HOT_TRACK_LIMIT);
+    // Platforms without an artist avatar endpoint can still use the first
+    // hot track's cover as a useful fallback.
+    if detail
+        .artist
+        .as_ref()
+        .map(|artist| artist.image_url.is_none())
+        .unwrap_or(false)
+    {
+        if let Some(url) = detail
+            .hot_tracks
+            .first()
+            .and_then(|track| track.art_url.clone())
+        {
+            if let Some(artist) = detail.artist.as_mut() {
+                artist.image_url = Some(url);
+            }
+        }
+    }
     detail
 }
 

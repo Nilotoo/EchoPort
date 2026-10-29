@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
-use crate::model::{Artist as ModelArtist, Platform, Track};
+use crate::model::{Album as ModelAlbum, Artist as ModelArtist, Platform, Track};
 use crate::net::Http;
 use crate::resolver::ResolveConfig;
 
@@ -20,6 +20,8 @@ const DETAIL_URL: &str = "https://music.163.com/api/song/detail/";
 const SONG_PAGE: &str = "https://music.163.com/song?id=";
 const ARTIST_PAGE: &str = "https://music.163.com/#/artist?id=";
 const ARTIST_DETAIL_URL: &str = "https://music.163.com/api/artist/";
+const ALBUM_DETAIL_URL: &str = "https://music.163.com/api/album/";
+const ALBUM_PAGE: &str = "https://music.163.com/#/album?id=";
 const REFERER: &str = "https://music.163.com/";
 
 #[derive(Debug, Default, Deserialize)]
@@ -56,6 +58,62 @@ struct ArtistSearchResponse {
 struct ArtistSearchResult {
     #[serde(default)]
     artists: Vec<ApiArtist>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct AlbumSearchResponse {
+    #[serde(default)]
+    code: Option<i64>,
+    #[serde(default)]
+    result: Option<AlbumSearchResult>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct AlbumSearchResult {
+    #[serde(default)]
+    albums: Vec<ApiAlbum>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ApiAlbum {
+    #[serde(default)]
+    id: Option<u64>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    pic_url: Option<String>,
+    #[serde(default)]
+    artist: Option<Artist>,
+    #[serde(default)]
+    artists: Vec<Artist>,
+    #[serde(default)]
+    size: Option<u32>,
+    #[serde(default)]
+    publish_time: Option<i64>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct AlbumDetailResponse {
+    #[serde(default)]
+    code: Option<i64>,
+    #[serde(default)]
+    album: Option<AlbumDetail>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AlbumDetail {
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    pic_url: Option<String>,
+    #[serde(default)]
+    size: Option<u32>,
+    #[serde(default)]
+    publish_time: Option<i64>,
+    #[serde(default)]
+    songs: Vec<Song>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -184,6 +242,162 @@ pub fn track_from_id(http: &Http, id: u64) -> Result<Track, String> {
         .get(&id)
         .and_then(build_track)
         .ok_or_else(|| format!("Netease song {id} was not found (removed or region locked)."))
+}
+
+// ---------------------------------------------------------------------------
+// Albums
+// ---------------------------------------------------------------------------
+
+fn album_artists(album: &ApiAlbum) -> String {
+    let names = util::join_names(
+        album
+            .artists
+            .iter()
+            .filter_map(|artist| artist.name.as_deref()),
+    );
+    if names.is_empty() {
+        album
+            .artist
+            .as_ref()
+            .and_then(|artist| artist.name.as_deref())
+            .and_then(util::clean)
+            .unwrap_or_default()
+    } else {
+        names
+    }
+}
+
+fn api_album_to_model(album: &ApiAlbum) -> Option<ModelAlbum> {
+    let id = album.id?;
+    let title = album.name.as_deref().and_then(util::clean)?;
+    let mut out = ModelAlbum::new(
+        Platform::Netease,
+        &id.to_string(),
+        title,
+        album_artists(album),
+    );
+    if let Some(art) = album.pic_url.as_deref().and_then(util::https_url) {
+        out = out.with_art(art);
+    }
+    if let Some(year) = album
+        .publish_time
+        .map(|ms| ms.saturating_add(8 * 3_600_000))
+        .and_then(util::year_from_unix_ms)
+    {
+        out = out.with_year(year);
+    }
+    if let Some(size) = album.size {
+        out = out.with_track_count(size);
+    }
+    out = out.with_page(format!("{ALBUM_PAGE}{id}"));
+    Some(out)
+}
+
+/// Search Netease albums (`type=10`).
+pub fn search_albums(http: &Http, query: &str, limit: usize) -> Result<Vec<ModelAlbum>, String> {
+    let limit = limit.clamp(1, 50);
+    let url = format!(
+        "{SEARCH_URL}?s={}&type=10&limit={limit}",
+        util::pct(query.trim())
+    );
+    let response: AlbumSearchResponse = http
+        .get_json(&url, &[("Referer", REFERER)])
+        .map_err(|err| format!("Netease album search failed: {err}"))?;
+    if let Some(code) = response.code {
+        if code != 200 {
+            return Err(format!("Netease album API error (code {code})"));
+        }
+    }
+    let albums = response
+        .result
+        .map(|result| result.albums)
+        .unwrap_or_default();
+    Ok(albums
+        .iter()
+        .filter_map(api_album_to_model)
+        .take(limit)
+        .collect())
+}
+
+/// Fetch album metadata + songs for the album page.
+pub fn album_detail(http: &Http, album: &ModelAlbum) -> Result<(ModelAlbum, Vec<Track>), String> {
+    let id = album
+        .source_id
+        .trim()
+        .parse::<u64>()
+        .map_err(|_| "This Netease album has an invalid source id.".to_owned())?;
+    let url = format!("{ALBUM_DETAIL_URL}{id}");
+    let raw = http
+        .get_text(&url, &[("Referer", REFERER)])
+        .map_err(|err| format!("Netease album lookup failed: {err}"))?;
+    let response: AlbumDetailResponse =
+        serde_json::from_str(&raw).map_err(|err| format!("Netease album parse failed: {err}"))?;
+    if let Some(code) = response.code {
+        if code != 200 {
+            return Err(format!("Netease album API error (code {code})"));
+        }
+    }
+    let detail = response.album.ok_or_else(|| {
+        "This Netease album is not available (removed or region locked).".to_owned()
+    })?;
+    let mut model = ModelAlbum::new(
+        Platform::Netease,
+        &id.to_string(),
+        detail
+            .name
+            .as_deref()
+            .and_then(util::clean)
+            .unwrap_or_else(|| album.title.clone()),
+        album.artist.clone(),
+    );
+    if let Some(art) = detail.pic_url.as_deref().and_then(util::https_url) {
+        model = model.with_art(art);
+    }
+    if let Some(year) = detail
+        .publish_time
+        .map(|ms| ms.saturating_add(8 * 3_600_000))
+        .and_then(util::year_from_unix_ms)
+    {
+        model = model.with_year(year);
+    }
+    if let Some(size) = detail.size {
+        model = model.with_track_count(size);
+    }
+    model = model.with_page(format!("{ALBUM_PAGE}{id}"));
+    let mut tracks = Vec::new();
+    for song in &detail.songs {
+        if let Some(mut track) = build_track(song) {
+            if track.album.is_none() {
+                track.album = Some(model.title.clone());
+            }
+            if track.art_url.is_none() {
+                track.art_url = model.art_url.clone();
+            }
+            tracks.push(track);
+        }
+    }
+    model.page_url = Some(format!("{ALBUM_PAGE}{id}"));
+    Ok((model, tracks))
+}
+
+/// Other albums by a Netease artist (album series/discography).
+pub fn artist_albums(
+    http: &Http,
+    artist_name: &str,
+    limit: usize,
+) -> Result<Vec<ModelAlbum>, String> {
+    let mut albums = search_albums(http, artist_name, limit.saturating_mul(2))?;
+    albums.retain(|album| {
+        album
+            .artist
+            .to_lowercase()
+            .contains(&artist_name.to_lowercase())
+            || artist_name
+                .to_lowercase()
+                .contains(&album.artist.to_lowercase())
+    });
+    albums.truncate(limit);
+    Ok(albums)
 }
 
 // ---------------------------------------------------------------------------

@@ -17,7 +17,9 @@ use crate::ui::widgets::{self, TrackRow};
 pub fn draw(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec<Command>) {
     ui.add_space(2.0);
     search_bar(ui, app, theme, pending);
-    ui.add_space(10.0);
+    ui.add_space(8.0);
+    search_tabs(ui, app, theme);
+    ui.add_space(6.0);
     filters(ui, app, theme);
     ui.add_space(12.0);
     if app.state.search.loading {
@@ -101,7 +103,7 @@ fn search_bar(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut V
             ),
         );
         let hint = app.state.tr(Key::SearchPlaceholder);
-        let response = ui.put(
+        let _response = ui.put(
             inner,
             egui::TextEdit::singleline(&mut app.state.search.input)
                 .id(id)
@@ -112,9 +114,6 @@ fn search_bar(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut V
                 .desired_width(inner.width()),
         );
         let mut submitted = false;
-        if response.has_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter)) {
-            submitted = true;
-        }
         if !app.state.search.input.is_empty() {
             let clear_rect = Rect::from_center_size(
                 Pos2::new(field_rect.right() - 23.0, field_rect.center().y),
@@ -183,6 +182,26 @@ fn submit(app: &mut EchoPortApp, pending: &mut Vec<Command>) {
         return;
     }
     pending.push(Command::Search { query, platforms });
+}
+
+// ---------------------------------------------------------------------------
+// Result category tabs
+// ---------------------------------------------------------------------------
+
+fn search_tabs(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme) {
+    use crate::state::SearchTab;
+    ui.horizontal(|ui| {
+        for (tab, key) in [
+            (SearchTab::All, Key::All),
+            (SearchTab::Artists, Key::Artists),
+            (SearchTab::Albums, Key::Albums),
+        ] {
+            let selected = app.state.search.tab == tab;
+            if style::chip(ui, theme, app.state.tr(key), None, selected).clicked() && !selected {
+                app.state.search.tab = tab;
+            }
+        }
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -458,7 +477,14 @@ fn results_view(
         app.ui.search_expanded.clear();
         app.ui.search_seen_query = Some(results.query.clone());
     }
-    let total: usize = results.results.iter().map(|group| group.tracks.len()).sum();
+    let tab = app.state.search.tab;
+    let total_tracks: usize = results.results.iter().map(|group| group.tracks.len()).sum();
+    let has_artists = results
+        .artists
+        .iter()
+        .any(|group| !group.artists.is_empty());
+    let has_albums = results.albums.iter().any(|group| !group.albums.is_empty());
+    let total = total_tracks + if has_artists { 1 } else { 0 } + if has_albums { 1 } else { 0 };
     egui::ScrollArea::vertical()
         .id_salt("search-results")
         .auto_shrink([false, false])
@@ -497,43 +523,128 @@ fn results_view(
             });
             ui.add_space(6.0);
 
-            let best = best_matches(&results.query, &results.results);
-            if !best.is_empty() {
-                section_heading(ui, theme, app.state.tr(Key::BestMatches), Some(best.len()));
-                ui.add_space(2.0);
-                for (index, track) in best.iter().enumerate() {
-                    best_row(ui, app, theme, pending, track, &best, index);
+            match tab {
+                crate::state::SearchTab::Artists => {
+                    artists_section(ui, app, theme, pending, results);
                 }
-                ui.add_space(14.0);
-            }
-
-            let artists = ranked_artists(&results.query, &results.artists);
-            if !artists.is_empty() {
-                section_heading(ui, theme, app.state.tr(Key::ProducersArtists), None);
-                style::hint_line(ui, theme, app.state.tr(Key::SearchArtistsHint));
-                ui.add_space(6.0);
-                for (platform, artists) in &artists {
-                    ui.push_id(("search-artists", platform.key()), |ui| {
-                        platform_subheading(ui, theme, *platform);
-                        let card_w = ((ui.available_width() - 20.0) / 3.0).clamp(170.0, 280.0);
-                        ui.horizontal_wrapped(|ui| {
-                            ui.spacing_mut().item_spacing.x = 10.0;
-                            for artist in artists {
-                                artist_card(ui, app, theme, pending, artist, card_w);
-                            }
-                        });
-                        ui.add_space(8.0);
-                    });
+                crate::state::SearchTab::Albums => {
+                    albums_section(ui, app, theme, pending, results);
                 }
-                ui.add_space(6.0);
-            }
+                crate::state::SearchTab::All => {
+                    let best = best_matches(&results.query, &results.results);
+                    if !best.is_empty() {
+                        section_heading(
+                            ui,
+                            theme,
+                            app.state.tr(Key::BestMatches),
+                            Some(best.len()),
+                        );
+                        ui.add_space(2.0);
+                        for (index, track) in best.iter().enumerate() {
+                            best_row(ui, app, theme, pending, track, &best, index);
+                        }
+                        ui.add_space(14.0);
+                    }
 
-            for group in ranked_groups(&results.query, &results.results) {
-                platform_group(ui, app, theme, pending, group);
-                ui.add_space(12.0);
+                    artists_section(ui, app, theme, pending, results);
+
+                    albums_section(ui, app, theme, pending, results);
+
+                    for group in ranked_groups(&results.query, &results.results) {
+                        platform_group(ui, app, theme, pending, group);
+                        ui.add_space(12.0);
+                    }
+                }
             }
             ui.add_space(20.0);
         });
+}
+
+fn artists_section(
+    ui: &mut Ui,
+    app: &mut EchoPortApp,
+    theme: &Theme,
+    pending: &mut Vec<Command>,
+    results: &SearchResults,
+) {
+    let artists = ranked_artists(&results.query, &results.artists);
+    if artists.is_empty() {
+        style::empty_state(
+            ui,
+            theme,
+            Icon::Profile,
+            app.state.tr(Key::SearchNoResults),
+            app.state.tr(Key::NoResultsHint),
+            None,
+        );
+        return;
+    }
+    section_heading(ui, theme, app.state.tr(Key::ProducersArtists), None);
+    style::hint_line(ui, theme, app.state.tr(Key::SearchArtistsHint));
+    ui.add_space(6.0);
+    for (platform, artists) in &artists {
+        ui.push_id(("search-artists", platform.key()), |ui| {
+            platform_subheading(ui, theme, *platform);
+            let card_w = ((ui.available_width() - 20.0) / 3.0).clamp(170.0, 280.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing.x = 10.0;
+                for artist in artists {
+                    artist_card(ui, app, theme, pending, artist, card_w);
+                }
+            });
+            ui.add_space(8.0);
+        });
+    }
+    ui.add_space(6.0);
+}
+
+fn album_relevance(query: &str, album: &crate::model::Album) -> i32 {
+    score_text(query, &album.title, &album.artist)
+}
+
+fn albums_section(
+    ui: &mut Ui,
+    app: &mut EchoPortApp,
+    theme: &Theme,
+    pending: &mut Vec<Command>,
+    results: &SearchResults,
+) {
+    let mut albums: Vec<crate::model::Album> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for group in &results.albums {
+        for album in &group.albums {
+            if seen.insert(album.id.clone()) {
+                albums.push(album.clone());
+            }
+        }
+    }
+    albums.sort_by(|a, b| {
+        album_relevance(&results.query, b)
+            .cmp(&album_relevance(&results.query, a))
+            .then(a.platform.key().cmp(b.platform.key()))
+            .then(a.title.cmp(&b.title))
+    });
+    if albums.is_empty() {
+        style::empty_state(
+            ui,
+            theme,
+            Icon::Music,
+            app.state.tr(Key::SearchNoResults),
+            app.state.tr(Key::NoResultsHint),
+            None,
+        );
+        return;
+    }
+    section_heading(ui, theme, app.state.tr(Key::Albums), Some(albums.len()));
+    ui.add_space(6.0);
+    let width = ((ui.available_width() - 20.0) / 2.0).clamp(220.0, 360.0);
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 10.0;
+        for album in &albums {
+            widgets::album_card(ui, app, theme, pending, album, width);
+        }
+    });
+    ui.add_space(14.0);
 }
 
 fn platform_subheading(ui: &mut Ui, theme: &Theme, platform: Platform) {

@@ -226,6 +226,22 @@ pub fn fetch(http: &Http, config: &ResolveConfig, track: &Track) -> SongBackgrou
 /// Fetch only the Wikipedia artist biography (used by the artist/producer page
 /// provider). Same strict relevance gate as `fetch`, but no album/song/video
 /// work, and its own 8 s budget.
+/// Fetch only the Wikipedia/MusicBrainz album background. Used by the album
+/// page, with the same strict relevance gate as the track background panel.
+pub(crate) fn album_bio_for(http: &Http, artist_name: &str, album: &str) -> Option<ArtistBio> {
+    let artist = primary_artist(artist_name)?;
+    let album = util::clean(album)?;
+    let context = TrackContext {
+        artist_tokens: significant_tokens(&artist),
+        album_tokens: significant_tokens(&album),
+        title_tokens: Vec::new(),
+        artist,
+        album: Some(album),
+        title: String::new(),
+    };
+    album_background(http, &context, Instant::now())
+}
+
 pub(crate) fn artist_bio_for(http: &Http, artist_name: &str) -> Option<ArtistBio> {
     let started = Instant::now();
     let context = TrackContext::from_artist(artist_name)?;
@@ -304,7 +320,11 @@ impl TrackContext {
     /// An album article must mention the artist and be about the album.
     fn album_article_ok(&self, bio: &ArtistBio) -> bool {
         let text = format!("{} {}", bio.title, bio.extract);
-        self.artist_matches(&text) && self.album_matches(&text)
+        // The album title tokens must be in the article TITLE, not merely
+        // mentioned somewhere in the extract (e.g. an artist's previous album
+        // article can mention the searched album title and would otherwise be
+        // shown as the wrong album background).
+        self.artist_matches(&text) && self.album_matches(&bio.title)
     }
 
     /// A song article must mention the artist and be about the title.
@@ -411,11 +431,38 @@ fn album_candidates(context: &TrackContext) -> Vec<String> {
     let Some(album) = context.album.as_deref() else {
         return Vec::new();
     };
-    vec![
-        format!("{album} (album)"),
-        format!("{} {album}", context.artist),
-        album.to_owned(),
-    ]
+    // Album search titles often include edition/remaster suffixes that are
+    // not part of the Wikipedia article title. Try the base title first.
+    let base = base_album_title(album);
+    let mut candidates = vec![
+        format!("{base} (album)"),
+        format!("{} {base}", context.artist),
+        base.clone(),
+    ];
+    if base != album {
+        candidates.push(album.to_owned());
+    }
+    candidates
+}
+
+/// Remove edition qualifiers such as "(Deluxe Edition - 2022 Remaster)" or
+/// " - Single" from an album title before looking it up on Wikipedia.
+fn base_album_title(album: &str) -> String {
+    let mut title = album.trim();
+    if let Some(index) = title.find(" (") {
+        title = &title[..index];
+    }
+    for suffix in [" - Single", " - EP", " - Remaster", " - Remastered"] {
+        if let Some(stripped) = title.strip_suffix(suffix) {
+            title = stripped;
+        }
+    }
+    let title = title.trim();
+    if title.is_empty() {
+        album.trim().to_owned()
+    } else {
+        title.to_owned()
+    }
 }
 
 fn album_search_query(context: &TrackContext) -> Option<String> {

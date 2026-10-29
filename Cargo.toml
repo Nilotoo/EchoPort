@@ -1,6 +1,6 @@
 [package]
 name = "echoport"
-version = "0.2.3"
+version = "0.3.0"
 edition = "2021"
 repository = "https://github.com/Nilotoo/EchoPort"
 homepage = "https://github.com/Nilotoo/EchoPort"

@@ -297,6 +297,9 @@ pub struct Playlist {
     pub description: String,
     #[serde(default)]
     pub track_ids: Vec<String>,
+    /// Optional user-picked playlist image stored under the app data dir.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cover_path: Option<PathBuf>,
     pub created_at: u64,
     pub updated_at: u64,
 }
@@ -313,6 +316,7 @@ impl Playlist {
             name,
             description: String::new(),
             track_ids: Vec::new(),
+            cover_path: None,
             created_at: now,
             updated_at: now,
         }
@@ -455,6 +459,12 @@ pub struct Profile {
     #[serde(default)]
     pub favorites: Vec<String>,
     #[serde(default)]
+    pub favorite_albums: Vec<Album>,
+    /// Local audio files explicitly saved from drag-and-drop (not in a
+    /// configured music folder).
+    #[serde(default)]
+    pub local_files: Vec<PathBuf>,
+    #[serde(default)]
     pub history: Vec<HistoryEntry>,
 }
 
@@ -472,6 +482,8 @@ impl Profile {
             tracks: BTreeMap::new(),
             playlists: Vec::new(),
             favorites: Vec::new(),
+            favorite_albums: Vec::new(),
+            local_files: Vec::new(),
             history: Vec::new(),
         }
     }
@@ -493,6 +505,28 @@ impl Profile {
                 .cloned()
                 .collect();
             self.tracks.retain(|id, _| keep.iter().any(|k| k == id));
+        }
+    }
+
+    pub fn is_favorite_album(&self, album_id: &str) -> bool {
+        self.favorite_albums
+            .iter()
+            .any(|album| album.id == album_id)
+    }
+
+    /// Toggle an album favourite; the full album metadata is kept locally so
+    /// the Profile page works offline and survives restarts.
+    pub fn toggle_favorite_album(&mut self, album: &Album) -> bool {
+        if let Some(index) = self
+            .favorite_albums
+            .iter()
+            .position(|candidate| candidate.id == album.id)
+        {
+            self.favorite_albums.remove(index);
+            false
+        } else {
+            self.favorite_albums.push(album.clone());
+            true
         }
     }
 
@@ -740,6 +774,92 @@ impl Artist {
     }
 }
 
+/// A catalogue album. Albums are metadata-only; playback resolves the
+/// individual tracks exactly like a track search result.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Album {
+    pub id: String,
+    pub platform: Platform,
+    pub title: String,
+    pub artist: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub art_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub year: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub track_count: Option<u32>,
+    #[serde(default)]
+    pub source_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page_url: Option<String>,
+}
+
+impl Album {
+    pub fn new(
+        platform: Platform,
+        source_id: &str,
+        title: impl Into<String>,
+        artist: impl Into<String>,
+    ) -> Self {
+        Self {
+            id: format!("{}:album:{}", platform.key(), stable_hash(source_id)),
+            platform,
+            title: title.into(),
+            artist: artist.into(),
+            art_url: None,
+            year: None,
+            track_count: None,
+            source_id: source_id.to_owned(),
+            page_url: None,
+        }
+    }
+
+    pub fn with_art(mut self, url: impl Into<String>) -> Self {
+        let url = url.into();
+        if !url.is_empty() {
+            self.art_url = Some(url);
+        }
+        self
+    }
+
+    pub fn with_year(mut self, year: u16) -> Self {
+        self.year = Some(year);
+        self
+    }
+
+    pub fn with_track_count(mut self, count: u32) -> Self {
+        if count > 0 {
+            self.track_count = Some(count);
+        }
+        self
+    }
+
+    pub fn with_page(mut self, url: impl Into<String>) -> Self {
+        let url = url.into();
+        if !url.is_empty() {
+            self.page_url = Some(url);
+        }
+        self
+    }
+}
+
+/// Full album page payload (metadata, ordered tracks, same-artist albums).
+#[derive(Clone, Debug, Default)]
+pub struct AlbumDetail {
+    pub album: Option<Album>,
+    pub tracks: Vec<Track>,
+    pub bio: Option<ArtistBio>,
+    pub series: Vec<Album>,
+}
+
+/// Albums found on one platform.
+#[derive(Clone, Debug)]
+pub struct PlatformAlbumResults {
+    pub platform: Platform,
+    pub albums: Vec<Album>,
+    pub error: Option<String>,
+}
+
 /// Artist/producer page content: biography from Wikipedia plus platform tracks.
 #[derive(Clone, Debug, Default)]
 pub struct ArtistDetail {
@@ -769,6 +889,8 @@ pub struct SearchResults {
     pub results: Vec<PlatformResults>,
     /// Producer/artist cards, ranked by relevance.
     pub artists: Vec<PlatformArtistResults>,
+    /// Album cards, ranked by relevance.
+    pub albums: Vec<PlatformAlbumResults>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -846,6 +968,12 @@ pub struct ProfileShare {
     #[serde(default)]
     pub favorites: Vec<String>,
     #[serde(default)]
+    pub favorite_albums: Vec<Album>,
+    /// Local audio files explicitly saved from drag-and-drop (not in a
+    /// configured music folder).
+    #[serde(default)]
+    pub local_files: Vec<PathBuf>,
+    #[serde(default)]
     pub history: Vec<HistoryEntry>,
 }
 
@@ -864,6 +992,8 @@ impl ProfileShare {
             tracks: profile.tracks.clone(),
             playlists: profile.playlists.clone(),
             favorites: profile.favorites.clone(),
+            favorite_albums: profile.favorite_albums.clone(),
+            local_files: profile.local_files.clone(),
             history: profile.history.clone(),
         }
     }
@@ -875,6 +1005,8 @@ impl ProfileShare {
         profile.tracks = self.tracks;
         profile.playlists = self.playlists;
         profile.favorites = self.favorites;
+        profile.favorite_albums = self.favorite_albums;
+        profile.local_files = self.local_files;
         profile.history = self.history;
         profile
     }
@@ -1081,6 +1213,24 @@ mod tests {
         assert_eq!(format_duration(0.0), "--:--");
         assert_eq!(format_duration(65.0), "1:05");
         assert_eq!(format_duration(3725.0), "1:02:05");
+    }
+    #[test]
+    fn album_favorites_and_local_files_roundtrip() {
+        let mut profile = Profile::new("Me", Settings::default());
+        let album = Album::new(Platform::AppleMusic, "123", "Album", "Artist")
+            .with_art("https://example.test/cover.jpg")
+            .with_year(2024)
+            .with_track_count(12);
+        assert!(profile.toggle_favorite_album(&album));
+        assert!(profile.is_favorite_album(&album.id));
+        profile.local_files.push(PathBuf::from("/tmp/example.flac"));
+        let json = serde_json::to_string(&profile).expect("serialize profile");
+        let mut parsed: Profile = serde_json::from_str(&json).expect("deserialize profile");
+        assert_eq!(parsed.favorite_albums.len(), 1);
+        assert_eq!(parsed.favorite_albums[0].title, "Album");
+        assert_eq!(parsed.local_files.len(), 1);
+        assert!(!parsed.toggle_favorite_album(&album));
+        assert!(!parsed.is_favorite_album(&album.id));
     }
 }
 

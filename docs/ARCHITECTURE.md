@@ -322,14 +322,8 @@ defaults to `~/Music/EchoPort`.
   (bilingual HTML manuals) and `examples/config.{lua,zh-CN.lua,en.lua}`; the Windows zip additionally
   has `README-WINDOWS`, `echoport.ico` and the Windows build scripts.
 
-### Mini player & background performance mode / 迷你播放器与后台模式
+### Background performance mode / 后台模式
 
-* **Mini player (v0.1.7)**: `ui/mini.rs::show()` renders an immediate egui viewport
-  (`ViewportBuilder` 420×142, always-on-top) while `EchoPortApp.mini_player` is true. It reads the same
-  app state (now-playing, playback position/state) and pushes `Command::ToggleMiniPlayer`,
-  `Command::RestoreMainWindow` and transport commands through the normal dispatch path. The main
-  window toggles it by clicking the sidebar brand; `ECHOPORT_MINI=1` auto-opens it for QA,
-  `ECHOPORT_MINI_SHOT=<path>` requests an egui viewport screenshot (backend-dependent).
 * **Background performance mode**: in `app.rs::update` the viewport focus/minimized flags set
   `state.ui_backgrounded`; repaint intervals become 1000 ms when backgrounded (66 ms playing,
   90 ms busy, layout repaint off) and normal otherwise. Audio runs on its own thread/stream and is not
@@ -366,7 +360,7 @@ defaults to `~/Music/EchoPort`.
 * **Verification status**: update-check/version-comparison logic is covered by unit tests and verified with
   fake/local data; **no live GitHub request was made this round** because the repo URL/auth are pending.
 
-### Security, slimming & installers (v0.2.3) / 安全、精简与安装包
+### Security, slimming & installers (v0.3.0) / 安全、精简与安装包
 
 * **Update-check hardening**: `update::repo()` only accepts `owner/name` (GitHub-safe chars), release
   URLs are restricted to `https://github.com/…`, version strings are whitelisted, and the checker
@@ -511,8 +505,7 @@ output device (no device → playback error) and HTTPS for online sources (local
 * **Player bar alignment**: `player_bar` receives the sidebar width and centres its
   transport + scrubber on the content column (`(panel.width + sidebar) / 2`), using
   the same order/gaps/button sizes as the Now-playing transport. All transport buttons
-  share one vertical centre line (no top-aligned outliers), only the left
-  mini-player/transport divider is painted, and the right tool cluster is tightened
+  share one vertical centre line (no top-aligned outliers), only the left divider is painted, and the right tool cluster is tightened
   (left-shifted) so it stays clear of the transport at every window size.
 * **Playlist sharing**: `model::PlaylistShare` is a versioned metadata-only JSON
   document (tracks with source ids/URLs, no audio, no cache paths); export writes it

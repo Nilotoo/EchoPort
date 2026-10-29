@@ -7,7 +7,7 @@
 many web sources — with mixed-platform playlists, downloads and song background.
 **No account. No cloud. No telemetry.**
 
-`Rust 1.85+` · `egui 0.32` · `Linux / Windows / macOS` · `GPL-3.0` · `v0.2.3`
+`Rust 1.85+` · `egui 0.32` · `Linux / Windows / macOS` · `GPL-3.0` · `v0.3.0`
 · 中文 | [English](#english)
 
 ---
@@ -32,10 +32,6 @@ many web sources — with mixed-platform playlists, downloads and song backgroun
 |---|---|
 | ![Settings](screenshots/qa-settings.png) | ![Profile collapsed](screenshots/qa18-profile-collapsed.png) |
 
-| Profile（编辑器展开：Save / Cancel / ×） | Mini player（迷你播放器） |
-|---|---|
-| ![Profile editing](screenshots/qa18-profile-editing.png) | ![Mini player](screenshots/qa17-mini-player.png) |
-
 | Startup splash（启动动画） | Splash update prompt（更新提示） |
 |---|---|
 | ![Splash](screenshots/qa19-splash.png) | ![Splash update](screenshots/qa19-splash-update.png) |
@@ -55,6 +51,14 @@ many web sources — with mixed-platform playlists, downloads and song backgroun
 | 125% UI scale · Home |  |
 |---|---|
 | ![125% scale](screenshots/qa-ui-scale-125-home.png) | |
+
+## v0.3.0 主要更新
+
+* **搜索分类**：综合 / 艺人 / 专辑三个标签；专辑结果单独成卡片，不再和歌曲混在一起。
+* **专辑详情与系列**：点专辑进入详情页，查看封面、年份、曲目、收藏和「同艺人其它专辑」；可继续在系列中跳转。
+* **专辑收藏**：专辑卡片和详情页可收藏，Profile 页新增 Favorite albums。
+* **拖入音频自动播放**：把本地音频拖到窗口即开始播放；随后询问是否保存到资料库（默认不保存）。
+* **继续轻量**：无新增运行时依赖，主要复用现有 ArtCache/provider 架构。
 
 ## ✨ 功能
 
@@ -151,8 +155,8 @@ C 编译器用于编译内置 Lua 5.4（mlua vendored），不需要安装系统
 内含：`echoport` 二进制、`echoport.desktop`、`echoport.png`、`README.md`、`INSTALL.txt`。安装：
 
 ```bash
-tar -xzf echoport-0.2.3-linux-x86_64.tar.gz
-cd echoport-0.2.3-linux-x86_64
+tar -xzf echoport-0.3.0-linux-x86_64.tar.gz
+cd echoport-0.3.0-linux-x86_64
 mkdir -p ~/.local/bin ~/.local/share/applications ~/.local/share/icons/hicolor/256x256/apps
 install -m755 echoport        ~/.local/bin/echoport
 install -m644 echoport.desktop ~/.local/share/applications/echoport.desktop
@@ -161,15 +165,15 @@ echoport   # 或从应用菜单启动 EchoPort
 ```
 
 * **Arch 用户**：源码目录运行 `./scripts/install-arch.sh`（无 sudo，自动安装到 `~/.local`）；
-  发布包提供 pacman 包：`sudo pacman -U echoport-0.2.3-1-x86_64.pkg.tar.zst`（AUR PKGBUILD 见
+  发布包提供 pacman 包：`sudo pacman -U echoport-0.3.0-1-x86_64.pkg.tar.zst`（AUR PKGBUILD 见
   `packaging/arch/`，依赖 glibc/gcc-libs，可选 yt-dlp/ffmpeg）。
 
-* **发布资产 / release assets**：`echoport-0.2.3-linux-x86_64.tar.gz`（绿色版）、
-  `echoport-0.2.3-1-x86_64.pkg.tar.zst`（Arch pacman）、`echoport-0.2.3-windows-x86_64.zip`（绿色版）、
-  `echoport-0.2.3-windows-x86_64.msi`（per-user 安装）、macOS `EchoPort.app.zip`（CI 构建），
+* **发布资产 / release assets**：`echoport-0.3.0-linux-x86_64.tar.gz`（绿色版）、
+  `echoport-0.3.0-1-x86_64.pkg.tar.zst`（Arch pacman）、`echoport-0.3.0-windows-x86_64.zip`（绿色版）、
+  `echoport-0.3.0-windows-x86_64.msi`（per-user 安装）、macOS `EchoPort.app.zip`（CI 构建），
   每个文件附 `.sha256`。
 
-> 发布包**不含** yt-dlp / ffmpeg，请按上面的依赖说明另外安装。当前项目处于 0.2.3
+> 发布包**不含** yt-dlp / ffmpeg，请按上面的依赖说明另外安装。当前项目处于 0.3.0
 > 开发阶段，尚未提供官方托管的二进制下载；请按源码构建或使用脚本自行打包。
 
 ### Windows 10 / 11（x86_64）
@@ -203,16 +207,17 @@ rustup target add x86_64-pc-windows-gnu
 
 交叉构建产物是未签名 PE，**未在 Windows 真机运行验证**；正式发布请在 Windows 上原生构建。
 
-**v0.2.3 构建状态**
+**v0.3.0 构建状态**
 
 * 交叉构建的 PE 已通过静态检查：`Subsystem 00000002 (Windows GUI)`（无控制台窗口）、包含
   `.rsrc` 图标资源目录（多尺寸 `assets/echoport.ico`）、外部工具子进程使用 `CREATE_NO_WINDOW`。
-* 产物：绿色版 `dist/echoport-0.2.3-windows-x86_64.zip` 与 per-user MSI
-  `dist/echoport-0.2.3-windows-x86_64.msi`（无需管理员、开始菜单快捷方式 + 标准卸载）；MSI 还带
+* 产物：绿色版 `dist/echoport-0.3.0-windows-x86_64.zip` 与 per-user MSI
+  `dist/echoport-0.3.0-windows-x86_64.msi`（无需管理员、开始菜单快捷方式 + 标准卸载）；MSI 还带
   **「Uninstall EchoPort (clean app data)」** 一键干净卸载（删除设置/资料/缓存，保留已下载音乐）。
-  **安装器（setup.exe）、MSI 和 zip 都内置 yt-dlp.exe + ffmpeg.exe**，普通用户无需另装依赖。
-  **推荐下载 `-setup.exe` 安装器**（有安装目录/桌面快捷方式选择、开始菜单、卸载器）；MSI 是静默 per-user 安装（无界面选项）；
-  zip 仅适合便携使用。
+  **NSIS setup.exe、MSI 和 zip 都内置 yt-dlp.exe + ffmpeg.exe**，普通用户无需另装依赖。
+  **Windows 推荐下载 `-setup.exe` 安装器（NSIS）**：有安装目录/桌面快捷方式选择、开始菜单、卸载器，
+  默认装到 `%LOCALAPPDATA%\Programs\EchoPort`（避免和缓存目录冲突），图标和路径更稳定；
+  MSI 用于静默部署；zip 仅适合便携使用。Inno Setup 脚本已准备，待后续版本接入 CI。
   MSI 在 Linux 用
   msitools/wixl 交叉构建，**未在 Windows 真机执行**，未签名 → SmartScreen 提示。
   **未签名、未在 Windows 实机运行**；首次运行请留意 SmartScreen 与 OpenGL 驱动要求。
@@ -223,7 +228,7 @@ rustup target add x86_64-pc-windows-gnu
 * 在线播放/下载需要 `yt-dlp.exe` 与 `ffmpeg.exe`：放到 `PATH` 或 `echoport.exe` 旁边；
   也可在设置里指定路径，或设置 `ECHOPORT_YT_DLP` / `ECHOPORT_FFMPEG`。
 * 数据位置见下方「数据与缓存位置」表（`%APPDATA%\echoport`、
-  `%LOCALAPPDATA%\echoport\cache`）；下载默认 `%USERPROFILE%\Music\EchoPort`。
+  `%LOCALAPPDATA%\echoport`（缓存；安装目录是 `%LOCALAPPDATA%\Programs\EchoPort`））；下载默认 `%USERPROFILE%\Music\EchoPort`。
 * DPI 缩放由 winit/egui 处理；界面缩放可在 **设置 → 外观** 选 100 / 110 / 125 / 150%。
 * 已知限制：未签名 / 无安装器 / 无自动更新；依赖 OpenGL 驱动；yt-dlp/ffmpeg 不随包；
   **本轮 Windows 支持为源码审计 + 交叉构建 PE，尚未在 Windows 实机运行验证**。
@@ -397,7 +402,7 @@ ECHOPORT_DEMO=1 cargo run     # 离线演示模式：假数据 + 生成的封面
 
 ---
 
-## 🔐 v0.2.3：安全/隐私加固、精简与安装包
+## 🔐 v0.3.0：安全/隐私加固、精简与安装包
 
 * **安全加固**：更新检查只接受 `owner/name` 仓库与 **https://github.com/** 发布链接；版本字符串白名单
   清洗；`OpenUrl` 只允许 http/https；资料/歌单导入限制 8 MB 文件与头像/简介/名称/歌单/曲目数量上限。
@@ -414,7 +419,7 @@ ECHOPORT_DEMO=1 cargo run     # 离线演示模式：假数据 + 生成的封面
   macOS zip 及各自 sha256。
 * **更新检查仓库**：默认目标现为 `https://github.com/Nilotoo/EchoPort`；仓库尚未 push，真实在线更新
   检查仍未验证（fake/本地路径 + 单元测试覆盖）。
-* 版本与发布包更新为 **v0.2.3**。
+* 版本与发布包更新为 **v0.3.0**。
 
 ---
 
@@ -456,12 +461,9 @@ ECHOPORT_DEMO=1 cargo run     # 离线演示模式：假数据 + 生成的封面
 
 ---
 
-## 🩹 v0.1.7：迷你播放器 / 后台性能模式 / 图标修正
+## 🩹 v0.1.7：后台性能模式 / 图标修正
 
-* **迷你播放器窗口（Mini player）**：点击侧边栏顶部的 **EchoPort 品牌/logo** 打开或关闭一个
-  420×142 的**始终置顶**浮动窗口：封面、标题/歌手、进度条与时间、上一首/播放暂停/下一首、
-  「打开主窗口」与关闭按钮；点击封面也会恢复主窗口。它作为独立 egui viewport 共享应用状态，
-  主窗口可以最小化/被遮挡，播放继续。`ECHOPORT_MINI=1` 可直接打开用于 QA。
+
 * **后台性能模式（自动）**：主窗口失焦或最小化时，UI 重绘节奏自动降速（播放中 66 ms → 1000 ms、
   有后台任务 90 ms → 1000 ms、布局 50 ms → 关闭），动画实际冻结，**音频播放不受影响**；
   回到前台自动恢复原节奏。
@@ -513,7 +515,7 @@ ECHOPORT_DEMO=1 cargo run     # 离线演示模式：假数据 + 生成的封面
 
 * **播放控制垂直居中**：底部播放条与「正在播放」页的 transport 按钮（来源/上一首/播放/下一首/循环/随机）
   统一垂直居中到同一条中线上（此前左侧两个按钮偏上）。
-* **移除多余右侧分隔线**：底部播放条只保留 mini-player 与 transport 之间的左侧细分隔线，右侧分隔线已删除。
+* **移除多余右侧分隔线**：底部播放条只保留左侧细分隔线，右侧分隔线已删除。
 * **右侧工具左移**：喜欢/队列/音量/信息等右侧工具整体左移（实测均匀左移 40 px），980×620、125%/150% 下不裁切。
 * **Bilibili / SoundCloud 回退**：这两类来源在自身地址/搜索失败后，最后会尝试 **YouTube 公开音频匹配**，
   因此受 412/反爬限制的结果仍可能播放；若所有来源都失败，才显示友好的 412/567 双语提示。
@@ -647,7 +649,7 @@ GPL-3.0 © EchoPort contributors. 见 [LICENSE](LICENSE)。
 mixed-platform playlists, downloads and song background all dock in one place.
 **No account, nothing uploaded.**
 
-`Rust 1.85+` · `egui 0.32` · `Linux / Windows / macOS` · `GPL-3.0` · `v0.2.3`
+`Rust 1.85+` · `egui 0.32` · `Linux / Windows / macOS` · `GPL-3.0` · `v0.3.0`
 · English | [中文](#echoport--回声港)
 
 ## 📸 Screenshots
@@ -669,10 +671,6 @@ All screenshots use an isolated temporary XDG environment and the neutral demo p
 | Settings | Profile (on-demand editor, collapsed) |
 |---|---|
 | ![Settings](screenshots/qa-settings.png) | ![Profile collapsed](screenshots/qa18-profile-collapsed.png) |
-
-| Profile (editor open: Save / Cancel / ×) | Mini player |
-|---|---|
-| ![Profile editing](screenshots/qa18-profile-editing.png) | ![Mini player](screenshots/qa17-mini-player.png) |
 
 | Startup splash | Splash update prompt |
 |---|---|
@@ -798,8 +796,8 @@ release attachments) contains the `echoport` binary, `echoport.desktop`, `echopo
 `README.md` and `INSTALL.txt`. Install with:
 
 ```bash
-tar -xzf echoport-0.2.3-linux-x86_64.tar.gz
-cd echoport-0.2.3-linux-x86_64
+tar -xzf echoport-0.3.0-linux-x86_64.tar.gz
+cd echoport-0.3.0-linux-x86_64
 mkdir -p ~/.local/bin ~/.local/share/applications ~/.local/share/icons/hicolor/256x256/apps
 install -m755 echoport        ~/.local/bin/echoport
 install -m644 echoport.desktop ~/.local/share/applications/echoport.desktop
@@ -808,16 +806,16 @@ echoport   # or launch EchoPort from the application menu
 ```
 
 * **Arch users**: `scripts/install-arch.sh` for a no-sudo `~/.local` install, or the release pacman
-  package: `sudo pacman -U echoport-0.2.3-1-x86_64.pkg.tar.zst` (AUR-ready PKGBUILD in
+  package: `sudo pacman -U echoport-0.3.0-1-x86_64.pkg.tar.zst` (AUR-ready PKGBUILD in
   `packaging/arch/`; depends glibc/gcc-libs, optional yt-dlp/ffmpeg).
 
-* **Release assets**: `echoport-0.2.3-linux-x86_64.tar.gz` (portable Linux),
-  `echoport-0.2.3-1-x86_64.pkg.tar.zst` (Arch pacman), `echoport-0.2.3-windows-x86_64.zip` (portable
-  Windows), `echoport-0.2.3-windows-x86_64.msi` (per-user install) and the CI-built macOS
+* **Release assets**: `echoport-0.3.0-linux-x86_64.tar.gz` (portable Linux),
+  `echoport-0.3.0-1-x86_64.pkg.tar.zst` (Arch pacman), `echoport-0.3.0-windows-x86_64.zip` (portable
+  Windows), `echoport-0.3.0-windows-x86_64.msi` (per-user install) and the CI-built macOS
   `EchoPort.app.zip` — each with a `.sha256` file.
 
 > The tarball does **not** include yt-dlp / ffmpeg — install them as described above. EchoPort is at
-> 0.2.3 and does not yet ship officially hosted binaries; build from source or run the packaging
+> 0.3.0 and does not yet ship officially hosted binaries; build from source or run the packaging
 > script yourself.
 
 ### Windows 10 / 11 (x86_64)
@@ -860,7 +858,7 @@ official packages should be built natively on Windows.
   Run anyway**.
 * Online playback/downloads need `yt-dlp.exe` and `ffmpeg.exe` on `PATH` or next to `echoport.exe`;
   explicit paths can be set in Settings, or via `ECHOPORT_YT_DLP` / `ECHOPORT_FFMPEG`.
-* Data locations are in the table below (`%APPDATA%\echoport`, `%LOCALAPPDATA%\echoport\cache`);
+* Data locations are in the table below (`%APPDATA%\echoport`, `%LOCALAPPDATA%\echoport`（缓存；安装目录是 `%LOCALAPPDATA%\Programs\EchoPort`）);
   downloads default to `%USERPROFILE%\Music\EchoPort`.
 * DPI scaling is handled by winit/egui; the in-app UI scale (100/110/125/150 %) is in
   Settings → Appearance.
@@ -1042,7 +1040,7 @@ Playback shortcuts are ignored while a text field has focus.
   `LIBGL_ALWAYS_SOFTWARE=1 WAYLAND_DISPLAY= ./target/release/echoport`
   (details in [QA_REPORT.md](docs/QA_REPORT.md)).
 
-## 🔐 v0.2.3: security/privacy hardening, slimming & installers
+## 🔐 v0.3.0: security/privacy hardening, slimming & installers
 
 * **Security hardening**: the update checker only accepts `owner/name` repos and
   **https://github.com/** release links, sanitizes version strings, `OpenUrl` accepts only
@@ -1062,7 +1060,7 @@ Playback shortcuts are ignored while a text field has focus.
   Arch package, Windows zip + MSI, macOS zip and a `.sha256` for each.
 * **Update-check repo**: default is now `https://github.com/Nilotoo/EchoPort`; the repo has not been
   pushed yet, so a real online update check is still unverified (fake/local paths + unit tests only).
-* Version and packages bumped to **v0.2.3**.
+* Version and packages bumped to **v0.3.0**.
 
 ---
 
@@ -1108,13 +1106,8 @@ Playback shortcuts are ignored while a text field has focus.
 
 ---
 
-## 🩹 v0.1.7: mini player / background performance mode / icon fixes
+## 🩹 v0.1.7: background performance mode / icon fixes
 
-* **Mini player**: click the **EchoPort brand/logo** in the sidebar to toggle a 420×142
-  **always-on-top** floating window with cover, title/artist, progress + times, previous/play-pause/
-  next, "open main window" and close; clicking the cover also restores the main window. It is an
-  immediate egui viewport sharing app state, so playback continues while the main window is hidden.
-  `ECHOPORT_MINI=1` opens it directly for QA.
 * **Background performance mode (automatic)**: when the main window is unfocused or minimized the
   repaint cadence is throttled (playing 66 ms → 1000 ms; busy 90 ms → 1000 ms; layout 50 ms → off),
   animations effectively freeze and **audio keeps playing**; the foreground cadence returns
@@ -1174,7 +1167,7 @@ Playback shortcuts are ignored while a text field has focus.
 
 * **Vertically centred transport**: bottom player bar and Now-playing transport buttons (source / previous /
   play / next / repeat / shuffle) now share one vertical centre line (the left two were top-aligned before).
-* **Redundant right divider removed**: only the left mini-player|transport divider remains in the bottom bar.
+* **Redundant right divider removed**: only the left divider remains in the bottom bar.
 * **Right-hand tools shifted left**: favourites / queue / volume / info moved left (measured uniform −40 px),
   with no clipping at 980×620 or 125 % / 150 % UI scale.
 * **Bilibili / SoundCloud fallback**: after their own URL/search sources fail, playback now makes a final
