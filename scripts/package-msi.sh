@@ -59,7 +59,7 @@ OUT="${OUT:-dist/$NAME.msi}"
 mkdir -p "$STAGE/docs" "$STAGE/examples" dist
 cp "$EXE" "$STAGE/echoport.exe"
 cp packaging/README-WINDOWS.md "$STAGE/README-WINDOWS.txt"
-cp LICENSE README.md "$STAGE/"
+cp LICENSE NOTICE README.md "$STAGE/"
 cp assets/echoport.ico "$STAGE/echoport.ico"
 cp packaging/windows/clean-uninstall.cmd "$STAGE/clean-uninstall.cmd"
 if [ -n "$TOOLS_DIR" ] && [ -d "$TOOLS_DIR" ]; then
