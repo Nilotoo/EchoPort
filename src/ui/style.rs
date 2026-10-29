@@ -480,6 +480,11 @@ fn asset_icon_id(icon: Icon) -> Option<u8> {
 }
 
 /// Paint an icon centred inside `rect` using `color`.
+/// Paint the user-supplied transparent note artwork (tinted to the theme).
+pub fn paint_note(painter: &Painter, rect: Rect, color: Color32) -> bool {
+    super::icons::paint(painter, 200, rect, color)
+}
+
 pub fn paint_icon(painter: &Painter, icon: Icon, rect: Rect, color: Color32) {
     // Shuffle: crossing arrows derived from the icon pack's SVG path
     // `icon-10.svg` (`M7 17L17 7` shaft + arrow head). The pack head is very

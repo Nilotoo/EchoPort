@@ -83,6 +83,9 @@ pub fn track_source_url(track: &Track) -> Option<String> {
             format!("https://music.apple.com/us/search?term={q}")
         }
         crate::model::Platform::Local => return None,
+        crate::model::Platform::InternetArchive => {
+            format!("https://archive.org/search?query={q}")
+        }
     };
     Some(url)
 }

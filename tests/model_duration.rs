@@ -186,8 +186,8 @@ fn track_display_and_search_helpers_handle_missing_metadata() {
 
 #[test]
 fn platform_keys_and_labels_roundtrip() {
-    assert_eq!(Platform::ALL.len(), 7);
-    assert_eq!(Platform::REMOTE.len(), 6);
+    assert_eq!(Platform::ALL.len(), 8);
+    assert_eq!(Platform::REMOTE.len(), 7);
     assert!(!Platform::REMOTE.contains(&Platform::Local));
     for platform in Platform::ALL {
         assert_eq!(Platform::from_key(platform.key()), Some(platform));

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # EchoPort — release build helper.
 #
-#   ./scripts/build.sh            # cargo build --release
+#   ./scripts/build.sh            # cargo build --release (full: Lua + all image formats)
+#   ./scripts/build.sh --lean     # lean build: no Lua/plugins, trimmed image formats
 #   ./scripts/build.sh --check    # cargo check only (fast sanity check)
 #   ./scripts/build.sh --debug    # debug build (used by run-demo.sh)
 #
@@ -18,6 +19,7 @@ for arg in "$@"; do
     case "$arg" in
         --release) MODE="release" ;;
         --debug) MODE="debug" ;;
+        --lean) MODE="lean" ;;
         --check) MODE="check" ;;
         -h|--help)
             sed -n '2,9p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -52,6 +54,10 @@ case "$MODE" in
         # `--locked` keeps a packaged build reproducible; fall back gracefully
         # when Cargo.lock is out of sync (e.g. a dependency was just added).
         cargo build --release --locked 2>/dev/null || cargo build --release
+        ;;
+    lean)
+        cargo build --profile lean --no-default-features --locked 2>/dev/null \
+            || cargo build --profile lean --no-default-features
         ;;
 esac
 

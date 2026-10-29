@@ -29,7 +29,7 @@ use egui::{
 
 use crate::app::EchoPortApp;
 use crate::i18n::{Key, Language};
-use crate::model::{format_duration, Platform, PlaybackState, Track};
+use crate::model::{format_duration, DownloadFormat, Platform, PlaybackState, Track};
 use crate::state::{Command, Page, ToastKind};
 use crate::theme::{self, Theme, ThemeMode};
 
@@ -65,6 +65,11 @@ pub enum Dialog {
     DeleteProfile {
         name: String,
     },
+    Download {
+        tracks: Vec<Track>,
+        format: DownloadFormat,
+    },
+    ExportProfile,
 }
 
 pub struct UiState {
@@ -97,6 +102,10 @@ pub struct UiState {
     pub profile_bio_for: Option<String>,
     /// The profile editor card is only shown after the user asks to edit.
     pub profile_editing: bool,
+    /// Track currently shown in the lyrics panel and its animated scroll
+    /// position (in line units).
+    pub lyrics_track: Option<String>,
+    pub lyrics_scroll_pos: f32,
 }
 
 impl UiState {
@@ -120,6 +129,8 @@ impl UiState {
             profile_bio: String::new(),
             profile_bio_for: None,
             profile_editing: false,
+            lyrics_track: None,
+            lyrics_scroll_pos: 0.0,
         }
     }
 }
@@ -532,7 +543,9 @@ fn player_bar(
     );
     // The page content starts after the sidebar, so centre the transport on
     // the *content column* centre, not the full window centre.
-    let content_center_x = inner.left() + (inner.width() + sidebar_width) * 0.5;
+    // Keep the original centred player layout, but nudge the whole transport
+    // cluster (transport + scrubber) left as a group.
+    let content_center_x = inner.left() + (inner.width() + sidebar_width) * 0.5 - 64.0;
     let half = (right_rect.left() - content_center_x)
         .min(content_center_x - left_rect.right())
         .max(120.0);
@@ -544,17 +557,6 @@ fn player_bar(
     let playing = app.state.playback.state.is_playing();
     let loading = app.state.playback.state == PlaybackState::Loading;
 
-    // Subtle divider between the navigation and the transport column.
-    let line_top = panel.top() + (height * 0.18).clamp(10.0, 22.0);
-    let line_bottom = panel.bottom() - (height * 0.18).clamp(10.0, 22.0);
-    ui.painter().vline(
-        inner.left() + left_w,
-        line_top..=line_bottom,
-        Stroke::new(
-            1.0_f32,
-            theme::with_alpha(theme.border, if theme.dark { 110 } else { 150 }),
-        ),
-    );
     style::absolute(ui, left_rect, |ui| {
         player_left(ui, app, theme, track.as_ref(), loading, inner.height());
     });
@@ -1211,6 +1213,18 @@ fn dialogs(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, pending: &
                     app.state.tr(Key::Delete),
                     true,
                 ),
+                Dialog::Download { tracks: _, .. } => (
+                    app.state.tr(Key::DownloadOptions),
+                    "",
+                    app.state.tr(Key::Download),
+                    false,
+                ),
+                Dialog::ExportProfile => (
+                    app.state.tr(Key::ExportProfile),
+                    app.state.tr(Key::ExportProfileWarning),
+                    app.state.tr(Key::ExportProfile),
+                    false,
+                ),
             };
             ui.label(RichText::new(title).size(18.0).strong().color(theme.text));
             ui.add_space(6.0);
@@ -1312,7 +1326,36 @@ fn dialogs(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, pending: &
                         );
                     }
                 }
-                Dialog::DeletePlaylist { .. } | Dialog::DeleteProfile { .. } => {}
+                Dialog::Download { format, .. } => {
+                    ui.add_space(2.0);
+                    ui.label(
+                        RichText::new(app.state.tr(Key::DownloadFormat))
+                            .size(11.0)
+                            .color(theme.text_weak),
+                    );
+                    ui.add_space(6.0);
+                    ui.horizontal(|ui| {
+                        for candidate in DownloadFormat::ALL {
+                            if style::chip(ui, theme, candidate.label(), None, *format == candidate)
+                                .clicked()
+                            {
+                                *format = candidate;
+                            }
+                        }
+                    });
+                    ui.add_space(8.0);
+                    let folder = app
+                        .state
+                        .profile
+                        .settings
+                        .download_dir
+                        .to_string_lossy()
+                        .into_owned();
+                    style::hint_line(ui, theme, &folder);
+                }
+                Dialog::ExportProfile
+                | Dialog::DeletePlaylist { .. }
+                | Dialog::DeleteProfile { .. } => {}
             }
             ui.add_space(16.0);
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -1386,6 +1429,17 @@ fn dialogs(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, pending: &
                         }
                         Dialog::DeletePlaylist { id, .. } => {
                             pending.push(Command::DeletePlaylist(id.clone()));
+                            keep = false;
+                        }
+                        Dialog::ExportProfile => {
+                            pending.push(Command::ExportProfile);
+                            keep = false;
+                        }
+                        Dialog::Download { tracks, format } => {
+                            pending.push(Command::StartDownload {
+                                tracks: tracks.clone(),
+                                format: *format,
+                            });
                             keep = false;
                         }
                         Dialog::NewProfile { name } => {

@@ -15,8 +15,8 @@ use crate::model::DownloadFormat;
 use crate::state::Page;
 use crate::theme::ThemeMode;
 
-use super::keys::{BindingAction, KeyChord};
 use super::{ScriptConfig, ScriptPaths};
+use crate::scripting::keys::{BindingAction, KeyChord};
 
 /// Default `config.lua` written on first run.
 ///

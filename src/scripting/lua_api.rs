@@ -18,8 +18,8 @@ use mlua::{Function, Lua, MultiValue, RegistryKey, Table, Value};
 use crate::model::{Platform, Track};
 use crate::state::{AppEvent, Command};
 
-use super::keys::{BindingAction, KeyChord};
 use super::{EventSender, ScriptActionInfo, ScriptEvent, ScriptPaths, VERSION};
+use crate::scripting::keys::{BindingAction, KeyChord};
 
 /// Maximum number of warnings kept in memory (protects against a script that
 /// errors on every frame).
