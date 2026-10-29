@@ -1,18 +1,18 @@
 # EchoPort QA Report / 质量报告
 
-> **状态：v0.2.1 最终验收（安全/隐私加固 + 精简/LTO + 内嵌文档 + Arch pacman / Windows MSI / macOS CI 安装包 + 公开仓库清理）。**
-> 本文件只包含实测数据，命令/环境可复现；资源主表沿用 v0.1.3 实测/v0.1.4 复核，v0.2.1 补充二进制精简/纹理内存数字（§6.8）。
+> **状态：v0.2.2 最终验收（安全/隐私加固 + 精简/LTO + 内嵌文档 + Arch pacman / Windows MSI / macOS CI 安装包 + 公开仓库清理）。**
+> 本文件只包含实测数据，命令/环境可复现；资源主表沿用 v0.1.3 实测/v0.1.4 复核，v0.2.2 补充二进制精简/纹理内存数字（§6.8）。
 > 本版重点：**资源占用 / 最低配置报告**（用户要求）、播放条进度条对齐+分隔线、NowPlaying 去调色板小点、
 > Apple Music「可搜索」措辞、双击交互、来源页面弹窗+新随机播放图标、缓存上限选项、歌单元数据导入/导出、
 > 严格相关的歌曲/专辑背景、Bilibili 友好提示、Made by nilotoo。
 >
-> **Status: FINAL v0.2.1 QA** (security/privacy hardening + slimming/LTO + embedded docs + Arch pacman / Windows MSI / macOS CI installers + public-repo cleanup).
-> All numbers measured on the frozen tree; the resource main table is from v0.1.3/re-checked on v0.1.4; v0.2.1 adds binary-slimming/texture-memory numbers (§6.8).
+> **Status: FINAL v0.2.2 QA** (security/privacy hardening + slimming/LTO + embedded docs + Arch pacman / Windows MSI / macOS CI installers + public-repo cleanup).
+> All numbers measured on the frozen tree; the resource main table is from v0.1.3/re-checked on v0.1.4; v0.2.2 adds binary-slimming/texture-memory numbers (§6.8).
 
-- 版本 / Version: **`0.2.1`** (`Cargo.toml`; `VERSION` file too)
+- 版本 / Version: **`0.2.2`** (`Cargo.toml`; `VERSION` file too)
 - 报告日期 / Date: `2026-10-29` (UTC)
 - 执行人 / Executor: qa-docs
-- 代码状态 / Code state: **FROZEN + packaged**（工作树包含 v0.2.1 全部改动；Lead 负责 commit/tag）
+- 代码状态 / Code state: **FROZEN + packaged**（工作树包含 v0.2.2 全部改动；Lead 负责 commit/tag）
 - 主机 / Host: Arch Linux (7.2.11), Rust 1.99.0, yt-dlp 2026.10.21, ffmpeg 9.0.2
 - 会话 / Session: KDE Plasma **Wayland**，缩放 1.25；GUI 通过 **X11(XWayland) + Mesa llvmpipe `swrast`**（VM 无 GPU）
 - 范围 / Scope: qa-docs 负责的 docs/tests/scripts/screenshots/packaging；**未修改 `src/**` 或 `Cargo.toml`**
@@ -57,8 +57,8 @@
 | 安全加固 / security | repo/URL/version/import 限制 | 代码审查：update repo `owner/name` 白名单、release URL 仅 `https://github.com/`、version 白名单、`OpenUrl` 仅 http/https、导入 8MB + 数量上限；个人路径已从 src/docs 移除（grep 0） | ✅ PASS |
 | 精简/LTO / slimming | 二进制与纹理预算 | Linux 二进制 **15,364,248 B**（v0.1.9 −766,672 B / −4.75%）；封面纹理 96→64 张、320→256 px（≈39 MB→17 MB 预算） | ✅ PASS |
 | 内嵌文档按钮 / embedded docs | Plugin docs / Config reference | `qa20-settings-docs-buttons.png`：Scripting 卡片两按钮；HTML 内嵌二进制、点击写入数据目录并用浏览器打开（无需外部文件） | ✅ PASS |
-| 启动提示居中 / centred splash | Stay/Update 居中 | `qa19-splash-update.png`（0.2.1 重新截取）按钮已居中；`qa19-splash.png` 为普通启动动画 | ✅ PASS |
-| 安装包 / installers | Arch + MSI + macOS CI | Arch pkg `pacman -Qip/-Qlp` 验证；MSI `msiinfo` 验证（ProductVersion 0.2.1.0、Start Menu shortcut、Icon stream）；macOS 仅 CI 脚本/patch，本地未构建（macOS 不可用） | ✅ PASS（Linux 侧静态） |
+| 启动提示居中 / centred splash | Stay/Update 居中 | `qa19-splash-update.png`（0.2.2 重新截取）按钮已居中；`qa19-splash.png` 为普通启动动画 | ✅ PASS |
+| 安装包 / installers | Arch + MSI + macOS CI | Arch pkg `pacman -Qip/-Qlp` 验证；MSI `msiinfo` 验证（ProductVersion 0.2.2.0、Start Menu shortcut、Icon stream）；macOS 仅 CI 脚本/patch，本地未构建（macOS 不可用） | ✅ PASS（Linux 侧静态） |
 | 来源弹窗 & 新图标 | 复制链接/打开原始页面 + 独立随机图标 | 弹窗双选项截图；随机为 #10+#11 交叉箭头，位于循环按钮旁 | ✅ PASS |
 | 缓存上限 / cache-limit setting | No cache / 512MB / 1GB(默认) / 2GB | 设置页 chips 截图；默认 1 GiB；无缓存模式启动清理已实测 | ✅ PASS |
 | 歌单导入/导出 | 元数据 JSON（无音频） | 逐歌单 Export + 工具栏 Import + 「仅共享元数据」提示截图 | ✅ PASS |
@@ -70,7 +70,7 @@
 | 截图 / screenshots | README 0 失效 | **隐私清理后保留 18 张当前截图（0 份日志）**，全部为隔离 XDG/中性 Demo 资料生成；README 图片引用 0 失效 | ✅ PASS |
 | 打包 / packages | 4 种安装包 + sha256 | Linux tar.gz **7,063,887 B** `40836e7d…`；Arch pkg **5,705,233 B** `e09599f4…`；Windows zip **6,171,200 B** `cfc5c907…`；**Windows MSI 6,544,384 B** `ef2c8217…`；exe 12,884,992 B；PE GUI/.rsrc、msiinfo 与 pacman -Qip/-Qlp 均通过 | ✅ PASS |
 
-**总体结论 / Overall: v0.2.1 发布候选（Linux 全量实测；Windows 交叉构建/MSI 静态验证、未在真机运行；macOS 仅 CI）。** 仓库已按隐私清理（18 张截图、无日志），更新检查默认 `Nilotoo/EchoPort` 但仓库尚未 push，真实在线检查未验证。
+**总体结论 / Overall: v0.2.2 发布候选（Linux 全量实测；Windows 交叉构建/MSI 静态验证、未在真机运行；macOS 仅 CI）。** 仓库已按隐私清理（18 张截图、无日志），更新检查默认 `Nilotoo/EchoPort` 但仓库尚未 push，真实在线检查未验证。
 软件 GL 环境偏差、间歇重绘风险与预编译包 glibc 基线已在 §6/§9 如实说明。
 
 ---
@@ -143,8 +143,8 @@ cargo test
 | `qa-settings.png` | 设置（使用 `/tmp` 隔离 XDG 重新生成，路径不含个人目录） |
 | `qa18-profile-collapsed.png` / `qa18-profile-editing.png` | 资料页（收起式编辑器 + 展开态） |
 | `qa17-mini-player.png` | 迷你播放器窗口 |
-| `qa19-splash.png` / `qa19-splash-update.png` | 启动动画 / 更新提示（v0.2.1 按钮居中） |
-| `qa20-settings-docs-buttons.png` | 设置 → Scripting 的 Plugin docs / Config reference 内嵌文档按钮（v0.2.1） |
+| `qa19-splash.png` / `qa19-splash-update.png` | 启动动画 / 更新提示（v0.2.2 按钮居中） |
+| `qa20-settings-docs-buttons.png` | 设置 → Scripting 的 Plugin docs / Config reference 内嵌文档按钮（v0.2.2） |
 | `qa19-icon-preview.png` | 新无外圈图标预览（资产来自 assets/icon*.png） |
 | `qa-tide-home.png` / `qa-ink-home.png` / `qa-ui-scale-125-home.png` | 主题与缩放 |
 
@@ -156,7 +156,7 @@ cargo test
 
 > 方法：`scripts/qa-resources.sh --bin target/release/echoport --with-network`，隔离 XDG、只测量自己启动的进程；
 > 原始输出由 `scripts/qa-resources.sh` 生成（日志含本机路径，已按隐私策略从公开仓库删除；v0.1.4 复核见 §6.6）。
-> v0.1.4 只改 UI 与 resolver 回退、v0.1.5 搜索/UI、v0.1.6 资料/UI/Windows 打包、v0.1.7 迷你窗口/后台模式/图标、v0.1.8 资料页 UI、v0.1.9 更新检查/启动动画/图标、v0.2.1 安全/精简/安装包：资源主表保持同一范围，未重新全量测量（后台模式 CPU §6.7；v0.2.1 精简数字 §6.8）。
+> v0.1.4 只改 UI 与 resolver 回退、v0.1.5 搜索/UI、v0.1.6 资料/UI/Windows 打包、v0.1.7 迷你窗口/后台模式/图标、v0.1.8 资料页 UI、v0.1.9 更新检查/启动动画/图标、v0.2.2 安全/精简/安装包：资源主表保持同一范围，未重新全量测量（后台模式 CPU §6.7；v0.2.2 精简数字 §6.8）。
 
 ### 6.1 启动与空闲
 
@@ -226,15 +226,15 @@ cargo test
 `ui_backgrounded` 会把重绘间隔切到 1000 ms（布局重绘关闭），需在真实 GPU 机器上复测。
 RSS 约 281 MiB（软件 GL 基线；与 v0.1.3 报告一致范围），线程 68。
 
-### 6.8 v0.2.1 精简与内存 / slimming & texture memory
+### 6.8 v0.2.2 精简与内存 / slimming & texture memory
 
-| 项目 | v0.1.9 | v0.2.1 | 变化 |
+| 项目 | v0.1.9 | v0.2.2 | 变化 |
 |---|---|---|---|
 | Linux release binary | 16,130,920 B | **15,364,248 B** | −766,672 B（−4.75%），LTO=fat + strip + codegen-units=1（内嵌 ~100KB 文档后仍更小） |
 | 封面纹理缓存 | 96 张 @320 px | **64 张 @256 px** | 纹理预算约 39 MB → 17 MB（RGBA 估算） |
 | Windows exe | 13,391,872 B | **12,884,992 B** | LTO 后同步缩小 |
 
-## 7. v0.1.3–v0.2.1 功能验收 / Feature verification
+## 7. v0.1.3–v0.2.2 功能验收 / Feature verification
 
 ### 7.1 播放条对齐 + 分隔线 ✅
 
@@ -378,7 +378,7 @@ RSS 约 281 MiB（软件 GL 基线；与 v0.1.3 报告一致范围），线程 6
 - **发布管理**：`VERSION`（0.1.9）、`.github/workflows/release.yml`（`v*` tag → Linux tar.gz + Windows zip
   → GitHub Release）、Cargo repository/homepage 已指向占位 `https://github.com/nilotoo/EchoPort`。
 
-### 7.17 v0.2.1 安全/隐私/精简/安装包 ✅
+### 7.17 v0.2.2 安全/隐私/精简/安装包 ✅
 
 - **安全加固**（代码审查 + 单测）：update repo 仅 `owner/name`（`valid_repo`）、release URL 仅
   `https://github.com/`（`safe_release_url`）、版本字符串白名单、`OpenUrl` http/https-only、
@@ -400,22 +400,22 @@ RSS 约 281 MiB（软件 GL 基线；与 v0.1.3 报告一致范围），线程 6
 ./scripts/package-linux.sh
 ```
 
-- **`dist/echoport-0.2.1-linux-x86_64.tar.gz`** — **7,063,887 B (6.74 MiB)**
+- **`dist/echoport-0.2.2-linux-x86_64.tar.gz`** — **7,063,887 B (6.74 MiB)**
   - sha256 **`40836e7de55135f30c716c273494bba178ea3eede23fda712811fb435e0de45d`**
   - `.sha256` 同级，`sha256sum -c` → OK
 - 内容：`echoport`（stripped 14.84 MiB）、`echoport.desktop`、`echoport.png`、`icon-128.png`、`README.md`、
   `LICENSE`、`INSTALL.txt`、`docs/SCRIPTING.md`、`docs/PLUGINS.md`、`examples/config.lua`、
   `examples/plugins/example.lua`、`assets/icons/{LICENSE.txt,README.md}`（MIT-0）。
 - 验证：解包后运行 → 正常启动并写 `[历史截图已清理]`；`desktop-file-validate` 通过；
-  `dist/` 仅保留 v0.2.1 的 4 个安装包（+ sha256；旧 0.1.x 与测试原型已删除）。
+  `dist/` 仅保留 v0.2.2 的 4 个安装包（+ sha256；旧 0.1.x 与测试原型已删除）。
 
 ### 8.1 Windows 包与 PE 静态检查（交叉构建，未执行）
 
-- **`dist/echoport-0.2.1-windows-x86_64.zip`** — **6,171,200 B**，sha256
+- **`dist/echoport-0.2.2-windows-x86_64.zip`** — **6,171,200 B**，sha256
   **`cfc5c90780a0e484ffcb9d5564d562ed9c91f2f95d880961968b1d877ec4af4b`**
-- **`dist/echoport-0.2.1-windows-x86_64.msi`** — **6,544,384 B**，sha256
+- **`dist/echoport-0.2.2-windows-x86_64.msi`** — **6,544,384 B**，sha256
   **`ef2c8217debb55bccda57222288e36aeec7331e5b5a2c755a0b1c330596ab9ed`**（per-user、未签名、未执行）
-- **`dist/echoport-0.2.1-1-x86_64.pkg.tar.zst`** — **5,705,233 B**，sha256
+- **`dist/echoport-0.2.2-1-x86_64.pkg.tar.zst`** — **5,705,233 B**，sha256
   **`e09599f442c0553d82c654b2dbf3847a71e74776d11e806c74e9b52d884e99c4`**（pacman -Qip/-Qlp 已验证）
 - macOS：CI-only `EchoPort.app.zip`（`scripts/package-macos.sh` + `packaging/ci/release-workflow.patch`），本地未构建/未验证。
   - 13 个文件：`echoport.exe`、`README-WINDOWS.txt`、`echoport.ico`、`README.md`、`LICENSE`、
@@ -442,7 +442,7 @@ RSS 约 281 MiB（软件 GL 基线；与 v0.1.3 报告一致范围），线程 6
 | 5 | 环境风险（open） | **间歇性连续重绘**：历史测量约 1/3 启动出现空闲 CPU 120–860 %（热线程=主线程+llvmpipe），无法按需复现；本轮 5/5 空闲样本 0.000–0.125 %。疑似软渲染/合成器交互，需真实 GPU 复测 | follow-up |
 | 6 | 环境限制 | **无可听音频输出**：QA 主机无声卡；播放链路验证到 resolve→cache→cover；真实进度截图佐证 | documented |
 | 7 | 发行限制 | **预编译包需 glibc ≥ 2.44**（本机构建基线）；老发行版需用 Rust 1.85+ 源码重建。Windows 10+/macOS 11+ 为构建目标，未实测 | documented |
-| 8 | 仓库状态 | 工作树含 v0.2.1 未提交改动；Lead 负责 commit/tag + fresh orphan main | open (Lead) |
+| 8 | 仓库状态 | 工作树含 v0.2.2 未提交改动；Lead 负责 commit/tag + fresh orphan main | open (Lead) |
 | 9 | 更新仓库/认证 | 默认 repo 现为 `Nilotoo/EchoPort`；仓库尚未 push，真实在线更新检查与 Release 上传需用户 SSH key/认证 | open (user) |
 | 10 | MSI/macOS 未执行 | MSI 与 macOS bundle 均为交叉/CI 构建，未在真实 Windows/macOS 运行；仅静态检查 | open (verification) |
 | 9 | 设计说明 | App/启动器/窗口图标保持不变；仅应用内 GUI 图标使用图标集 | documented |
@@ -473,10 +473,10 @@ cargo test --test live_network -- --ignored --nocapture --test-threads=1
 
 # 打包 + 校验
 ./scripts/package-linux.sh
-sha256sum -c dist/echoport-0.2.1-linux-x86_64.tar.gz.sha256
-sha256sum -c dist/echoport-0.2.1-windows-x86_64.zip.sha256
-sha256sum -c dist/echoport-0.2.1-windows-x86_64.msi.sha256
-sha256sum -c dist/echoport-0.2.1-1-x86_64.pkg.tar.zst.sha256
+sha256sum -c dist/echoport-0.2.2-linux-x86_64.tar.gz.sha256
+sha256sum -c dist/echoport-0.2.2-windows-x86_64.zip.sha256
+sha256sum -c dist/echoport-0.2.2-windows-x86_64.msi.sha256
+sha256sum -c dist/echoport-0.2.2-1-x86_64.pkg.tar.zst.sha256
 ```
 
 ---
@@ -491,12 +491,12 @@ sha256sum -c dist/echoport-0.2.1-1-x86_64.pkg.tar.zst.sha256
 - [x] Apple Music 显示 Searchable；GUI 无 preview/match 措辞
 - [x] 双击选中/播放、来源页面弹窗、新随机播放图标、缓存 chips、歌单导入/导出、背景专辑/歌曲段落、Made by nilotoo
 - [x] 回归：Apple 完整播放 213.1 s、真实进度、后台 wiki、缓存清理、暂停切换、provider 搜索
-- [x] v0.2.1：安全/隐私加固、LTO/纹理精简、内嵌文档按钮、启动提示居中、Arch pacman + Windows MSI + macOS CI 安装包、公开仓库 18 张截图/0 日志、无个人路径
-- [ ] Lead commit/tag v0.2.1 + 用户 SSH key 后 GitHub Release 上传（本任务不 push）
+- [x] v0.2.2：安全/隐私加固、LTO/纹理精简、内嵌文档按钮、启动提示居中、Arch pacman + Windows MSI + macOS CI 安装包、公开仓库 18 张截图/0 日志、无个人路径
+- [ ] Lead commit/tag v0.2.2 + 用户 SSH key 后 GitHub Release 上传（本任务不 push）
 - [x] Windows 交叉构建 exe + zip（PE 静态检查：GUI subsystem、.rsrc、imports；**未在 Windows 实机运行**）
 - [x] README/USAGE/ARCHITECTURE/PROVIDERS/QA_REPORT 更新 v0.1.9；截图/日志隐私清理后 README 图片引用 0 失效；Linux/Windows 包均含 HTML 手册与配置模板；Linux 包含 Arch 安装脚本与 32/48/128/256 图标
 - [x] 临时文件/旧 0.1.2 归档清理
-- [ ] Lead commit + tag v0.2.1（唯一剩余发布动作；GitHub 上传等用户 SSH key）
+- [ ] Lead commit + tag v0.2.2（唯一剩余发布动作；GitHub 上传等用户 SSH key）
 
 ### 仍未解决 / follow-ups
 - §9 #5 间歇性连续重绘（真实 GPU 复测）

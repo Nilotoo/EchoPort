@@ -1132,10 +1132,22 @@ fn about(
                     .size(10.5)
                     .color(theme.accent),
                 );
-                if style::button(ui, theme, app.state.tr(Key::UpdateNow), Variant::Primary)
+                if app.state.updates.downloading {
+                    let percent = app
+                        .state
+                        .updates
+                        .progress
+                        .map(|progress| format!(" · {:.0}%", progress * 100.0))
+                        .unwrap_or_default();
+                    ui.label(
+                        RichText::new(format!("{}{percent}", app.state.tr(Key::UpdateDownloading)))
+                            .size(10.0)
+                            .color(theme.text_weak),
+                    );
+                } else if style::button(ui, theme, app.state.tr(Key::UpdateNow), Variant::Primary)
                     .clicked()
                 {
-                    pending.push(Command::OpenUpdatePage);
+                    pending.push(Command::InstallUpdate);
                 }
             } else if app.state.updates.checking {
                 ui.label(

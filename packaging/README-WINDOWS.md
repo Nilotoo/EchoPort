@@ -59,6 +59,12 @@ downloads are never auto-deleted. Nothing is uploaded; there is no account, tele
   it (this is being addressed on the source side).
 * Linux/macOS share the same code base; this document covers only the Windows package.
 
+## Updates
+
+When a newer GitHub release exists, EchoPort's Update button downloads the matching setup.exe,
+verifies its published sha256, runs the installer silently and relaunches the app. It updates the
+current install directory; if automatic installation fails it falls back to opening the release page.
+
 ## Uninstall
 
 - **Standard uninstall:** Windows Settings → Apps → EchoPort → Uninstall (or Add/Remove Programs).

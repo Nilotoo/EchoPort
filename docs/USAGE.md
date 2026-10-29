@@ -24,7 +24,7 @@ EchoPort（回声港）是一个本地优先的多音源桌面音乐播放器：
   `ECHOPORT_UPDATE_REPO=owner/name` 覆盖；仅接受 owner/name 与 https://github.com/ 发布链接），
   之后每 6 小时一次；没有 Release 时回退读取 `VERSION`。
   只比较版本，不上报遥测、不需要 token、不自动下载/安装。About → **Check for updates** 可手动检查；
-  发现更新时 About 显示更新行，点 Update 打开 Release 页面。
+  发现更新时 About 显示更新行；点 Update 会下载并校验新版本，Windows/Linux 自动静默安装并重启（macOS 目前打开发布页）。
 * **启动动画**：约 0.9 s（检查进行中最多 1.4 s）；发现更新时停留显示 **Stay on this version / Update**。
   `ECHOPORT_SPLASH=1` 强制显示、`ECHOPORT_NO_SPLASH=1` 关闭、`ECHOPORT_NO_UPDATE_CHECK=1` 禁止检查、
   `ECHOPORT_FAKE_UPDATE=9.9.9` 伪造更新用于测试。
@@ -32,11 +32,11 @@ EchoPort（回声港）是一个本地优先的多音源桌面音乐播放器：
   桌面项 + hicolor 32/48/128/256 图标；发布包解包后也可运行 `./install-arch.sh`。
 * 仓库 URL 仍为占位假设（等待确认远端/认证），因此真实网络更新检查尚未验证。
 
-### 1.2 安装方式（v0.2.1）
+### 1.2 安装方式（v0.2.2）
 
-* **Arch pacman 包**：发布资产 `echoport-0.2.1-1-x86_64.pkg.tar.zst`；
-  `sudo pacman -U echoport-0.2.1-1-x86_64.pkg.tar.zst`（AUR-ready PKGBUILD 在 `packaging/arch/`）。
-* **Windows MSI（per-user）**：`echoport-0.2.1-windows-x86_64.msi`，双击安装（无需管理员），
+* **Arch pacman 包**：发布资产 `echoport-0.2.2-1-x86_64.pkg.tar.zst`；
+  `sudo pacman -U echoport-0.2.2-1-x86_64.pkg.tar.zst`（AUR-ready PKGBUILD 在 `packaging/arch/`）。
+* **Windows MSI（per-user）**：`echoport-0.2.2-windows-x86_64.msi`，双击安装（无需管理员），
   开始菜单快捷方式 + 标准卸载；开始菜单中的 **「Uninstall EchoPort (clean app data)」** 会额外删除
   设置/资料/缓存并保留 `%USERPROFILE%\Music\EchoPort` 中已下载音乐。未签名 → SmartScreen 提示。绿色版 zip 仍可用。
 * **macOS**：仓库 CI 的 `macos-latest` job 构建 universal `.app`（`EchoPort.app.zip`）；
@@ -250,7 +250,7 @@ one quiet interface. **No account, and nothing is uploaded.**
   `nilotoo/EchoPort`, override with `ECHOPORT_UPDATE_REPO=owner/name`; falls back to `VERSION` when no
   Release exists). Version comparison only — no telemetry, no token, no auto-download/install.
   About → **Check for updates** runs it manually; an available update shows a row whose Update button
-  opens the release page.
+  downloads, verifies and installs automatically on Windows/Linux (macOS opens the release page).
 * **Startup animation**: ~0.9 s (up to 1.4 s while a check is in flight); an update found during the
   splash keeps it open with **Stay on this version / Update**. `ECHOPORT_SPLASH=1` forces it,
   `ECHOPORT_NO_SPLASH=1` disables it, `ECHOPORT_NO_UPDATE_CHECK=1` disables checking, and

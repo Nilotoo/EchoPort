@@ -278,6 +278,9 @@ pub enum Key {
     Quit,
     BackgroundNotice,
     UpdatePageOpened,
+    UpdateDownloading,
+    UpdateInstalling,
+    UpdateFailed,
     // v0.1.3 UI round
     DoubleClickPlay,
     DoubleClickOpen,
@@ -658,6 +661,18 @@ impl Key {
             UpdatePageOpened => (
                 "Update page opened in your browser. Install the new version, then restart EchoPort.",
                 "已在浏览器打开发布页：安装新版本后重新启动 EchoPort 即可。",
+            ),
+            UpdateDownloading => (
+                "Downloading update…",
+                "正在下载更新…",
+            ),
+            UpdateInstalling => (
+                "Update verified — installing and restarting EchoPort…",
+                "更新校验通过：正在安装并重启 EchoPort…",
+            ),
+            UpdateFailed => (
+                "Automatic update failed. Opening the release page instead.",
+                "自动更新失败，已改为打开发布页手动下载。",
             ),
             DoubleClickPlay => ("Double-click to play", "双击播放"),
             DoubleClickOpen => ("Double-click to open", "双击打开"),

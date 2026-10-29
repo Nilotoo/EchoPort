@@ -27,6 +27,33 @@ pub struct UpdateInfo {
     pub assets: Vec<UpdateAsset>,
 }
 
+/// Pick the release asset for this platform. Windows prefers the interactive
+/// NSIS setup; Linux/macOS use the archives produced by the release workflow.
+pub fn asset_for_current_platform(info: &UpdateInfo) -> Option<&UpdateAsset> {
+    #[cfg(target_os = "windows")]
+    let preferred: &[&str] = &["setup.exe", "windows-x86_64.msi", "windows-x86_64.zip"];
+    #[cfg(target_os = "linux")]
+    let preferred: &[&str] = &["linux-x86_64.tar.gz"];
+    #[cfg(target_os = "macos")]
+    let preferred: &[&str] = &["macos", ".app.zip", ".zip"];
+    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+    let preferred: &[&str] = &["tar.gz", "zip"];
+    for suffix in preferred {
+        if let Some(asset) = info.assets.iter().find(|asset| asset.name.contains(suffix)) {
+            return Some(asset);
+        }
+    }
+    None
+}
+
+/// The `.sha256` sibling asset for a downloaded asset, if published.
+pub fn checksum_asset<'a>(info: &'a UpdateInfo, asset: &'a UpdateAsset) -> Option<&'a UpdateAsset> {
+    let wanted = format!("{}.sha256", asset.name);
+    info.assets
+        .iter()
+        .find(|candidate| candidate.name == wanted)
+}
+
 pub fn repo() -> String {
     let candidate = std::env::var("ECHOPORT_UPDATE_REPO")
         .ok()
