@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>EchoPort · 插件开发手册 / Plugin development manual</title>
+<style>
+*,*::before,*::after{box-sizing:border-box}
+:root{--bg:#f3f6fb;--panel:#fff;--panel2:#f8fafd;--ink:#16233a;--muted:#5a6b82;--accent:#044bb5;--accent-soft:#e3ecfb;--teal:#2dacb5;--lime:#bbff5c;--lime-ink:#1d3300;--border:#dfe7f3;--code-bg:#101a2b;--code-ink:#e7eefb;--radius:16px;--shadow:0 10px 30px rgba(12,36,74,.08)}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1521;--panel:#161f30;--panel2:#1b2537;--ink:#e9eef8;--muted:#9fb0c7;--accent:#7aa2f7;--accent-soft:#1f2d46;--teal:#59c9d0;--border:#26334a;--code-bg:#0b1220;--shadow:0 10px 30px rgba(0,0,0,.35)}}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif}
+a{color:var(--accent)}
+.topbar{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--panel) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}
+.topbar-inner{max-width:1120px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.2px;color:var(--ink);text-decoration:none}
+.dot{width:11px;height:11px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 5px var(--accent-soft)}
+.brand small{color:var(--muted);font-weight:500}
+.spacer{flex:1}
+.lang-switch{display:flex;gap:4px;padding:3px;background:var(--panel2);border:1px solid var(--border);border-radius:999px}
+.lang-btn{border:0;background:transparent;color:var(--muted);font:inherit;font-size:13px;padding:5px 14px;border-radius:999px;cursor:pointer;transition:.15s}
+.lang-btn:hover{color:var(--ink)}
+.lang-btn.is-active{background:var(--accent);color:#fff;box-shadow:0 2px 8px rgba(4,75,181,.35)}
+html[data-lang="zh"] .lang-en,html[data-lang="en"] .lang-zh{display:none!important}
+.wrap{max-width:1120px;margin:0 auto;padding:28px 20px 80px}
+.hero{padding:26px 0 6px}
+.hero h1{font-size:clamp(28px,4vw,40px);line-height:1.15;margin:0 0 10px}
+.hero p{color:var(--muted);margin:0;max-width:820px}
+.badges{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 6px}
+.badge{font-size:12px;padding:4px 10px;border-radius:999px;background:var(--panel);border:1px solid var(--border);color:var(--muted)}
+.badge.lime{background:var(--lime);color:var(--lime-ink);border-color:transparent;font-weight:600}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:22px 24px;margin:18px 0;box-shadow:var(--shadow)}
+.card h2{margin:0 0 12px;font-size:22px;scroll-margin-top:80px}
+.card h3{margin:22px 0 8px;font-size:16.5px;color:var(--accent)}
+.toc{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-top:6px}
+.toc a{display:block;padding:9px 12px;border-radius:10px;background:var(--panel2);border:1px solid var(--border);text-decoration:none;color:var(--ink);font-size:14px}
+.toc a:hover{border-color:var(--accent);color:var(--accent)}
+.toc .num{color:var(--accent);font-weight:700;margin-right:6px}
+.muted{color:var(--muted)}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}
+:not(pre)>code{font-size:.88em;background:var(--accent-soft);color:var(--accent);padding:1.5px 6px;border-radius:6px}
+table{width:100%;border-collapse:collapse;font-size:14.5px;margin:10px 0 6px;display:block;overflow-x:auto}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+th{background:var(--panel2);color:var(--muted);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em}
+tr:hover td{background:var(--panel2)}
+td code{white-space:nowrap}
+.note{border-left:4px solid var(--teal);background:var(--panel2);padding:12px 16px;border-radius:0 10px 10px 0;margin:14px 0;color:var(--muted)}
+.note strong{color:var(--ink)}
+.warn{border-left-color:#e8a33d}
+.danger{border-left-color:#c0392b}
+.code{position:relative;margin:14px 0;border-radius:12px;overflow:hidden;background:var(--code-bg)}
+.code pre{margin:0;padding:16px 18px;overflow-x:auto;color:var(--code-ink);font-size:13.5px;line-height:1.6}
+.code code{font-size:inherit}
+.copy{position:absolute;top:8px;right:8px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#dfe8f8;font:inherit;font-size:11.5px;padding:4px 10px;border-radius:8px;cursor:pointer;opacity:.85;transition:.15s}
+.copy:hover{opacity:1;background:rgba(255,255,255,.16)}
+.kbd{display:inline-block;font-size:12px;padding:1px 7px;border:1px solid var(--border);border-bottom-width:2px;border-radius:6px;background:var(--panel2);color:var(--ink);font-family:ui-monospace,monospace}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+footer{border-top:1px solid var(--border);color:var(--muted);font-size:13.5px;padding:22px 20px;text-align:center}
+footer a{color:var(--accent)}
+@media print{.topbar,.copy,.lang-switch{display:none!important}.lang-en{display:none!important}.card{box-shadow:none;break-inside:avoid}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#zh-top"><span class="dot"></span>EchoPort <small>· Lua 插件 / Plugins</small></a>
+    <span class="spacer"></span>
+    <div class="lang-switch" role="group" aria-label="Language / 语言">
+      <button class="lang-btn is-active" data-lang="zh" aria-pressed="true">中文</button>
+      <button class="lang-btn" data-lang="en" aria-pressed="false">English</button>
+    </div>
+  </div>
+</header>
+
+<!-- ======================= 中文版 / CHINESE ======================= -->
+<div class="lang-zh">
+<div class="wrap" id="zh-top">
+  <section class="hero">
+    <h1>EchoPort 插件开发手册</h1>
+    <p>用 Lua 5.4 给 EchoPort 添加自己的逻辑：监听播放/搜索/下载事件、注册动作与快捷键、读写配置、弹出界面提示。无需编译；插件是按文件名排序加载的本地 Lua 文件。也可以把逻辑编译进 Rust，通过 <code>Plugin</code> / <code>PluginRegistry</code> 扩展点接入。</p>
+    <div class="badges">
+      <span class="badge lime">v0.1.6</span>
+      <span class="badge">Lua 5.4 · 免安装</span>
+      <span class="badge">本地受信任脚本</span>
+      <span class="badge">设置页 → 重新加载脚本</span>
+    </div>
+  </section>
+
+  <div class="card">
+    <h2 id="zh-toc">目录</h2>
+    <nav class="toc">
+      <a href="#zh-overview"><span class="num">1</span>能做什么 / 三种扩展方式</a>
+      <a href="#zh-files"><span class="num">2</span>文件位置与加载顺序</a>
+      <a href="#zh-config"><span class="num">3</span>配置文件速查</a>
+      <a href="#zh-format"><span class="num">4</span>插件文件格式</a>
+      <a href="#zh-events"><span class="num">5</span>事件</a>
+      <a href="#zh-actions"><span class="num">6</span>自定义动作</a>
+      <a href="#zh-bind"><span class="num">7</span>键位绑定</a>
+      <a href="#zh-api"><span class="num">8</span>Helper API 参考</a>
+      <a href="#zh-example"><span class="num">9</span>完整示例插件</a>
+      <a href="#zh-security"><span class="num">10</span>安全与限制</a>
+      <a href="#zh-rust"><span class="num">11</span>Rust 扩展点</a>
+      <a href="#zh-trouble"><span class="num">12</span>故障排查</a>
+      <a href="#zh-links"><span class="num">13</span>相关文件</a>
+    </nav>
+  </div>
+
+  <div class="card" id="zh-overview">
+    <h2>1. 能做什么 / 三种扩展方式</h2>
+    <table>
+      <thead><tr><th>方式</th><th>适合</th><th>改动后如何生效</th></tr></thead>
+      <tbody>
+        <tr><td><code>config.lua</code></td><td>主题、快捷键、启动页、音量、下载/缓存等设置</td><td>设置 → 重新加载脚本</td></tr>
+        <tr><td><code>plugins/*.lua</code></td><td>事件钩子、自定义动作、快捷键回调、通知/日志 —— 无需编译</td><td>设置 → 重新加载脚本</td></tr>
+        <tr><td>Rust <code>Plugin</code></td><td>编译进应用的插件（性能敏感、需要访问应用内部类型）</td><td>重新构建应用</td></tr>
+      </tbody>
+    </table>
+    <p>一个 Lua 插件能做到的事情：</p>
+    <ul>
+      <li>在播放开始/结束、搜索完成、下载完成、曲库扫描完成、暂停/继续、应用启动时执行逻辑；</li>
+      <li>注册自定义动作（出现在设置页，可绑快捷键）；</li>
+      <li>绑定按键到内置动作、自定义动作或任意 Lua 函数；</li>
+      <li>触发播放命令、搜索、打开链接、导入链接、设置音量；</li>
+      <li>弹出应用内提示、写日志、读取当前曲目与运行路径。</li>
+    </ul>
+    <div class="note"><strong>没有网络 API：</strong><code>echoport.*</code> 不提供 HTTP 请求；插件运行在 UI 线程，应保持轻量。Lua 标准库完整可用（含 <code>io</code>/<code>os</code>），但阻塞操作会卡住界面，应避免。</div>
+  </div>
+
+  <div class="card" id="zh-files">
+    <h2>2. 文件位置与加载顺序</h2>
+    <table>
+      <thead><tr><th>平台</th><th>配置</th><th>插件</th></tr></thead>
+      <tbody>
+        <tr><td>Linux</td><td><code>~/.config/echoport/config.lua</code></td><td><code>~/.config/echoport/plugins/*.lua</code></td></tr>
+        <tr><td>macOS</td><td><code>~/Library/Application Support/echoport/config.lua</code></td><td><code>…/echoport/plugins/*.lua</code></td></tr>
+        <tr><td>Windows</td><td><code>%APPDATA%\echoport\config.lua</code></td><td><code>%APPDATA%\echoport\plugins\*.lua</code></td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li><strong>顺序：</strong>先加载 <code>config.lua</code>，再按<strong>文件名排序</strong>加载 <code>plugins/*.lua</code>（<code>01_a.lua</code> 先于 <code>02_b.lua</code>；隐藏文件跳过，不递归子目录）。</li>
+      <li><strong>隔离：</strong>每个插件文件独立执行。某个插件语法错误或运行时报错，只产生一条 <code>&lt;文件名&gt;: &lt;错误&gt;</code> 警告，其他插件继续加载。</li>
+      <li><strong>一次性：</strong>每个文件只执行一次；用 <code>echoport.on</code> / <code>actions.add</code> / <code>bind</code> 注册的回调会在之后的事件中调用。</li>
+      <li><strong>重新加载：</strong>设置 → 重新加载脚本会重建整个 Lua 状态并重新执行所有文件；Lua 全局变量会被清空。</li>
+      <li><strong>失败保护：</strong>如果重新加载时 <code>config.lua</code> 报错，会保留上一次成功的配置和插件。设置页最多显示 100 条脚本警告。</li>
+      <li><strong>线程：</strong>所有 Lua 回调在 UI 线程同步执行——不要阻塞、不要长循环、不要网络/重型 IO。</li>
+    </ul>
+  </div>
+
+  <div class="card" id="zh-config">
+    <h2>3. 配置文件速查</h2>
+    <p>配置写在全局 <code>echoport</code> 表的 <code>config</code> 字段里；插件在加载时可以读取它（但不能通过它修改用户设置）。完整说明见 <a href="config.html">docs/config.html</a>。</p>
+    <table>
+      <thead><tr><th>键</th><th>取值</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>language</code></td><td><code>"en"</code> / <code>"zh"</code></td><td>界面语言</td></tr>
+        <tr><td><code>theme</code></td><td><code>"pulse"</code> / <code>"tide"</code> / <code>"ink"</code></td><td>旧别名 blue_white/album→pulse，midnight→ink</td></tr>
+        <tr><td><code>ui_scale</code></td><td>0.8–2.0</td><td>界面缩放（预设 100/110/125/150%）</td></tr>
+        <tr><td><code>follow_cover_accent</code></td><td>布尔</td><td>跟随封面取色</td></tr>
+        <tr><td><code>accent</code> / <code>highlight</code></td><td><code>"#RRGGBB"</code></td><td>强调色 / 荧光高亮</td></tr>
+        <tr><td><code>macaron</code></td><td>正好 5 个颜色</td><td>马卡龙装饰色</td></tr>
+        <tr><td><code>startup_page</code></td><td>页面名</td><td>启动页面（含 <code>artist</code>）</td></tr>
+        <tr><td><code>volume</code> / <code>volume_step</code></td><td>0–1 / 0.01–0.5</td><td>音量与音量键步长</td></tr>
+        <tr><td><code>seek_step</code></td><td>1–120 秒</td><td>快进/快退步长</td></tr>
+        <tr><td><code>results_per_platform</code></td><td>2–50</td><td>每平台搜索结果数</td></tr>
+        <tr><td><code>download_format</code> / <code>download_dir</code></td><td>格式 / 路径</td><td>下载设置（支持 <code>~</code> 与 <code>$VAR</code>）</td></tr>
+        <tr><td><code>music_dirs</code></td><td>路径表</td><td>本地曲库扫描目录</td></tr>
+        <tr><td><code>cache_limit_mb</code></td><td>0–10240</td><td>音频缓存上限（0=不留缓存）</td></tr>
+        <tr><td><code>keyboard</code></td><td><code>[按键] = 动作</code></td><td>键盘快捷键，见下一节</td></tr>
+      </tbody>
+    </table>
+    <div class="code"><button class="copy" data-label="复制" data-copied="已复制">复制</button><pre><code>echoport.config = {
+  language = "zh",
+  theme = "tide",
+  ui_scale = 1.1,
+  keyboard = {
+    ["Space"] = "play_pause",
+    ["Ctrl+Alt+J"] = "action:hello",
+  },
+}</code></pre></div>
+  </div>
+
+  <div class="card" id="zh-format">
+    <h2>4. 插件文件格式</h2>
+    <p>插件就是普通的 Lua 代码块（不是模块，无需 <code>return</code>）：文件被加载时立即执行一次，注册回调后结束。推荐结构：</p>
+    <div class="code"><button class="copy" data-label="复制" data-copied="已复制">复制</button><pre><code>-- plugins/my_plugin.lua
+-- 1) 文件顶部做一次初始化（日志 / 局部状态）/ one-time setup
+local plays = 0
+
+echoport.log("my_plugin loaded on EchoPort " .. echoport.version)
+
+-- 2) 注册事件钩子 / register event hooks
+echoport.on("track_start", function(track)
+  if track == nil then return end       -- 字段可能为 nil，务必判空
+  plays = plays + 1
+  echoport.notify("♪ " .. track.title .. " — " .. track.artist)
+end)
+
+-- 3) 注册自定义动作 / register custom actions
+echoport.actions.add({
+  id = "my_stats",                      -- 必填、唯一
+  title = "播放统计 / Play count",      -- 必填
+  run = function()
+    echoport.notify("本次会话已播放 " .. plays .. " 首 / tracks played: " .. plays)
+  end,
+})
+
+-- 4) 绑定快捷键 / bind a key
+echoport.bind("Ctrl+Alt+P", "action:my_stats")</code></pre></div>
+    <p>文件内可以用 <code>local</code> 保存状态（重新加载时清空），也可以定义辅助函数；不需要 <code>module()</code> 或返回表。一个文件建议只做一类事情，便于排查。</p>
+  </div>
+
+  <div class="card" id="zh-events">
+    <h2>5. 事件</h2>
+    <p>用 <code>echoport.on(事件名, function(...) end)</code> 注册；同一事件可注册多个回调，按注册顺序执行（config.lua 先于插件）。</p>
+    <table>
+      <thead><tr><th>事件名</th><th>回调参数</th><th>触发时机</th></tr></thead>
+      <tbody>
+        <tr><td><code>startup</code></td><td>—</td><td>应用启动完成</td></tr>
+        <tr><td><code>track_start</code></td><td><code>track</code> 表</td><td>开始播放</td></tr>
+        <tr><td><code>track_end</code></td><td><code>track</code> 表</td><td>当前曲目播放结束</td></tr>
+        <tr><td><code>search_done</code></td><td><code>query</code> 字符串</td><td>多平台搜索完成</td></tr>
+        <tr><td><code>download_done</code></td><td><code>track</code> 表、<code>path</code> 字符串</td><td>下载完成</td></tr>
+        <tr><td><code>library_scanned</code></td><td><code>count</code> 数字</td><td>本地曲库扫描完成</td></tr>
+        <tr><td><code>playback_paused</code></td><td>—</td><td>暂停</td></tr>
+        <tr><td><code>playback_resumed</code></td><td>—</td><td>继续播放</td></tr>
+      </tbody>
+    </table>
+    <h3>track 表</h3>
+    <div class="code"><button class="copy" data-label="复制" data-copied="已复制">复制</button><pre><code>{
+  id = "youtube:abc123",          -- 稳定的曲目 id
+  title = "曲名 / title",
+  artist = "艺术家 / artist",
+  album = "专辑",                  -- 可能为 nil
+  platform = "youtube",            -- local|spotify|apple_music|netease|soundcloud|bilibili|youtube
+  duration = 215.0,                -- 秒，可能为 nil
+  url = "https://...",             -- 来源页面，可能为 nil
+  local_path = "/music/x.mp3",     -- 仅本地曲目，可能为 nil
+}</code></pre></div>
+    <div class="code"><button class="copy" data-label="复制" data-copied="已复制">复制</button><pre><code>echoport.on("track_end", function(track)
+  if track ~= nil then
+    echoport.log("track_end: " .. track.title)
+  end
+end)
+
+echoport.on("download_done", function(track, path)
+  if track ~= nil then
+    echoport.toast("已保存 / saved: " .. track.title .. " -> " .. path)
+  end
+end)</code></pre></div>
+    <div class="note">回调里的 Lua 错误会被捕获：记录一条警告并写日志，<strong>不会</strong>中断其他回调或插件。所有参数可能为 <code>nil</code>，请总是判空。</div>
+  </div>
+
+  <div class="card" id="zh-actions">
+    <h2>6. 自定义动作</h2>
+    <div class="code"><button class="copy" data-label="复制" data-copied="已复制">复制</button><pre><code>echoport.actions.add({
+  id = "focus_mode",                 -- 必填：唯一 id，用作 "action:focus_mode"
+  title = "专注模式 / Focus mode",   -- 必填：设置页显示名
+  description = "音量 30% 并暂停",   -- 可选
+  keys = "Ctrl+Alt+F",               -- 可选：字符串或字符串表，自动注册键位
+  run = function()                   -- 必填：动作主体
+    echoport.set_volume(0.3)
+    echoport.command("play_pause")
+    echoport.notify("专注模式已开启 / focus mode on")
+  end,
+})</code></pre></div>
+    <table>
+      <thead><tr><th>字段</th><th>要求</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>id</code></td><td>必填</td><td>非空且唯一；重复 id 时<strong>后定义者生效</strong>并记录警告</td></tr>
+        <tr><td><code>title</code></td><td>必填</td><td>缺失时用 id 代替并警告</td></tr>
+        <tr><td><code>description</code></td><td>可选</td><td>字符串</td></tr>
+        <tr><td><code>keys</code></td><td>可选</td><td>字符串或字符串表；无效键位产生警告</td></tr>
+        <tr><td><code>run</code></td><td>必填</td><td>函数；可被键位、<code>echoport.command("action:&lt;id&gt;")</code> 或设置页触发</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card" id="zh-bind">
+    <h2>7. 键位绑定</h2>
+    <div class="code"><button class="copy" data-label="复制" data-copied="已复制">复制</button><pre><code>echoport.bind("Ctrl+Alt+N", "next")            -- 内置动作
+echoport.bind("Ctrl+Alt+H", "action:hello")    -- 自定义动作
+echoport.bind("Ctrl+Alt+D", function()         -- 任意函数（自动包装为隐藏动作）
+  echoport.notify("自定义绑定 / custom binding")
+end)</code></pre></div>
+    <ul>
+      <li>修饰键：<span class="kbd">Ctrl</span> <span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">Cmd</span>（Windows/Linux 上 Cmd == Ctrl），大小写不敏感。</li>
+      <li>内置动作：<code>play_pause</code>、<code>next</code>、<code>previous</code>、<code>seek_forward</code>、<code>seek_backward</code>、<code>volume_up</code>、<code>volume_down</code>、<code>toggle_queue</code>、<code>toggle_favorite</code>、<code>toggle_shuffle</code>、<code>cycle_repeat</code>、<code>open_search</code>、<code>open_settings</code>、<code>open_home</code>。</li>
+      <li>同一个按键组合重复绑定时，<strong>后注册者生效</strong>并记录警告；输入框聚焦时快捷键被抑制。</li>
+      <li>绑定到尚不存在的 <code>action:&lt;id&gt;</code>：所有文件加载完后统一校验，不存在则忽略并警告（支持同文件内先 bind 后定义）。</li>
+    </ul>
+  </div>
+
+  <div class="card" id="zh-api">
+    <h2>8. Helper API 参考</h2>
+    <table>
+      <thead><tr><th>调用</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>echoport.version</code></td><td>应用版本字符串，如 <code>"0.1.6"</code></td></tr>
+        <tr><td><code>echoport.paths</code></td><td><code>{ data, cache, config_file, plugins, downloads, music }</code></td></tr>
+        <tr><td><code>echoport.config</code></td><td><code>config.lua</code> 中的配置表（插件加载时已可用）</td></tr>
+        <tr><td><code>echoport.notify(text)</code> / <code>echoport.toast(text)</code></td><td>应用内轻提示 / toast</td></tr>
+        <tr><td><code>echoport.log(text)</code></td><td>写日志（<code>log::info</code>）</td></tr>
+        <tr><td><code>echoport.on(event, fn)</code></td><td>注册事件回调，见第 5 节</td></tr>
+        <tr><td><code>echoport.actions.add{...}</code></td><td>注册自定义动作，见第 6 节</td></tr>
+        <tr><td><code>echoport.bind(chord, action_or_fn)</code></td><td>绑定按键，见第 7 节</td></tr>
+        <tr><td><code>echoport.command(action)</code></td><td>触发内置动作（名字见上）、或 <code>"action:&lt;id&gt;"</code></td></tr>
+        <tr><td><code>echoport.search(query)</code></td><td>搜索所有远程平台</td></tr>
+        <tr><td><code>echoport.open_url(url)</code></td><td>用浏览器打开绝对 URL（必须含 <code>://</code>）</td></tr>
+        <tr><td><code>echoport.play_url(url)</code></td><td>导入平台链接并播放（YouTube/Spotify/Apple Music/网易云/SoundCloud/Bilibili）</td></tr>
+        <tr><td><code>echoport.set_volume(v)</code></td><td>设置音量 0–1（越界自动截断并警告）</td></tr>
+        <tr><td><code>echoport.current_track()</code></td><td>最近播放的 track 表；没有则 <code>nil</code></td></tr>
+        <tr><td><code>echoport.reload()</code></td><td>仅提示：实际重载由设置页发起（会记录一条警告）</td></tr>
+      </tbody>
+    </table>
+    <div class="note"><strong>异步性：</strong><code>command</code> / <code>search</code> / <code>open_url</code> / <code>play_url</code> / <code>set_volume</code> 通过应用事件通道派发，在下一帧生效，不会阻塞当前回调。</div>
+  </div>
+
+  <div class="card" id="zh-example">
+    <h2>9. 完整示例插件</h2>
+    <p>把下面内容保存为 <code>&lt;config_dir&gt;/echoport/plugins/example.lua</code>，然后在设置页重新加载脚本即可。它演示：播放提示、会话内历史、自定义动作、快捷键、日志。仓库里也有可直接使用的 <a href="../examples/plugins/example.lua"><code>examples/plugins/example.lua</code></a>。</p>
+    <div class="code"><button class="copy" data-label="复制" data-copied="已复制">复制</button><pre><code>-- EchoPort 示例插件 / example plugin
+local history = {}
+
+echoport.log("example plugin loaded, EchoPort " .. echoport.version)
+
+-- 曲目开始播放时提示，并记住最近 20 首 / toast + keep last 20 titles
+echoport.on("track_start", function(track)
+  if track == nil then return end
+  echoport.notify("♪ " .. track.title .. " — " .. track.artist)
+  table.insert(history, 1, track.title)
+  if #history > 20 then
+    table.remove(history)
+  end
+end)
+
+-- 搜索完成时写日志 / log finished searches
+echoport.on("search_done", function(query)
+  echoport.log("search finished: " .. tostring(query))
+end)
+
+-- 自定义动作：显示最近播放 / custom action: recent tracks
+echoport.actions.add({
+  id = "recent_tracks",
+  title = "最近播放 / Recent tracks",
+  description = "Example plugin history action",
+  keys = "Ctrl+Alt+L",
+  run = function()
+    if #history == 0 then
+      echoport.notify("还没有播放记录 / nothing played yet")
+      return
+    end
+    local shown = {}
+    for index = 1, math.min(#history, 5) do
+      shown[#shown + 1] = history[index]
+    end
+    echoport.notify("最近 / recent: " .. table.concat(shown, " | "))
+  end,
+})
+
+-- 绑定函数到快捷键 / bind a function to a key
+echoport.bind("Ctrl+Alt+G", function()
+  local track = echoport.current_track()
+  if track then
+    echoport.notify("正在播放 / now playing: " .. track.title)
+  else
+    echoport.notify("还没有播放 / nothing playing")
+  end
+end)</code></pre></div>
+    <div class="note"><strong>关于“桌面通知”：</strong>EchoPort 提供的是<strong>应用内</strong> toast（<code>echoport.notify</code>），没有专门的系统桌面通知 API。由于 Lua 标准库完整，技术上可以用 <code>os.execute("notify-send ...")</code> 调用外部程序，但它会同步阻塞 UI 线程且依赖平台，不推荐；需要时请谨慎、自行测试。</div>
+  </div>
+
+  <div class="card" id="zh-security">
+    <h2>10. 安全与限制</h2>
+    <ul>
+      <li><strong>不是沙箱：</strong>配置文件与插件以你的用户权限在本机执行，拥有完整 Lua 5.4 标准库（含 <code>io</code>、<code>os</code>、<code>load</code>）。只安装你信任的脚本。</li>
+      <li><strong>不联网：</strong><code>echoport.*</code> 不提供网络 API；<code>open_url</code> 只是交给浏览器/系统打开。</li>
+      <li><strong>UI 线程：</strong>所有回调同步运行，禁止阻塞（长循环、<code>os.execute</code>、大文件 IO 会冻结界面）。</li>
+      <li><strong>警告上限：</strong>设置页最多显示 100 条脚本警告，超过后折叠。</li>
+      <li><strong>隔离：</strong>每个插件文件独立执行，单文件错误不影响其他文件；插件不能覆盖用户的 <code>config.lua</code> 设置。</li>
+      <li><strong>无热重载：</strong>重新加载会重建整个 Lua 状态（全局变量丢失），不支持只重载某个插件。</li>
+      <li><strong>重复定义：</strong>动作 id 重复时后定义生效并警告；按键重复时后注册生效并警告；无效键位/事件/动作只警告不崩溃。</li>
+    </ul>
+  </div>
+
+  <div class="card" id="zh-rust">
+    <h2>11. Rust 扩展点（编译进应用）</h2>
+    <p>需要更高性能或访问应用内部类型时，可以实现 <code>echoport::scripting::Plugin</code> trait 并注册到 <code>PluginRegistry</code>。它和 Lua 事件共享同一套 <code>ScriptEvent</code>。</p>
+    <div class="code"><button class="copy" data-label="复制" data-copied="已复制">复制</button><pre><code>use echoport::scripting::{Plugin, PluginHost, PluginRegistry, ScriptEvent};
+use echoport::state::Command;
+
+struct AutoShuffle;
+
+impl Plugin for AutoShuffle {
+    fn id(&amp;self) -&gt; &amp;str {
+        "auto-shuffle"
+    }
+
+    fn on_event(&amp;mut self, event: &amp;ScriptEvent, host: &amp;mut PluginHost) {
+        if let ScriptEvent::TrackStart(track) = event {
+            host.notify(format!("now playing: {}", track.title));
+            host.dispatch(Command::ToggleShuffle);   // 下一帧生效 / applied next frame
+        }
+    }
+}
+
+// 在 EchoPortApp 初始化时注册一次 / register once at startup
+let mut rust_plugins = PluginRegistry::with_sender(tx.clone());
+rust_plugins.register(Box::new(AutoShuffle));
+
+// 事件分发点 / event dispatch point
+rust_plugins.fire(&amp;ScriptEvent::TrackStart(track.clone()));</code></pre></div>
+    <table>
+      <thead><tr><th>接口</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>Plugin::id() -&gt; &amp;str</code></td><td>唯一 id；重复注册时后注册者替换前者并记日志</td></tr>
+        <tr><td><code>Plugin::on_event(&amp;mut self, &amp;ScriptEvent, &amp;mut PluginHost)</code></td><td>UI 线程同步调用；不要阻塞；Rust panic 不会被捕获（Lua 会）</td></tr>
+        <tr><td><code>PluginHost::dispatch(Command)</code></td><td>派发应用命令（<code>echoport::state::Command</code>），下一帧生效</td></tr>
+        <tr><td><code>PluginHost::notify(text)</code></td><td>应用内提示（等价于 Lua <code>notify</code>）</td></tr>
+        <tr><td><code>PluginRegistry::new()</code> / <code>with_sender(tx)</code> / <code>set_sender(tx)</code></td><td>创建注册表并连接事件通道</td></tr>
+        <tr><td><code>register</code> / <code>fire</code> / <code>plugins</code> / <code>is_empty</code> / <code>len</code></td><td>注册、分发、查询</td></tr>
+      </tbody>
+    </table>
+    <p>Lua <code>Scripts</code> 不是 <code>Send</code>（Lua 状态绑定线程），请放在 UI 线程；Rust <code>PluginRegistry</code> 与插件本身是 <code>Send</code> 的。</p>
+  </div>
+
+  <div class="card" id="zh-trouble">
+    <h2>12. 故障排查</h2>
+    <table>
+      <thead><tr><th>现象</th><th>处理</th></tr></thead>
+      <tbody>
+        <tr><td>插件没加载</td><td>确认扩展名是 <code>.lua</code>、位于 <code>plugins/</code> 目录、不是隐藏文件；看设置页 warnings 里的 <code>&lt;文件名&gt;: &lt;错误&gt;</code>。</td></tr>
+        <tr><td><code>syntax error</code></td><td>检查 Lua 语法（<code>end</code>、逗号、引号）；该文件被跳过，其他插件照常加载。</td></tr>
+        <tr><td>事件没触发</td><td>事件名拼写（见第 5 节，下划线小写）；事件只在对应应用状态变化时派发。</td></tr>
+        <tr><td>动作没出现在设置页</td><td><code>actions.add</code> 缺 <code>run</code> 或 <code>id</code> 会被拒绝并警告；看 warnings。</td></tr>
+        <tr><td>快捷键无效</td><td>输入框聚焦时被抑制；检查动作名；重复按键以后注册者为准。</td></tr>
+        <tr><td>重新加载后状态丢失</td><td>Lua 全局状态会在重载时清空；需要持久化请用 <code>echoport.paths.data</code> 自行写文件（谨慎、非必需）。</td></tr>
+        <tr><td>界面卡顿</td><td>回调里不要阻塞或长时间运行；重活应拆成短任务，或改用 Rust 插件的后台线程。</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card" id="zh-links">
+    <h2>13. 相关文件</h2>
+    <ul>
+      <li><a href="config.html">docs/config.html</a> — 全部配置选项参考</li>
+      <li><a href="SCRIPTING.md">docs/SCRIPTING.md</a> — Markdown 版配置 / Lua API</li>
+      <li><a href="PLUGINS.md">docs/PLUGINS.md</a> — Markdown 版插件指南（含 API 稳定性承诺）</li>
+      <li><a href="../examples/config.zh-CN.lua">examples/config.zh-CN.lua</a> · <a href="../examples/config.en.lua">examples/config.en.lua</a> · <a href="../examples/plugins/example.lua">examples/plugins/example.lua</a></li>
+    </ul>
+  </div>
+</div>
+</div>
+
+<!-- ======================= ENGLISH ======================= -->
+<div class="lang-en">
+<div class="wrap" id="en-top">
+  <section class="hero">
+    <h1>EchoPort plugin development manual</h1>
+    <p>Add your own logic to EchoPort with Lua 5.4: listen to playback/search/download events, register actions and shortcuts, read the configuration, show in-app toasts. No compilation needed — plugins are local Lua files loaded in file-name order. Logic can also be compiled into Rust through the <code>Plugin</code> / <code>PluginRegistry</code> extension point.</p>
+    <div class="badges">
+      <span class="badge lime">v0.1.6</span>
+      <span class="badge">Lua 5.4 · nothing to install</span>
+      <span class="badge">Trusted local scripts</span>
+      <span class="badge">Settings → Reload scripts</span>
+    </div>
+  </section>
+
+  <div class="card">
+    <h2 id="en-toc">Contents</h2>
+    <nav class="toc">
+      <a href="#en-overview"><span class="num">1</span>What you can build / three ways</a>
+      <a href="#en-files"><span class="num">2</span>File locations &amp; load order</a>
+      <a href="#en-config"><span class="num">3</span>Configuration quick reference</a>
+      <a href="#en-format"><span class="num">4</span>Plugin file format</a>
+      <a href="#en-events"><span class="num">5</span>Events</a>
+      <a href="#en-actions"><span class="num">6</span>Custom actions</a>
+      <a href="#en-bind"><span class="num">7</span>Key bindings</a>
+      <a href="#en-api"><span class="num">8</span>Helper API reference</a>
+      <a href="#en-example"><span class="num">9</span>Complete example plugin</a>
+      <a href="#en-security"><span class="num">10</span>Security &amp; limits</a>
+      <a href="#en-rust"><span class="num">11</span>Rust extension point</a>
+      <a href="#en-trouble"><span class="num">12</span>Troubleshooting</a>
+      <a href="#en-links"><span class="num">13</span>Related files</a>
+    </nav>
+  </div>
+
+  <div class="card" id="en-overview">
+    <h2>1. What you can build / three ways</h2>
+    <table>
+      <thead><tr><th>Way</th><th>Good for</th><th>Apply changes</th></tr></thead>
+      <tbody>
+        <tr><td><code>config.lua</code></td><td>theme, shortcuts, startup page, volume, download/cache settings</td><td>Settings → Reload scripts</td></tr>
+        <tr><td><code>plugins/*.lua</code></td><td>event hooks, custom actions, key callbacks, toasts/logging — no build step</td><td>Settings → Reload scripts</td></tr>
+        <tr><td>Rust <code>Plugin</code></td><td>compiled-in plugins (performance-sensitive or needing internal app types)</td><td>rebuild the app</td></tr>
+      </tbody>
+    </table>
+    <p>A Lua plugin can:</p>
+    <ul>
+      <li>run logic on app startup, track start/end, search completion, download completion, library scan completion, pause/resume;</li>
+      <li>register custom actions (listed in Settings, hotkeyable);</li>
+      <li>bind keys to built-in actions, custom actions or arbitrary Lua functions;</li>
+      <li>trigger playback commands, search, open a link, import a link, set the volume;</li>
+      <li>show in-app toasts, write logs, read the current track and platform paths.</li>
+    </ul>
+    <div class="note"><strong>No networking API:</strong> <code>echoport.*</code> exposes no HTTP requests; plugins run on the UI thread and must stay cheap. The full Lua standard library (including <code>io</code>/<code>os</code>) is available, but blocking calls freeze the interface — avoid them.</div>
+  </div>
+
+  <div class="card" id="en-files">
+    <h2>2. File locations &amp; load order</h2>
+    <table>
+      <thead><tr><th>Platform</th><th>Config</th><th>Plugins</th></tr></thead>
+      <tbody>
+        <tr><td>Linux</td><td><code>~/.config/echoport/config.lua</code></td><td><code>~/.config/echoport/plugins/*.lua</code></td></tr>
+        <tr><td>macOS</td><td><code>~/Library/Application Support/echoport/config.lua</code></td><td><code>…/echoport/plugins/*.lua</code></td></tr>
+        <tr><td>Windows</td><td><code>%APPDATA%\echoport\config.lua</code></td><td><code>%APPDATA%\echoport\plugins\*.lua</code></td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li><strong>Order:</strong> <code>config.lua</code> first, then <code>plugins/*.lua</code> sorted by <strong>file name</strong> (<code>01_a.lua</code> before <code>02_b.lua</code>; hidden files skipped, sub-directories not descended into).</li>
+      <li><strong>Isolation:</strong> each plugin file runs once in its own protected execution. A syntax/runtime error in one plugin produces a <code>&lt;file&gt;: &lt;error&gt;</code> warning and the other plugins still load.</li>
+      <li><strong>One-shot:</strong> each file executes once; callbacks registered with <code>echoport.on</code> / <code>actions.add</code> / <code>bind</code> are called later.</li>
+      <li><strong>Reload:</strong> Settings → Reload scripts rebuilds the whole Lua state and re-executes every file; Lua globals are cleared.</li>
+      <li><strong>Failure protection:</strong> if <code>config.lua</code> fails during a reload, the previous working configuration and plugins are kept. Settings shows at most 100 script warnings.</li>
+      <li><strong>Threading:</strong> all Lua callbacks run synchronously on the UI thread — no blocking, no long loops, no network/heavy IO.</li>
+    </ul>
+  </div>
+
+  <div class="card" id="en-config">
+    <h2>3. Configuration quick reference</h2>
+    <p>Configuration lives in the global <code>echoport.config</code> table; plugins can read it while loading (they cannot use it to override user settings). Full details: <a href="config.html">docs/config.html</a>.</p>
+    <table>
+      <thead><tr><th>Key</th><th>Values</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><code>language</code></td><td><code>"en"</code> / <code>"zh"</code></td><td>UI language</td></tr>
+        <tr><td><code>theme</code></td><td><code>"pulse"</code> / <code>"tide"</code> / <code>"ink"</code></td><td>legacy: blue_white/album→pulse, midnight→ink</td></tr>
+        <tr><td><code>ui_scale</code></td><td>0.8–2.0</td><td>UI zoom (presets 100/110/125/150%)</td></tr>
+        <tr><td><code>follow_cover_accent</code></td><td>boolean</td><td>derive accents from cover art</td></tr>
+        <tr><td><code>accent</code> / <code>highlight</code></td><td><code>"#RRGGBB"</code></td><td>accent / fluorescent highlight</td></tr>
+        <tr><td><code>macaron</code></td><td>exactly 5 colours</td><td>macaron decoration palette</td></tr>
+        <tr><td><code>startup_page</code></td><td>page name</td><td>startup page (including <code>artist</code>)</td></tr>
+        <tr><td><code>volume</code> / <code>volume_step</code></td><td>0–1 / 0.01–0.5</td><td>volume and volume-button step</td></tr>
+        <tr><td><code>seek_step</code></td><td>1–120 seconds</td><td>seek step</td></tr>
+        <tr><td><code>results_per_platform</code></td><td>2–50</td><td>search results per platform</td></tr>
+        <tr><td><code>download_format</code> / <code>download_dir</code></td><td>format / path</td><td>download settings (supports <code>~</code> and <code>$VAR</code>)</td></tr>
+        <tr><td><code>music_dirs</code></td><td>list of paths</td><td>local library scan folders</td></tr>
+        <tr><td><code>cache_limit_mb</code></td><td>0–10240</td><td>audio cache cap (0 = keep no cache)</td></tr>
+        <tr><td><code>keyboard</code></td><td><code>[chord] = action</code></td><td>keyboard shortcuts, see below</td></tr>
+      </tbody>
+    </table>
+    <div class="code"><button class="copy" data-label="Copy" data-copied="Copied">Copy</button><pre><code>echoport.config = {
+  language = "en",
+  theme = "tide",
+  ui_scale = 1.1,
+  keyboard = {
+    ["Space"] = "play_pause",
+    ["Ctrl+Alt+J"] = "action:hello",
+  },
+}</code></pre></div>
+  </div>
+
+  <div class="card" id="en-format">
+    <h2>4. Plugin file format</h2>
+    <p>A plugin is a plain Lua chunk (not a module — no <code>return</code> needed): the file executes once when loaded, registers callbacks and ends. Recommended shape:</p>
+    <div class="code"><button class="copy" data-label="Copy" data-copied="Copied">Copy</button><pre><code>-- plugins/my_plugin.lua
+-- 1) one-time setup at the top of the file / 文件顶部初始化
+local plays = 0
+
+echoport.log("my_plugin loaded on EchoPort " .. echoport.version)
+
+-- 2) register event hooks / 注册事件钩子
+echoport.on("track_start", function(track)
+  if track == nil then return end       -- fields may be nil; always nil-check
+  plays = plays + 1
+  echoport.notify("♪ " .. track.title .. " — " .. track.artist)
+end)
+
+-- 3) register custom actions / 注册自定义动作
+echoport.actions.add({
+  id = "my_stats",                      -- required, unique
+  title = "Play count / 播放统计",       -- required
+  run = function()
+    echoport.notify("tracks played this session: " .. plays)
+  end,
+})
+
+-- 4) bind a key / 绑定快捷键
+echoport.bind("Ctrl+Alt+P", "action:my_stats")</code></pre></div>
+    <p>Use <code>local</code> for state (cleared on reload) and helper functions freely; no <code>module()</code> or return table is required. One file per concern keeps debugging simple.</p>
+  </div>
+
+  <div class="card" id="en-events">
+    <h2>5. Events</h2>
+    <p>Register with <code>echoport.on(name, function(...) end)</code>. Multiple callbacks per event are allowed and run in registration order (config.lua before plugins).</p>
+    <table>
+      <thead><tr><th>Event</th><th>Arguments</th><th>When</th></tr></thead>
+      <tbody>
+        <tr><td><code>startup</code></td><td>—</td><td>app finished starting</td></tr>
+        <tr><td><code>track_start</code></td><td><code>track</code> table</td><td>a track started playing</td></tr>
+        <tr><td><code>track_end</code></td><td><code>track</code> table</td><td>a track finished playing</td></tr>
+        <tr><td><code>search_done</code></td><td><code>query</code> string</td><td>multi-platform search finished</td></tr>
+        <tr><td><code>download_done</code></td><td><code>track</code> table, <code>path</code> string</td><td>download finished</td></tr>
+        <tr><td><code>library_scanned</code></td><td><code>count</code> number</td><td>local library scan finished</td></tr>
+        <tr><td><code>playback_paused</code></td><td>—</td><td>paused</td></tr>
+        <tr><td><code>playback_resumed</code></td><td>—</td><td>resumed</td></tr>
+      </tbody>
+    </table>
+    <h3>Track table</h3>
+    <div class="code"><button class="copy" data-label="Copy" data-copied="Copied">Copy</button><pre><code>{
+  id = "youtube:abc123",          -- stable track id
+  title = "title",
+  artist = "artist",
+  album = "album",                -- may be nil
+  platform = "youtube",            -- local|spotify|apple_music|netease|soundcloud|bilibili|youtube
+  duration = 215.0,                -- seconds, may be nil
+  url = "https://...",             -- source page, may be nil
+  local_path = "/music/x.mp3",     -- local tracks only, may be nil
+}</code></pre></div>
+    <div class="code"><button class="copy" data-label="Copy" data-copied="Copied">Copy</button><pre><code>echoport.on("track_end", function(track)
+  if track ~= nil then
+    echoport.log("track_end: " .. track.title)
+  end
+end)
+
+echoport.on("download_done", function(track, path)
+  if track ~= nil then
+    echoport.toast("saved: " .. track.title .. " -> " .. path)
+  end
+end)</code></pre></div>
+    <div class="note">Lua errors inside a callback are caught: they become a warning plus a log line and do <strong>not</strong> stop other callbacks or plugins. Every argument may be <code>nil</code> — always nil-check.</div>
+  </div>
+
+  <div class="card" id="en-actions">
+    <h2>6. Custom actions</h2>
+    <div class="code"><button class="copy" data-label="Copy" data-copied="Copied">Copy</button><pre><code>echoport.actions.add({
+  id = "focus_mode",                 -- required: unique, referenced as "action:focus_mode"
+  title = "Focus mode",              -- required: label in Settings
+  description = "volume 30% + pause",-- optional
+  keys = "Ctrl+Alt+F",               -- optional: string or list of strings
+  run = function()                   -- required: action body
+    echoport.set_volume(0.3)
+    echoport.command("play_pause")
+    echoport.notify("focus mode on / 专注模式已开启")
+  end,
+})</code></pre></div>
+    <table>
+      <thead><tr><th>Field</th><th>Required</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><code>id</code></td><td>yes</td><td>non-empty, unique; duplicate ids: <strong>last definition wins</strong> with a warning</td></tr>
+        <tr><td><code>title</code></td><td>yes</td><td>falls back to the id (with a warning) when missing</td></tr>
+        <tr><td><code>description</code></td><td>no</td><td>string</td></tr>
+        <tr><td><code>keys</code></td><td>no</td><td>string or list of strings; invalid chords produce warnings</td></tr>
+        <tr><td><code>run</code></td><td>yes</td><td>function; runnable from a key, <code>echoport.command("action:&lt;id&gt;")</code> or Settings</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card" id="en-bind">
+    <h2>7. Key bindings</h2>
+    <div class="code"><button class="copy" data-label="Copy" data-copied="Copied">Copy</button><pre><code>echoport.bind("Ctrl+Alt+N", "next")            -- built-in action
+echoport.bind("Ctrl+Alt+H", "action:hello")    -- custom action
+echoport.bind("Ctrl+Alt+D", function()         -- arbitrary function (wrapped as a hidden action)
+  echoport.notify("custom binding / 自定义绑定")
+end)</code></pre></div>
+    <ul>
+      <li>Modifiers: <span class="kbd">Ctrl</span> <span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">Cmd</span> (Cmd == Ctrl on Windows/Linux), case-insensitive.</li>
+      <li>Built-in actions: <code>play_pause</code>, <code>next</code>, <code>previous</code>, <code>seek_forward</code>, <code>seek_backward</code>, <code>volume_up</code>, <code>volume_down</code>, <code>toggle_queue</code>, <code>toggle_favorite</code>, <code>toggle_shuffle</code>, <code>cycle_repeat</code>, <code>open_search</code>, <code>open_settings</code>, <code>open_home</code>.</li>
+      <li>Duplicate chords: <strong>last registration wins</strong> with a warning; shortcuts are suppressed while a text field has keyboard focus.</li>
+      <li>Binding to an unknown <code>action:&lt;id&gt;</code>: validated after all files load; if it still does not exist the binding is dropped with a warning (forward declarations within a file are fine).</li>
+    </ul>
+  </div>
+
+  <div class="card" id="en-api">
+    <h2>8. Helper API reference</h2>
+    <table>
+      <thead><tr><th>Call</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>echoport.version</code></td><td>app version string, e.g. <code>"0.1.6"</code></td></tr>
+        <tr><td><code>echoport.paths</code></td><td><code>{ data, cache, config_file, plugins, downloads, music }</code></td></tr>
+        <tr><td><code>echoport.config</code></td><td>the <code>config.lua</code> table (available when plugins load)</td></tr>
+        <tr><td><code>echoport.notify(text)</code> / <code>echoport.toast(text)</code></td><td>in-app toast</td></tr>
+        <tr><td><code>echoport.log(text)</code></td><td>write a log line (<code>log::info</code>)</td></tr>
+        <tr><td><code>echoport.on(event, fn)</code></td><td>register an event callback, see section 5</td></tr>
+        <tr><td><code>echoport.actions.add{...}</code></td><td>register a custom action, see section 6</td></tr>
+        <tr><td><code>echoport.bind(chord, action_or_fn)</code></td><td>bind a key, see section 7</td></tr>
+        <tr><td><code>echoport.command(action)</code></td><td>trigger a built-in action (names above) or <code>"action:&lt;id&gt;"</code></td></tr>
+        <tr><td><code>echoport.search(query)</code></td><td>search all remote platforms</td></tr>
+        <tr><td><code>echoport.open_url(url)</code></td><td>open an absolute URL in the browser (must contain <code>://</code>)</td></tr>
+        <tr><td><code>echoport.play_url(url)</code></td><td>import a platform link and play it (YouTube/Spotify/Apple Music/Netease/SoundCloud/Bilibili)</td></tr>
+        <tr><td><code>echoport.set_volume(v)</code></td><td>set volume 0–1 (clamped with a warning)</td></tr>
+        <tr><td><code>echoport.current_track()</code></td><td>last track table, or <code>nil</code></td></tr>
+        <tr><td><code>echoport.reload()</code></td><td>hint only — reloading is initiated from Settings (records a warning)</td></tr>
+      </tbody>
+    </table>
+    <div class="note"><strong>Asynchronous dispatch:</strong> <code>command</code> / <code>search</code> / <code>open_url</code> / <code>play_url</code> / <code>set_volume</code> go through the app event channel and apply on the next frame, so they never block the current callback.</div>
+  </div>
+
+  <div class="card" id="en-example">
+    <h2>9. Complete example plugin</h2>
+    <p>Save this as <code>&lt;config_dir&gt;/echoport/plugins/example.lua</code> and use Settings → Reload scripts. It demonstrates playback toasts, in-session history, a custom action, a shortcut and logging. The repository also ships a working <a href="../examples/plugins/example.lua"><code>examples/plugins/example.lua</code></a>.</p>
+    <div class="code"><button class="copy" data-label="Copy" data-copied="Copied">Copy</button><pre><code>-- EchoPort example plugin / 示例插件
+local history = {}
+
+echoport.log("example plugin loaded, EchoPort " .. echoport.version)
+
+-- Toast on track start and remember the last 20 titles
+echoport.on("track_start", function(track)
+  if track == nil then return end
+  echoport.notify("♪ " .. track.title .. " — " .. track.artist)
+  table.insert(history, 1, track.title)
+  if #history > 20 then
+    table.remove(history)
+  end
+end)
+
+-- Log finished searches
+echoport.on("search_done", function(query)
+  echoport.log("search finished: " .. tostring(query))
+end)
+
+-- Custom action: show recent tracks
+echoport.actions.add({
+  id = "recent_tracks",
+  title = "Recent tracks",
+  description = "Example plugin history action",
+  keys = "Ctrl+Alt+L",
+  run = function()
+    if #history == 0 then
+      echoport.notify("nothing played yet / 还没有播放记录")
+      return
+    end
+    local shown = {}
+    for index = 1, math.min(#history, 5) do
+      shown[#shown + 1] = history[index]
+    end
+    echoport.notify("recent: " .. table.concat(shown, " | "))
+  end,
+})
+
+-- Bind a function to a key
+echoport.bind("Ctrl+Alt+G", function()
+  local track = echoport.current_track()
+  if track then
+    echoport.notify("now playing: " .. track.title)
+  else
+    echoport.notify("nothing playing / 还没有播放")
+  end
+end)</code></pre></div>
+    <div class="note"><strong>About “desktop notifications”:</strong> EchoPort offers <strong>in-app</strong> toasts via <code>echoport.notify</code>; there is no dedicated OS notification API. Because the full Lua stdlib is available you could technically call e.g. <code>os.execute("notify-send ...")</code>, but it blocks the UI thread and is platform-dependent — not recommended unless you know what you are doing.</div>
+  </div>
+
+  <div class="card" id="en-security">
+    <h2>10. Security &amp; limits</h2>
+    <ul>
+      <li><strong>Not a sandbox:</strong> config files and plugins run locally with your user permissions and the full Lua 5.4 standard library (<code>io</code>, <code>os</code>, <code>load</code>, …). Only install scripts you trust.</li>
+      <li><strong>No networking:</strong> <code>echoport.*</code> exposes no network API; <code>open_url</code> simply hands a URL to the browser/system.</li>
+      <li><strong>UI thread:</strong> all callbacks run synchronously — never block (long loops, <code>os.execute</code>, heavy file IO freeze the interface).</li>
+      <li><strong>Warning cap:</strong> Settings shows at most 100 script warnings; further ones are folded.</li>
+      <li><strong>Isolation:</strong> each plugin file runs isolated; one broken file does not affect the others. Plugins cannot override the user's <code>config.lua</code> settings.</li>
+      <li><strong>No hot reload:</strong> reloading rebuilds the whole Lua state (globals are lost); there is no per-plugin reload.</li>
+      <li><strong>Duplicates:</strong> duplicate action ids keep the last definition with a warning; duplicate chords keep the last registration with a warning; invalid chords/events/actions only warn, never crash.</li>
+    </ul>
+  </div>
+
+  <div class="card" id="en-rust">
+    <h2>11. Rust extension point (compiled-in plugins)</h2>
+    <p>For higher performance or access to internal app types, implement the <code>echoport::scripting::Plugin</code> trait and register it in a <code>PluginRegistry</code>. It shares the same <code>ScriptEvent</code> stream as Lua.</p>
+    <div class="code"><button class="copy" data-label="Copy" data-copied="Copied">Copy</button><pre><code>use echoport::scripting::{Plugin, PluginHost, PluginRegistry, ScriptEvent};
+use echoport::state::Command;
+
+struct AutoShuffle;
+
+impl Plugin for AutoShuffle {
+    fn id(&amp;self) -&gt; &amp;str {
+        "auto-shuffle"
+    }
+
+    fn on_event(&amp;mut self, event: &amp;ScriptEvent, host: &amp;mut PluginHost) {
+        if let ScriptEvent::TrackStart(track) = event {
+            host.notify(format!("now playing: {}", track.title));
+            host.dispatch(Command::ToggleShuffle);   // applied on the next frame
+        }
+    }
+}
+
+// Register once when EchoPortApp is created
+let mut rust_plugins = PluginRegistry::with_sender(tx.clone());
+rust_plugins.register(Box::new(AutoShuffle));
+
+// Dispatch events next to the Lua dispatch point
+rust_plugins.fire(&amp;ScriptEvent::TrackStart(track.clone()));</code></pre></div>
+    <table>
+      <thead><tr><th>Interface</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><code>Plugin::id() -&gt; &amp;str</code></td><td>unique id; re-registering the same id replaces the earlier plugin and logs a warning</td></tr>
+        <tr><td><code>Plugin::on_event(&amp;mut self, &amp;ScriptEvent, &amp;mut PluginHost)</code></td><td>called synchronously on the UI thread; keep it cheap; Rust panics are not caught (Lua errors are)</td></tr>
+        <tr><td><code>PluginHost::dispatch(Command)</code></td><td>queue an app command (<code>echoport::state::Command</code>), applied next frame</td></tr>
+        <tr><td><code>PluginHost::notify(text)</code></td><td>in-app toast (same as Lua <code>notify</code>)</td></tr>
+        <tr><td><code>PluginRegistry::new()</code> / <code>with_sender(tx)</code> / <code>set_sender(tx)</code></td><td>create a registry and connect the event channel</td></tr>
+        <tr><td><code>register</code> / <code>fire</code> / <code>plugins</code> / <code>is_empty</code> / <code>len</code></td><td>register, dispatch, inspect</td></tr>
+      </tbody>
+    </table>
+    <p>Lua <code>Scripts</code> is not <code>Send</code> (the Lua state is thread-bound) — keep it on the UI thread. Rust <code>PluginRegistry</code> and its plugins are <code>Send</code>.</p>
+  </div>
+
+  <div class="card" id="en-trouble">
+    <h2>12. Troubleshooting</h2>
+    <table>
+      <thead><tr><th>Symptom</th><th>Fix</th></tr></thead>
+      <tbody>
+        <tr><td>Plugin does not load</td><td>Check the <code>.lua</code> extension, that it sits in <code>plugins/</code> and is not a hidden file; read the <code>&lt;file&gt;: &lt;error&gt;</code> warning in Settings.</td></tr>
+        <tr><td><code>syntax error</code></td><td>Check Lua syntax (<code>end</code>, commas, quotes); that file is skipped and the others still load.</td></tr>
+        <tr><td>Event never fires</td><td>Check the event spelling (section 5, lowercase with underscores); events only fire on the matching app state change.</td></tr>
+        <tr><td>Action missing from Settings</td><td><code>actions.add</code> without <code>run</code> or <code>id</code> is rejected with a warning; check the warnings list.</td></tr>
+        <tr><td>Shortcut does nothing</td><td>Suppressed while a text field has focus; check the action name; duplicate chords keep the last registration.</td></tr>
+        <tr><td>State lost after reload</td><td>Lua globals are cleared on reload; persist only if needed via <code>echoport.paths.data</code> (careful, usually unnecessary).</td></tr>
+        <tr><td>UI stutters</td><td>Do not block or run long work in callbacks; split it up or move heavy work to a Rust plugin's background thread.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card" id="en-links">
+    <h2>13. Related files</h2>
+    <ul>
+      <li><a href="config.html">docs/config.html</a> — every configuration option</li>
+      <li><a href="SCRIPTING.md">docs/SCRIPTING.md</a> — Markdown config / Lua API reference</li>
+      <li><a href="PLUGINS.md">docs/PLUGINS.md</a> — Markdown plugin guide (including the API stability promise)</li>
+      <li><a href="../examples/config.zh-CN.lua">examples/config.zh-CN.lua</a> · <a href="../examples/config.en.lua">examples/config.en.lua</a> · <a href="../examples/plugins/example.lua">examples/plugins/example.lua</a></li>
+    </ul>
+  </div>
+</div>
+</div>
+
+<footer>
+  <span class="lang-zh">EchoPort · <a href="config.html">配置参考</a> · <a href="SCRIPTING.md">SCRIPTING.md</a> · <a href="PLUGINS.md">PLUGINS.md</a> · <a href="../examples/plugins/example.lua">示例插件</a></span>
+  <span class="lang-en">EchoPort · <a href="config.html">config reference</a> · <a href="SCRIPTING.md">SCRIPTING.md</a> · <a href="PLUGINS.md">PLUGINS.md</a> · <a href="../examples/plugins/example.lua">example plugin</a></span>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+  var STORAGE_KEY = "echoport-docs-lang";
+
+  function readStored() {
+    try { return window.localStorage.getItem(STORAGE_KEY); } catch (error) { return null; }
+  }
+  function store(lang) {
+    try { window.localStorage.setItem(STORAGE_KEY, lang); } catch (error) { /* file:// or private mode */ }
+  }
+  function apply(lang) {
+    var value = lang === "en" ? "en" : "zh";
+    var root = document.documentElement;
+    root.setAttribute("data-lang", value);
+    root.setAttribute("lang", value === "en" ? "en" : "zh-CN");
+    var buttons = document.querySelectorAll(".lang-btn");
+    for (var i = 0; i < buttons.length; i += 1) {
+      var active = buttons[i].getAttribute("data-lang") === value;
+      buttons[i].classList.toggle("is-active", active);
+      buttons[i].setAttribute("aria-pressed", active ? "true" : "false");
+    }
+  }
+  function initialLang() {
+    try {
+      var params = new URLSearchParams(window.location.search);
+      if (params.get("lang") === "en" || params.get("lang") === "zh") { return params.get("lang"); }
+    } catch (error) { /* very old browsers */ }
+    return readStored() || "zh";
+  }
+
+  apply(initialLang());
+
+  var buttons = document.querySelectorAll(".lang-btn");
+  for (var i = 0; i < buttons.length; i += 1) {
+    buttons[i].addEventListener("click", function (event) {
+      var lang = event.currentTarget.getAttribute("data-lang");
+      apply(lang);
+      store(lang);
+    });
+  }
+
+  // Copy-to-clipboard buttons inside code blocks (optional, never fatal).
+  var copyButtons = document.querySelectorAll(".copy");
+  for (var j = 0; j < copyButtons.length; j += 1) {
+    copyButtons[j].addEventListener("click", function (event) {
+      var button = event.currentTarget;
+      var block = button.parentNode ? button.parentNode.querySelector("pre code") : null;
+      if (!block) { return; }
+      var text = block.textContent;
+      var label = button.getAttribute("data-label") || "Copy";
+      var copied = button.getAttribute("data-copied") || "Copied";
+      var reset = function () {
+        button.textContent = copied;
+        window.setTimeout(function () { button.textContent = label; }, 1400);
+      };
+      var fallback = function () {
+        try {
+          var area = document.createElement("textarea");
+          area.value = text;
+          area.setAttribute("readonly", "");
+          area.style.position = "fixed";
+          area.style.opacity = "0";
+          document.body.appendChild(area);
+          area.select();
+          document.execCommand("copy");
+          document.body.removeChild(area);
+          reset();
+        } catch (error) {
+          button.textContent = copied;
+          window.setTimeout(function () { button.textContent = label; }, 1400);
+        }
+      };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(reset, fallback);
+        } else {
+          fallback();
+        }
+      } catch (error) {
+        fallback();
+      }
+    });
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- WiX source for the EchoPort Windows installer, built with msitools/wixl on Linux.
+     Per-user install (no admin required): %LOCALAPPDATA%\EchoPort + Start Menu shortcut.
+     This MSI is cross-built and unsigned; it has NOT been executed on Windows. -->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="EchoPort" Language="1033" Version="@VERSION4@"
+           Manufacturer="nilotoo" UpgradeCode="@UPGRADE_GUID@">
+    <Package InstallerVersion="500" Compressed="yes" InstallScope="perUser"/>
+    <MajorUpgrade DowngradeErrorMessage="A newer version of EchoPort is already installed."/>
+    <Media Id="1" Cabinet="echoport.cab" EmbedCab="yes"/>
+    <Icon Id="EchoPortIcon" SourceFile="@STAGE@/echoport.ico"/>
+    <Property Id="ARPPRODUCTICON" Value="EchoPortIcon"/>
+    <Property Id="ARPHELPLINK" Value="https://github.com/Nilotoo/EchoPort"/>
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="LocalAppDataFolder">
+        <Directory Id="EchoPortDir" Name="EchoPort">
+          <Component Id="MainExecutable" Guid="@GUID_EXE@">
+            <File Id="EchoPortExe" Name="echoport.exe" Source="@STAGE@/echoport.exe" KeyPath="yes">
+              <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuDir" Name="EchoPort"
+                        WorkingDirectory="EchoPortDir" Advertise="no"/>
+            </File>
+          </Component>
+          <Component Id="CleanUninstaller" Guid="@GUID_CLEAN@">
+            <File Id="CleanUninstallCmd" Name="clean-uninstall.cmd" Source="@STAGE@/clean-uninstall.cmd" KeyPath="yes">
+              <Shortcut Id="CleanUninstallShortcut" Directory="ProgramMenuDir"
+                        Name="Uninstall EchoPort (clean app data)" Advertise="no"/>
+            </File>
+          </Component>
+@TOOLS_COMPONENT@
+          <Component Id="DocsAndLicence" Guid="@GUID_DOCS@">
+            <File Id="ReadmeWindows" Name="README-WINDOWS.txt" Source="@STAGE@/README-WINDOWS.txt"/>
+            <File Id="Licence" Name="LICENSE" Source="@STAGE@/LICENSE"/>
+            <File Id="Readme" Name="README.md" Source="@STAGE@/README.md"/>
+            <File Id="ScriptingMd" Name="SCRIPTING.md" Source="@STAGE@/docs/SCRIPTING.md"/>
+            <File Id="PluginsMd" Name="PLUGINS.md" Source="@STAGE@/docs/PLUGINS.md"/>
+            <File Id="PluginsHtml" Name="plugins.html" Source="@STAGE@/docs/plugins.html"/>
+            <File Id="ConfigHtml" Name="config.html" Source="@STAGE@/docs/config.html"/>
+            <File Id="ConfigLua" Name="config.lua" Source="@STAGE@/examples/config.lua"/>
+            <File Id="ConfigZh" Name="config.zh-CN.lua" Source="@STAGE@/examples/config.zh-CN.lua"/>
+            <File Id="ConfigEn" Name="config.en.lua" Source="@STAGE@/examples/config.en.lua"/>
+            <File Id="PluginExample" Name="example.lua" Source="@STAGE@/examples/example.lua"/>
+          </Component>
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ProgramMenuDir" Name="EchoPort"/>
+      </Directory>
+    </Directory>
+
+    <DirectoryRef Id="ProgramMenuDir">
+      <Component Id="ProgramMenuDirectory" Guid="@GUID_MENU@">
+        <RemoveFolder Id="RemoveProgramMenuDir" On="uninstall"/>
+        <RegistryValue Root="HKCU" Key="Software\EchoPort" Name="startMenu" Type="integer" Value="1" KeyPath="yes"/>
+      </Component>
+    </DirectoryRef>
+
+    <Feature Id="EchoPortFeature" Title="EchoPort" Level="1">
+      <ComponentRef Id="MainExecutable"/>
+      <ComponentRef Id="DocsAndLicence"/>
+      <ComponentRef Id="CleanUninstaller"/>
+      @TOOLS_REF@
+      <ComponentRef Id="ProgramMenuDirectory"/>
+    </Feature>
+  </Product>
+</Wix>

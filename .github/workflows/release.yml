@@ -1,0 +1,178 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config libasound2-dev libxkbcommon-dev \
+            libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxcb1-dev libx11-dev libxi-dev libgl1-mesa-dev \
+            desktop-file-utils
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build release
+        run: cargo build --release
+      - name: "Package Linux tarball (script: icons, VERSION, install-arch, checksums)"
+        run: |
+          chmod +x scripts/package-linux.sh
+          ./scripts/package-linux.sh
+      - name: Package Arch pacman package
+        run: |
+          sudo apt-get install -y --no-install-recommends libarchive-tools zstd
+          chmod +x scripts/package-arch.sh
+          ./scripts/package-arch.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            dist/echoport-*-linux-x86_64.tar.gz*
+            dist/echoport-*-1-x86_64.pkg.tar.zst*
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build release
+        run: cargo build --release
+      - name: Fetch bundled media tools (yt-dlp + ffmpeg)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path dist/tools | Out-Null
+          Invoke-WebRequest -Uri 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe' -OutFile 'dist/tools/yt-dlp.exe'
+          Invoke-WebRequest -Uri 'https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-lgpl.zip' -OutFile 'dist/ffmpeg.zip'
+          Expand-Archive -Path 'dist/ffmpeg.zip' -DestinationPath 'dist/ffmpeg' -Force
+          $ff = Get-ChildItem 'dist/ffmpeg' -Recurse -Filter 'ffmpeg.exe' | Select-Object -First 1
+          if (-not $ff) { throw 'ffmpeg.exe not found in archive' }
+          Copy-Item $ff.FullName 'dist/tools/ffmpeg.exe'
+          $ffLic = Get-ChildItem 'dist/ffmpeg' -Recurse -File | Where-Object { $_.Name -match '^(LICENSE|COPYING)' } | Select-Object -First 1
+          if ($ffLic) { Copy-Item $ffLic.FullName 'dist/tools/LICENSE-ffmpeg.txt' }
+          Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/yt-dlp/yt-dlp/master/LICENSE' -OutFile 'dist/tools/LICENSE-yt-dlp.txt'
+          Copy-Item packaging/windows/THIRD-PARTY.md 'dist/tools/THIRD-PARTY.md'
+      - name: Package Windows zip
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          try {
+            $raw = Get-Content -Path Cargo.toml -Raw
+            $match = [regex]::Match($raw, '(?m)^version = "([^"]+)"')
+            if (-not $match.Success) { throw "Could not read version from Cargo.toml" }
+            $version = $match.Groups[1].Value
+            $name = "echoport-$version-windows-x86_64"
+            Write-Host "Packaging $name"
+            New-Item -ItemType Directory -Force -Path "dist/$name/docs", "dist/$name/examples" | Out-Null
+            Copy-Item -Path target/release/echoport.exe -Destination "dist/$name/echoport.exe"
+            Copy-Item -Path packaging/README-WINDOWS.md -Destination "dist/$name/README-WINDOWS.txt"
+            Copy-Item -Path assets/echoport.ico -Destination "dist/$name/echoport.ico"
+            Copy-Item -Path README.md -Destination "dist/$name/"
+            Copy-Item -Path LICENSE -Destination "dist/$name/"
+            Copy-Item -Path docs/* -Destination "dist/$name/docs/" -Recurse
+            Copy-Item -Path examples/* -Destination "dist/$name/examples/" -Recurse
+            Copy-Item -Path dist/tools -Destination "dist/$name/tools" -Recurse
+            Compress-Archive -Path "dist/$name/*" -DestinationPath "dist/$name.zip"
+            $hash = (Get-FileHash "dist/$name.zip" -Algorithm SHA256).Hash.ToLower()
+            "$hash  $name.zip" | Set-Content "dist/$name.zip.sha256"
+          } catch {
+            Write-Host "::error::Windows packaging failed: $($_.Exception.Message)"
+            Write-Host $_.ScriptStackTrace
+            throw
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/echoport-*-windows-x86_64.zip*
+
+  windows-msi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cross + MSI tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends mingw-w64 msitools wixl unzip
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+      - name: Cross-build Windows binary
+        run: |
+          set +e
+          cargo build --release --target x86_64-pc-windows-gnu 2>&1 | tee cargo-win.log
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" -ne 0 ]; then
+            { echo '### Windows cross-build log'; echo '```'; tail -200 cargo-win.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$rc"
+      - name: Fetch bundled media tools (Windows binaries)
+        run: |
+          mkdir -p .win-tools
+          curl -L --fail -o .win-tools/yt-dlp.exe 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe'
+          curl -L --fail -o ffmpeg.zip 'https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-lgpl.zip'
+          unzip -q ffmpeg.zip -d .win-ffmpeg
+          cp "$(find .win-ffmpeg -iname ffmpeg.exe | head -1)" .win-tools/ffmpeg.exe
+          find .win-ffmpeg -maxdepth 2 -iname 'LICENSE*' -o -iname 'COPYING*' | head -1 | xargs -r -I{} cp '{}' .win-tools/LICENSE-ffmpeg.txt
+          curl -L --fail -o .win-tools/LICENSE-yt-dlp.txt 'https://raw.githubusercontent.com/yt-dlp/yt-dlp/master/LICENSE'
+          cp packaging/windows/THIRD-PARTY.md .win-tools/
+      - name: Build MSI installer
+        run: |
+          chmod +x scripts/package-msi.sh
+          set +e
+          ./scripts/package-msi.sh --tools-dir .win-tools 2>&1 | tee msi-build.log
+          rc=${PIPESTATUS[0]}
+          { echo '### MSI build log'; echo '```'; tail -200 msi-build.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-msi
+          path: dist/echoport-*-windows-x86_64.msi*
+
+  macos:
+    # Not urgent for v0.2.0; keep the recipe but let it fail without blocking
+    # the Windows/Linux release. Enable/attach it in a later release.
+    if: false
+    continue-on-error: true
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - name: Build universal .app + zip
+        run: |
+          cargo build --release --target aarch64-apple-darwin
+          cargo build --release --target x86_64-apple-darwin
+          lipo -create -output echoport-universal \
+            target/aarch64-apple-darwin/release/echoport \
+            target/x86_64-apple-darwin/release/echoport
+          chmod +x scripts/package-macos.sh
+          ./scripts/package-macos.sh --binary echoport-universal
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/EchoPort.app.zip*
+
+  release:
+    needs: [linux, windows, windows-msi]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true

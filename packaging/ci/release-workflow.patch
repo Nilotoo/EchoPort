@@ -1,0 +1,73 @@
+--- a/.github/workflows/release.yml
++++ b/.github/workflows/release.yml
+@@ -39,10 +39,17 @@
+           cp assets/icons/LICENSE.txt "dist/$NAME/assets/" 2>/dev/null || true
+           tar -C dist -czf "dist/$NAME.tar.gz" "$NAME"
+           (cd dist && sha256sum "$NAME.tar.gz" > "$NAME.tar.gz.sha256")
++      - name: Package Arch pacman package
++        run: |
++          sudo apt-get install -y --no-install-recommends libarchive-tools zstd
++          chmod +x scripts/package-arch.sh
++          ./scripts/package-arch.sh
+       - uses: actions/upload-artifact@v4
+         with:
+           name: linux
+-          path: dist/echoport-*-linux-x86_64.tar.gz*
++          path: |
++            dist/echoport-*-linux-x86_64.tar.gz*
++            dist/echoport-*-1-x86_64.pkg.tar.zst*
+ 
+   windows:
+     runs-on: windows-latest
+@@ -70,8 +77,50 @@
+           name: windows
+           path: dist/echoport-*-windows-x86_64.zip*
+ 
++  windows-msi:
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++      - name: Install cross + MSI tooling
++        run: |
++          sudo apt-get update
++          sudo apt-get install -y --no-install-recommends mingw-w64 msitools
++      - uses: dtolnay/rust-toolchain@stable
++        with:
++          targets: x86_64-pc-windows-gnu
++      - name: Cross-build Windows binary + MSI
++        run: |
++          cargo build --release --target x86_64-pc-windows-gnu
++          chmod +x scripts/package-msi.sh
++          ./scripts/package-msi.sh
++      - uses: actions/upload-artifact@v4
++        with:
++          name: windows-msi
++          path: dist/echoport-*-windows-x86_64.msi*
++
++  macos:
++    runs-on: macos-latest
++    steps:
++      - uses: actions/checkout@v4
++      - uses: dtolnay/rust-toolchain@stable
++        with:
++          targets: aarch64-apple-darwin, x86_64-apple-darwin
++      - name: Build universal .app + zip
++        run: |
++          cargo build --release --target aarch64-apple-darwin
++          cargo build --release --target x86_64-apple-darwin
++          lipo -create -output echoport-universal \
++            target/aarch64-apple-darwin/release/echoport \
++            target/x86_64-apple-darwin/release/echoport
++          chmod +x scripts/package-macos.sh
++          ./scripts/package-macos.sh --binary echoport-universal
++      - uses: actions/upload-artifact@v4
++        with:
++          name: macos
++          path: dist/EchoPort.app.zip*
++
+   release:
+-    needs: [linux, windows]
++    needs: [linux, windows, windows-msi, macos]
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/download-artifact@v4
