@@ -62,6 +62,6 @@ sed -e "s|@VERSION4@|$VERSION4|g" \
 echo "==> makensis: $OUT"
 makensis -V2 "$STAGE/installer.nsi"
 [ -s "$OUT" ] || { echo "makensis did not produce $OUT" >&2; exit 1; }
-sha256sum "$OUT" > "$OUT.sha256"
+( cd "$(dirname "$OUT")" && sha256sum "$(basename "$OUT")" > "$(basename "$OUT").sha256" )
 echo "artifact: $OUT"
 ls -lh "$OUT"

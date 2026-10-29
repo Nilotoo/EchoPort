@@ -32,7 +32,9 @@ pub fn draw(ctx: &egui::Context, app: &mut EchoPortApp, pending: &mut Vec<Comman
     let prompt_ready = update.is_some() && elapsed >= 0.30;
     // Give a slow update check a moment to land so an available update can be
     // shown right on the loading screen (but never hold startup hostage).
-    let waiting_for_check = app.state.updates.checking && elapsed < 1.40;
+    // If the (usually fast) GitHub check is still in flight, keep the splash
+    // alive a little longer so an update prompt can actually be shown.
+    let waiting_for_check = app.state.updates.checking && elapsed < 2.50;
     if !prompt_ready && !waiting_for_check && elapsed >= 0.90 {
         app.splash_done = true;
         return;

@@ -366,7 +366,7 @@ defaults to `~/Music/EchoPort`.
 * **Verification status**: update-check/version-comparison logic is covered by unit tests and verified with
   fake/local data; **no live GitHub request was made this round** because the repo URL/auth are pending.
 
-### Security, slimming & installers (v0.2.0) / 安全、精简与安装包
+### Security, slimming & installers (v0.2.1) / 安全、精简与安装包
 
 * **Update-check hardening**: `update::repo()` only accepts `owner/name` (GitHub-safe chars), release
   URLs are restricted to `https://github.com/…`, version strings are whitelisted, and the checker
