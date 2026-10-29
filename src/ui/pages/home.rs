@@ -258,15 +258,13 @@ fn hero(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec<Com
             }
         }
         None => {
-            style::paint_icon(
-                ui.painter(),
-                Icon::Music,
-                Rect::from_center_size(
-                    Pos2::new(rect.left() + 54.0, rect.center().y),
-                    Vec2::splat(46.0),
-                ),
-                theme.text_weak,
+            let note = Rect::from_center_size(
+                Pos2::new(rect.left() + 54.0, rect.center().y),
+                Vec2::splat(48.0),
             );
+            if !style::paint_note(ui.painter(), note, theme.text_weak) {
+                style::paint_icon(ui.painter(), Icon::Music, note, theme.text_weak);
+            }
             style::paint_elided(
                 ui.painter(),
                 Pos2::new(rect.left() + 96.0, rect.center().y - 10.0),

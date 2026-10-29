@@ -153,6 +153,8 @@ fn asset_bytes(id: u8) -> Option<&'static [u8]> {
         35 => include_bytes!("../../assets/icons/white/png/icon-35-48px.png"),
         37 => include_bytes!("../../assets/icons/white/png/icon-37-48px.png"),
         39 => include_bytes!("../../assets/icons/white/png/icon-39-48px.png"),
+        // User supplied transparent note artwork (500×500); tinted at paint time.
+        200 => include_bytes!("../../assets/icons/note_white.png"),
         _ => return None,
     })
 }

@@ -3,7 +3,7 @@
 //! track controls / details on the right. No tinted backdrop, no decorative
 //! animations — just functional loading indicators.
 
-use egui::{Align, CornerRadius, Layout, Pos2, Rect, RichText, Sense, Stroke, Ui, Vec2};
+use egui::{Align, Align2, CornerRadius, Layout, Pos2, Rect, RichText, Sense, Stroke, Ui, Vec2};
 
 use crate::app::EchoPortApp;
 use crate::i18n::Key;
@@ -154,9 +154,17 @@ fn track_view(
     // (fullscreen) windows without changing the v0.1.0 proportions.
     let group_h = (size + 44.0).max(430.0);
     let lead = ((available_height - group_h) * 0.5).clamp(0.0, 260.0);
-    // Cap the info column so the pair can be centred on very wide windows.
-    let details_w = (available_width - size - 40.0).clamp(240.0, 560.0);
-    let group_w = 6.0 + size + 34.0 + details_w;
+    // Lyrics column (when enabled) takes the empty right-hand area; the detail
+    // column shrinks a little so the three columns stay on one row.
+    let lyrics_on = app.state.profile.settings.lyrics_enabled;
+    let lyrics_w = if lyrics_on {
+        (available_width * 0.30).clamp(240.0, 620.0)
+    } else {
+        0.0
+    };
+    let lyrics_gap = if lyrics_on { 24.0 } else { 0.0 };
+    let details_w = (available_width - size - 34.0 - lyrics_w - lyrics_gap).clamp(240.0, 620.0);
+    let group_w = 6.0 + size + 34.0 + details_w + lyrics_gap + lyrics_w;
     let side = ((available_width - group_w) * 0.5).max(0.0);
     // When there is room, centre the transport on the content column so its
     // play button lines up with the bottom player bar; otherwise keep the
@@ -171,7 +179,11 @@ fn track_view(
     // overlapping the artwork.
     let best_start = target.max(cover_right + 12.0);
     let fits = best_start + cluster_half * 2.0 <= content_left + available_width - 2.0;
-    let transport_x = fits.then_some(best_start);
+    let transport_x = if lyrics_on {
+        None
+    } else {
+        fits.then_some(best_start)
+    };
     ui.horizontal_top(|ui| {
         ui.add_space(side + 6.0);
         ui.vertical(|ui| {
@@ -184,7 +196,221 @@ fn track_view(
             ui.add_space(lead);
             track_details(ui, app, theme, pending, track, scale, transport_x);
         });
+        if lyrics_on {
+            ui.add_space(lyrics_gap);
+            ui.vertical(|ui| {
+                ui.set_width(lyrics_w);
+                ui.add_space(lead.max(4.0));
+                lyrics_panel(
+                    ui,
+                    app,
+                    theme,
+                    pending,
+                    track,
+                    lyrics_w,
+                    available_height,
+                    scale,
+                );
+            });
+        }
     });
+}
+
+fn lyrics_panel(
+    ui: &mut Ui,
+    app: &mut EchoPortApp,
+    theme: &Theme,
+    pending: &mut Vec<Command>,
+    track: &Track,
+    width: f32,
+    height: f32,
+    scale: f32,
+) {
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(width, height.max(260.0)), Sense::hover());
+    let header = Rect::from_min_max(rect.min, Pos2::new(rect.right(), rect.top() + 30.0));
+    ui.painter().text(
+        Pos2::new(header.left(), header.center().y),
+        Align2::LEFT_CENTER,
+        app.state.tr(Key::Lyrics),
+        style::font(13.0 * scale),
+        style::weak_text(theme),
+    );
+    if let Some(data) = app.state.lyrics.data.as_ref() {
+        ui.painter().text(
+            Pos2::new(header.right(), header.center().y),
+            Align2::RIGHT_CENTER,
+            &data.source,
+            style::font(9.0),
+            style::weak_text(theme),
+        );
+    }
+    let content = Rect::from_min_max(
+        Pos2::new(rect.left(), header.bottom() + 8.0),
+        Pos2::new(rect.right(), rect.bottom()),
+    );
+    let painter = ui.painter().with_clip_rect(content);
+    let centered = |text: &str, color: egui::Color32, y: f32, size: f32| {
+        painter.text(
+            Pos2::new(content.center().x, y),
+            Align2::CENTER_CENTER,
+            text,
+            style::font(size),
+            color,
+        );
+    };
+    let lyric_center_y = content.top() + content.height() * 0.26;
+    if app.state.lyrics.loading {
+        centered(
+            app.state.tr(Key::LyricsLoading),
+            style::weak_text(theme),
+            lyric_center_y,
+            13.0,
+        );
+        return;
+    }
+    let Some(data) = app.state.lyrics.data.as_ref() else {
+        let message = app
+            .state
+            .lyrics
+            .error
+            .as_deref()
+            .unwrap_or_else(|| app.state.tr(Key::NoLyrics));
+        centered(message, style::weak_text(theme), lyric_center_y, 12.0);
+        return;
+    };
+    if data.lines.is_empty() && data.plain.is_empty() {
+        centered(
+            app.state.tr(Key::NoLyrics),
+            style::weak_text(theme),
+            lyric_center_y,
+            12.0,
+        );
+        return;
+    }
+
+    let position = app
+        .ui
+        .scrub_preview
+        .unwrap_or(app.state.playback.position_secs);
+    let max_text_width = (content.width() - 18.0).max(80.0);
+    if !data.lines.is_empty() {
+        let active = data.active_line(position);
+        let target = active.unwrap_or(0) as f32;
+        if app.ui.lyrics_track.as_deref() != Some(track.id.as_str()) {
+            app.ui.lyrics_scroll_pos = target;
+        }
+        let dt = ui.ctx().input(|input| input.stable_dt).min(0.1);
+        let diff = target - app.ui.lyrics_scroll_pos;
+        app.ui.lyrics_scroll_pos += diff * (dt * 11.0).min(1.0);
+        if diff.abs() > 0.015 {
+            ui.ctx().request_repaint();
+        }
+        app.ui.lyrics_track = Some(track.id.clone());
+
+        let current = active.unwrap_or(0) as isize;
+        let base_line_h = (content.height() / 6.0).clamp(34.0, 54.0) * scale;
+        let shift = (current as f32 - app.ui.lyrics_scroll_pos) * base_line_h;
+        let current_center = lyric_center_y + shift;
+        let mut rows: Vec<(i32, std::sync::Arc<egui::Galley>, egui::Color32)> = Vec::new();
+        for offset in -2i32..=2 {
+            let index = current + offset as isize;
+            if index < 0 || index as usize >= data.lines.len() {
+                continue;
+            }
+            let (size, alpha, color) = match offset.abs() {
+                0 => (23.0 * scale, 1.0, theme.accent),
+                1 => (16.0 * scale, 0.62, theme.text),
+                _ => (12.5 * scale, 0.28, theme.text_weak),
+            };
+            let color = theme::with_alpha(color, (alpha * 255.0) as u8);
+            let galley = painter.layout(
+                data.lines[index as usize].text.clone(),
+                style::font(size),
+                color,
+                max_text_width,
+            );
+            rows.push((offset, galley, color));
+        }
+        let Some(current_row) = rows.iter().find(|(offset, _, _)| *offset == 0) else {
+            return;
+        };
+        let current_h = current_row.1.size().y;
+        let mut clicked_seek = None;
+        let mut above_bottom = current_center - current_h * 0.5 - 8.0;
+        for (offset, galley, color) in rows.iter().filter(|(offset, _, _)| *offset < 0).rev() {
+            let y = above_bottom - galley.size().y * 0.5;
+            let pos = Pos2::new(
+                content.center().x - galley.size().x * 0.5,
+                y - galley.size().y * 0.5,
+            );
+            painter.galley(pos, galley.clone(), *color);
+            let hit = Rect::from_center_size(
+                Pos2::new(content.center().x, y),
+                Vec2::new(content.width(), galley.size().y.max(base_line_h)),
+            );
+            let index = (current + *offset as isize) as usize;
+            let response = ui.interact(
+                hit,
+                ui.id().with(("lyrics-line", track.id.as_str(), index)),
+                Sense::click(),
+            );
+            if response.clicked() {
+                clicked_seek = Some(data.lines[index].time_secs);
+            }
+            above_bottom = y - galley.size().y * 0.5 - 8.0;
+        }
+        let current_pos = Pos2::new(
+            content.center().x - current_row.1.size().x * 0.5,
+            current_center - current_h * 0.5,
+        );
+        painter.galley(current_pos, current_row.1.clone(), current_row.2);
+        let mut below_top = current_center + current_h * 0.5 + 8.0;
+        for (offset, galley, color) in rows.iter().filter(|(offset, _, _)| *offset > 0) {
+            let y = below_top + galley.size().y * 0.5;
+            let pos = Pos2::new(content.center().x - galley.size().x * 0.5, below_top);
+            painter.galley(pos, galley.clone(), *color);
+            let hit = Rect::from_center_size(
+                Pos2::new(content.center().x, y),
+                Vec2::new(content.width(), galley.size().y.max(base_line_h)),
+            );
+            let index = (current + *offset as isize) as usize;
+            let response = ui.interact(
+                hit,
+                ui.id().with(("lyrics-line", track.id.as_str(), index)),
+                Sense::click(),
+            );
+            if response.clicked() {
+                clicked_seek = Some(data.lines[index].time_secs);
+            }
+            below_top += galley.size().y + 8.0;
+        }
+        if let Some(seconds) = clicked_seek {
+            pending.push(Command::Seek(seconds));
+        }
+    } else {
+        // Plain lyrics have no timestamps; wrap and centre the first five lines.
+        let mut rows = Vec::new();
+        for line in data.plain.iter().take(5) {
+            let galley = painter.layout(
+                line.clone(),
+                style::font(14.0 * scale),
+                theme.text,
+                max_text_width,
+            );
+            rows.push(galley);
+        }
+        if rows.is_empty() {
+            return;
+        }
+        let total_h: f32 = rows.iter().map(|row| row.size().y).sum::<f32>()
+            + 10.0 * (rows.len().saturating_sub(1) as f32);
+        let mut y = lyric_center_y - total_h * 0.5;
+        for galley in rows {
+            let pos = Pos2::new(content.center().x - galley.size().x * 0.5, y);
+            painter.galley(pos, galley.clone(), theme.text);
+            y += galley.size().y + 10.0;
+        }
+    }
 }
 
 fn cover_column(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, track: &Track, size: f32) {

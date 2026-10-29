@@ -402,7 +402,7 @@ fn editor_card(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut 
             )
             .clicked()
             {
-                pending.push(Command::ExportProfile);
+                app.ui.dialog = Some(Dialog::ExportProfile);
             }
             ui.add_space(4.0);
             if style::button_icon(

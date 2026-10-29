@@ -18,6 +18,7 @@ use crate::net::Http;
 use crate::resolver::{self, ResolveConfig, ResolveError};
 
 pub mod apple;
+pub mod archive;
 pub(crate) mod artists;
 pub mod netease;
 pub mod spotify;
@@ -134,6 +135,7 @@ fn search_platform(
         Platform::YouTube | Platform::SoundCloud | Platform::Bilibili => {
             resolver_search(config, platform, query, limit)
         }
+        Platform::InternetArchive => archive::search(http, query, limit),
     };
     match outcome {
         Ok(tracks) => {
@@ -330,6 +332,7 @@ fn artist_search_platform(
                 Err(err) => Err(friendly_resolver_error(platform, &err)),
             }
         }
+        Platform::InternetArchive => Ok(Vec::new()),
     };
     match outcome {
         Ok(list) => PlatformArtistResults {
@@ -522,7 +525,7 @@ pub fn artist_detail(http: &Http, config: &ResolveConfig, artist: &Artist) -> Ar
                 }
             }
         }
-        Platform::Spotify | Platform::Local => Vec::new(),
+        Platform::Spotify | Platform::Local | Platform::InternetArchive => Vec::new(),
     };
     detail.hot_tracks = finalize_hot_tracks(tracks, artist, HOT_TRACK_LIMIT);
     // Platforms without an artist avatar endpoint can still use the first

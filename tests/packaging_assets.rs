@@ -157,20 +157,16 @@ fn docs_and_readme_are_present() {
     }
     let readme = std::fs::read_to_string(manifest_dir().join("README.md")).expect("README.md");
     assert!(
-        readme.contains("中文"),
-        "README must contain the Chinese section"
+        readme.contains("EchoPort"),
+        "README must introduce EchoPort"
     );
     assert!(
-        readme.contains("English"),
-        "README must contain the English section"
+        readme.lines().count() < 220,
+        "README is intentionally a concise geek intro"
     );
     assert!(
-        readme.contains("docs/SCRIPTING.md"),
-        "README must link the scripting docs"
-    );
-    assert!(
-        readme.contains("docs/PLUGINS.md"),
-        "README must link the plugin docs"
+        readme.contains("docs/USAGE.md"),
+        "README must link the usage guide"
     );
 }
 

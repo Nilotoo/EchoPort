@@ -507,7 +507,19 @@ impl EchoPortApp {
                 self.state.playback = PlaybackStatus::default();
                 self.toast(ToastKind::Info, Key::ToastCleared);
             }
-            Command::Download(tracks) => self.start_downloads(tracks),
+            Command::Download(tracks) => {
+                if !tracks.is_empty() {
+                    self.ui.dialog = Some(crate::ui::Dialog::Download {
+                        tracks,
+                        format: self.state.profile.settings.download_format,
+                    });
+                }
+            }
+            Command::StartDownload { tracks, format } => {
+                self.state.profile.settings.download_format = format;
+                self.mark_dirty();
+                self.start_downloads(tracks);
+            }
             Command::LoadBackground(track) => self.start_background(*track),
             Command::OpenUrl(url) => {
                 if is_safe_web_url(&url) {
@@ -658,6 +670,17 @@ impl EchoPortApp {
             }
             Command::SetFollowCoverAccent(follow) => {
                 self.state.set_follow_cover_accent(follow);
+                self.mark_dirty();
+            }
+            Command::SetLyricsEnabled(enabled) => {
+                self.state.profile.settings.lyrics_enabled = enabled;
+                if enabled {
+                    if let Some(track) = self.state.now_playing.clone() {
+                        self.spawn_lyrics(&track);
+                    }
+                } else {
+                    self.state.lyrics = crate::state::LyricsView::default();
+                }
                 self.mark_dirty();
             }
             Command::CheckForUpdates => {
@@ -1285,6 +1308,24 @@ impl EchoPortApp {
                     self.mark_dirty();
                 }
             }
+            AppEvent::LyricsReady {
+                track_id,
+                data,
+                error,
+            } => {
+                let current = self
+                    .state
+                    .now_playing
+                    .as_ref()
+                    .map(|track| track.id.as_str());
+                if current == Some(track_id.as_str()) {
+                    self.state.lyrics.loading = false;
+                    self.state.lyrics.track_id = Some(track_id);
+                    self.state.lyrics.data = data;
+                    self.state.lyrics.error = error;
+                    ctx.request_repaint();
+                }
+            }
             AppEvent::SearchCoverReady { generation, path } => {
                 if generation != self.search_generation {
                     // A stale prefetch from an earlier search/query.
@@ -1465,6 +1506,7 @@ impl EchoPortApp {
         };
         self.load_cover(track.clone());
         self.spawn_background_if_needed(track.clone());
+        self.spawn_lyrics(&track);
         self.mark_dirty();
         self.fire_script(ScriptEvent::TrackStart(track.clone()));
 
@@ -2126,6 +2168,33 @@ impl EchoPortApp {
                 track_id: track.id.clone(),
                 path,
                 palette,
+            });
+        });
+    }
+
+    fn spawn_lyrics(&mut self, track: &Track) {
+        if !self.state.profile.settings.lyrics_enabled {
+            self.state.lyrics = crate::state::LyricsView::default();
+            return;
+        }
+        self.state.lyrics = crate::state::LyricsView {
+            track_id: Some(track.id.clone()),
+            loading: true,
+            data: None,
+            error: None,
+        };
+        let http = self.http.clone();
+        let track = track.clone();
+        let tx = self.tx.clone();
+        std::thread::spawn(move || {
+            let (data, error) = match crate::lyrics::fetch(&http, &track) {
+                Ok(data) => (Some(data), None),
+                Err(err) => (None, Some(err)),
+            };
+            let _ = tx.send(AppEvent::LyricsReady {
+                track_id: track.id,
+                data,
+                error,
             });
         });
     }

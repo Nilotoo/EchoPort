@@ -779,6 +779,9 @@ pub(crate) fn sources_for(track: &Track) -> Vec<Source> {
         },
         // No anonymous streaming for these: always match through YouTube.
         Platform::Spotify | Platform::AppleMusic => vec![search_query("ytsearch1")],
+        Platform::InternetArchive => page_url
+            .map(|url| vec![Source::Url(url.to_owned())])
+            .unwrap_or_default(),
     }
 }
 
@@ -833,6 +836,31 @@ fn classify_match(actual: Option<f64>, expected: Option<f64>) -> MatchLength {
     MatchLength::FullButDifferent
 }
 
+fn resolve_archive(config: &ResolveConfig, track: &Track) -> Result<ResolvedAudio, ResolveError> {
+    let http = crate::net::Http::new();
+    let (url, extension) =
+        crate::providers::archive::audio_file(&http, track).map_err(ResolveError::Media)?;
+    let destination = cache_path(config, track, &extension);
+    if let Some(parent) = destination.parent() {
+        std::fs::create_dir_all(parent).map_err(|err| ResolveError::Other(err.to_string()))?;
+    }
+    http.download(&url, &[], &destination, |_, _| {})
+        .map_err(|err| ResolveError::Other(format!("Internet Archive download failed: {err}")))?;
+    let size = std::fs::metadata(&destination)
+        .map(|m| m.len())
+        .unwrap_or(0);
+    if size < MIN_CACHE_BYTES {
+        let _ = std::fs::remove_file(&destination);
+        return Err(ResolveError::Media(
+            "Internet Archive returned an empty audio file.".to_owned(),
+        ));
+    }
+    Ok(ResolvedAudio {
+        path: destination,
+        temporary: true,
+    })
+}
+
 // ---------------------------------------------------------------------------
 // resolve()
 // ---------------------------------------------------------------------------
@@ -861,6 +889,12 @@ pub fn resolve(config: &ResolveConfig, track: &Track) -> Result<ResolvedAudio, R
             path,
             temporary: true,
         });
+    }
+
+    // Internet Archive is a direct public library: download its file without
+    // requiring yt-dlp or resolving a YouTube match.
+    if track.platform == Platform::InternetArchive {
+        return resolve_archive(config, track);
     }
 
     let priority = playback_priority(track);

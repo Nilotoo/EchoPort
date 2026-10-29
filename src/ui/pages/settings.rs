@@ -208,6 +208,41 @@ fn appearance(
         ui.add_space(14.0);
         style::divider(ui, theme);
         ui.add_space(10.0);
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                ui.label(
+                    RichText::new(app.state.tr(Key::ShowLyrics))
+                        .size(12.0)
+                        .color(theme.text),
+                );
+                ui.add_space(2.0);
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(app.state.tr(Key::ShowLyricsHint))
+                            .size(10.0)
+                            .color(theme.text_weak),
+                    )
+                    .wrap(),
+                );
+            });
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if style::switch(
+                    ui,
+                    theme,
+                    app.state.profile.settings.lyrics_enabled,
+                    "lyrics-enabled",
+                )
+                .clicked()
+                {
+                    pending.push(Command::SetLyricsEnabled(
+                        !app.state.profile.settings.lyrics_enabled,
+                    ));
+                }
+            });
+        });
+        ui.add_space(14.0);
+        style::divider(ui, theme);
+        ui.add_space(10.0);
         ui.label(
             RichText::new(app.state.tr(Key::LanguageLabel))
                 .size(11.0)

@@ -38,6 +38,10 @@ pub fn download_track(
     if track.local_path.is_some() {
         return Err("local tracks are already on disk".to_owned());
     }
+    // Internet Archive exposes direct public files; no yt-dlp/ffmpeg needed.
+    if track.platform == crate::model::Platform::InternetArchive {
+        return download_archive(track, options, progress);
+    }
     let ytdlp = config.ytdlp().ok_or_else(|| {
         "yt-dlp is not available; install yt-dlp or set its path in Settings".to_owned()
     })?;
@@ -80,6 +84,60 @@ pub fn download_track(
         }
     }
     Err(last_error)
+}
+
+fn download_archive(
+    track: &Track,
+    options: &DownloadOptions,
+    progress: &mut dyn FnMut(DownloadProgress),
+) -> Result<PathBuf, String> {
+    std::fs::create_dir_all(&options.dir)
+        .map_err(|err| format!("cannot create download folder: {err}"))?;
+    let http = crate::net::Http::new();
+    let (url, extension) = crate::providers::archive::audio_file(&http, track)?;
+    let stem = safe_file_stem(&track.title);
+    let mut destination = options.dir.join(format!("{stem}.{extension}"));
+    let mut suffix = 1;
+    while destination.exists() {
+        destination = options.dir.join(format!("{stem} ({suffix}).{extension}"));
+        suffix += 1;
+    }
+    progress(DownloadProgress {
+        fraction: Some(0.0),
+        stage: "downloading".to_owned(),
+    });
+    http.download(&url, &[], &destination, |written, total| {
+        progress(DownloadProgress {
+            fraction: total.map(|total| (written as f32 / total as f32).clamp(0.0, 1.0)),
+            stage: "downloading".to_owned(),
+        });
+    })
+    .map_err(|err| format!("Internet Archive download failed: {err}"))?;
+    progress(DownloadProgress {
+        fraction: Some(1.0),
+        stage: "done".to_owned(),
+    });
+    Ok(destination)
+}
+
+fn safe_file_stem(title: &str) -> String {
+    let mut out = String::new();
+    for ch in title.chars() {
+        if ch.is_alphanumeric() || matches!(ch, ' ' | '-' | '_' | '.' | '(' | ')') {
+            out.push(ch);
+        } else {
+            out.push('_');
+        }
+        if out.chars().count() >= 120 {
+            break;
+        }
+    }
+    let out = out.trim().trim_matches('.').to_owned();
+    if out.is_empty() {
+        "Internet Archive audio".to_owned()
+    } else {
+        out
+    }
 }
 
 /// Build the yt-dlp argument list (without the binary and the source argument).

@@ -584,6 +584,7 @@ pub fn platform_color(platform: Platform) -> Color32 {
         Platform::SoundCloud => Color32::from_rgb(0xF2, 0x6B, 0x2E),
         Platform::Bilibili => Color32::from_rgb(0xEE, 0x6D, 0x9C),
         Platform::YouTube => Color32::from_rgb(0xE0, 0x3B, 0x3B),
+        Platform::InternetArchive => Color32::from_rgb(0x8B, 0x6B, 0x4A),
     }
 }
 

@@ -152,6 +152,14 @@ impl Default for SearchView {
 }
 
 #[derive(Clone, Debug, Default)]
+pub struct LyricsView {
+    pub track_id: Option<String>,
+    pub loading: bool,
+    pub data: Option<crate::lyrics::LyricsData>,
+    pub error: Option<String>,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct LibraryView {
     pub tracks: Vec<Track>,
     pub scanning: bool,
@@ -259,6 +267,7 @@ pub struct AppState {
     pub background: BackgroundView,
     pub artist_page: ArtistPageView,
     pub album_page: AlbumPageView,
+    pub lyrics: LyricsView,
     pub updates: UpdateView,
     pub cover: CoverView,
     pub tooling: ToolingStatus,
@@ -319,6 +328,7 @@ impl AppState {
             background: BackgroundView::default(),
             artist_page: ArtistPageView::default(),
             album_page: AlbumPageView::default(),
+            lyrics: LyricsView::default(),
             updates: UpdateView::default(),
             cover: CoverView::default(),
             tooling: ToolingStatus::default(),
@@ -502,7 +512,13 @@ pub enum Command {
     /// Load more results for one platform (keeps the current query).
     SearchMore(Platform),
     ToggleQueuePanel,
+    /// Open the download-options dialog for these tracks.
     Download(Vec<Track>),
+    /// Start downloading with an explicit format chosen in the dialog.
+    StartDownload {
+        tracks: Vec<Track>,
+        format: DownloadFormat,
+    },
     LoadBackground(Box<Track>),
     OpenUrl(String),
     CopyText(String),
@@ -544,6 +560,7 @@ pub enum Command {
     /// Change UI zoom (1.0 = 100 %).
     SetUiScale(f32),
     SetFollowCoverAccent(bool),
+    SetLyricsEnabled(bool),
     /// Streamed-audio cache cap in MiB; `0` = delete played tracks immediately.
     SetCacheLimit(u32),
     /// Export a playlist as a metadata-only share file.
@@ -598,6 +615,12 @@ pub enum AppEvent {
     ArtistDetailReady(Box<ArtistDetail>),
     /// Album page data (metadata + ordered tracks + same-artist albums).
     AlbumDetailReady(Box<crate::model::AlbumDetail>),
+    /// Lyrics fetched for a track (stale results are ignored by track id).
+    LyricsReady {
+        track_id: String,
+        data: Option<crate::lyrics::LyricsData>,
+        error: Option<String>,
+    },
     /// Best-effort artist portrait URL found by a background lookup.
     ArtistPortrait {
         artist_id: String,

@@ -241,7 +241,7 @@ fn platform_colours_are_distinct_for_every_source() {
             "platform dot {platform:?} is hard to see on both light and dark rows: {colour:?}"
         );
     }
-    assert_eq!(seen.len(), 7);
+    assert_eq!(seen.len(), 8);
 }
 
 #[test]

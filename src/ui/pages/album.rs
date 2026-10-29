@@ -168,6 +168,18 @@ pub fn draw(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec
                     {
                         pending.push(Command::PlayTracks(view.tracks.clone()));
                     }
+                    ui.add_space(4.0);
+                    if style::button_icon(
+                        ui,
+                        theme,
+                        Icon::Download,
+                        app.state.tr(Key::Download),
+                        Variant::Secondary,
+                    )
+                    .clicked()
+                    {
+                        pending.push(Command::Download(view.tracks.clone()));
+                    }
                 });
             });
             ui.add_space(4.0);

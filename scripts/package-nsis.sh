@@ -9,11 +9,13 @@ cd "$ROOT"
 EXE="target/x86_64-pc-windows-gnu/release/echoport.exe"
 TOOLS_DIR=""
 OUT=""
+VARIANT="full"
 while [ $# -gt 0 ]; do
     case "$1" in
         --exe) EXE="$2"; shift 2 ;;
         --tools-dir) TOOLS_DIR="$2"; shift 2 ;;
         --out) OUT="$2"; shift 2 ;;
+        --lean) VARIANT="lean"; shift ;;
         -h|--help) sed -n '1,20p' "$0"; exit 0 ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
@@ -29,7 +31,11 @@ if not m: raise SystemExit('bad version')
 print('.'.join(m.groups())+'.0')
 PY
 )"
-NAME="echoport-$VERSION-windows-x86_64"
+if [ "$VARIANT" = "lean" ]; then
+    NAME="echoport-$VERSION-windows-x86_64-lean"
+else
+    NAME="echoport-$VERSION-windows-x86_64"
+fi
 STAGE="$ROOT/dist/_nsis/$NAME"
 OUT="${OUT:-$ROOT/dist/$NAME-setup.exe}"
 rm -rf "$STAGE"
@@ -45,11 +51,13 @@ if [ -n "$TOOLS_DIR" ] && [ -d "$TOOLS_DIR" ]; then
     mkdir -p "$STAGE/tools"
     cp -a "$TOOLS_DIR"/. "$STAGE/tools/"
 fi
-for f in SCRIPTING.md PLUGINS.md plugins.html config.html; do
-    install -m644 "docs/$f" "$STAGE/docs/$f"
-done
-install -m644 examples/config.lua examples/config.zh-CN.lua examples/config.en.lua "$STAGE/examples/"
-install -m644 examples/plugins/example.lua "$STAGE/examples/example.lua"
+if [ "$VARIANT" = "full" ]; then
+    for f in SCRIPTING.md PLUGINS.md plugins.html config.html; do
+        install -m644 "docs/$f" "$STAGE/docs/$f"
+    done
+    install -m644 examples/config.lua examples/config.zh-CN.lua examples/config.en.lua "$STAGE/examples/"
+    install -m644 examples/plugins/example.lua "$STAGE/examples/example.lua"
+fi
 
 sed -e "s|@VERSION4@|$VERSION4|g" \
     -e "s|@VERSION@|$VERSION|g" \

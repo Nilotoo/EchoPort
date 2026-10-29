@@ -14,8 +14,8 @@ fn main() -> eframe::Result {
         .init();
 
     let mut viewport = egui::ViewportBuilder::default()
-        .with_inner_size([1200.0, 800.0])
-        .with_min_inner_size([980.0, 620.0])
+        .with_inner_size([1360.0, 860.0])
+        .with_min_inner_size([1040.0, 660.0])
         .with_title("EchoPort")
         .with_app_id("echoport");
     if let Some(icon) = build_icon() {

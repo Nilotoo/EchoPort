@@ -18,6 +18,7 @@ pub mod download;
 pub mod fonts;
 pub mod i18n;
 pub mod library;
+pub mod lyrics;
 pub mod model;
 pub mod net;
 pub mod process;

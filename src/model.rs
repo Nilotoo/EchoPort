@@ -71,10 +71,11 @@ pub enum Platform {
     SoundCloud,
     Bilibili,
     YouTube,
+    InternetArchive,
 }
 
 impl Platform {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::Local,
         Self::Spotify,
         Self::AppleMusic,
@@ -82,16 +83,18 @@ impl Platform {
         Self::SoundCloud,
         Self::Bilibili,
         Self::YouTube,
+        Self::InternetArchive,
     ];
 
     /// Platforms that can be searched over the network.
-    pub const REMOTE: [Self; 6] = [
+    pub const REMOTE: [Self; 7] = [
         Self::Spotify,
         Self::AppleMusic,
         Self::Netease,
         Self::SoundCloud,
         Self::Bilibili,
         Self::YouTube,
+        Self::InternetArchive,
     ];
 
     pub fn key(self) -> &'static str {
@@ -103,6 +106,7 @@ impl Platform {
             Self::SoundCloud => "soundcloud",
             Self::Bilibili => "bilibili",
             Self::YouTube => "youtube",
+            Self::InternetArchive => "internet_archive",
         }
     }
 
@@ -120,6 +124,7 @@ impl Platform {
             Self::SoundCloud => "SoundCloud",
             Self::Bilibili => "Bilibili",
             Self::YouTube => "YouTube",
+            Self::InternetArchive => "Internet Archive",
         }
     }
 
@@ -388,6 +393,9 @@ pub struct Settings {
     /// of the current track (background and text stay theme-fixed).
     #[serde(default = "default_true")]
     pub follow_cover_accent: bool,
+    /// Show scrolling lyrics in the Now Playing page.
+    #[serde(default = "default_true")]
+    pub lyrics_enabled: bool,
     pub download_format: DownloadFormat,
     pub download_dir: PathBuf,
     pub music_dirs: Vec<PathBuf>,
@@ -418,6 +426,7 @@ impl Default for Settings {
             language: Language::detect(),
             theme_mode: ThemeMode::default(),
             follow_cover_accent: true,
+            lyrics_enabled: true,
             download_format: DownloadFormat::Mp3,
             download_dir: music_dir.join("EchoPort"),
             music_dirs: vec![music_dir],

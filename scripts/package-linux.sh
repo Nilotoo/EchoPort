@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # EchoPort — build the Linux release tarball.
 #
-#   ./scripts/package-linux.sh
+#   ./scripts/package-linux.sh            # full build
+#   ./scripts/package-linux.sh --lean     # lean build (no Lua/plugins)
 #
 # Result (also printed at the end):
 #   dist/echoport-<version>-linux-x86_64/
@@ -23,6 +24,14 @@ cd "$ROOT"
 
 fail() { echo "error: $*" >&2; exit 1; }
 
+LEAN=0
+for arg in "$@"; do
+    case "$arg" in
+        --lean) LEAN=1 ;;
+        *) fail "unknown argument: $arg" ;;
+    esac
+done
+
 # ---- version --------------------------------------------------------------
 VERSION=""
 if command -v cargo >/dev/null 2>&1; then
@@ -41,13 +50,23 @@ fi
 [ -f "README.md" ] || fail "missing README.md (run from the repository root)"
 
 # ---- build ----------------------------------------------------------------
-echo "==> building release binary"
-./scripts/build.sh --release
-BIN="target/release/echoport"
-[ -x "$BIN" ] || fail "release binary not found at $BIN"
+if [ "$LEAN" -eq 1 ]; then
+    echo "==> building lean binary (no Lua/plugins)"
+    ./scripts/build.sh --lean
+    BIN="target/lean/echoport"
+else
+    echo "==> building release binary"
+    ./scripts/build.sh --release
+    BIN="target/release/echoport"
+fi
+[ -x "$BIN" ] || fail "binary not found at $BIN"
 
 # ---- stage ----------------------------------------------------------------
-NAME="echoport-${VERSION}-linux-x86_64"
+if [ "$LEAN" -eq 1 ]; then
+    NAME="echoport-${VERSION}-linux-x86_64-lean"
+else
+    NAME="echoport-${VERSION}-linux-x86_64"
+fi
 STAGE="dist/${NAME}"
 TARBALL="dist/${NAME}.tar.gz"
 echo "==> staging $STAGE"
@@ -73,12 +92,14 @@ if [ -f "NOTICE" ]; then
     install -m 0644 "NOTICE" "$STAGE/NOTICE"
 fi
 # User-facing docs for the optional Lua scripting / plugin layer.
-for doc in docs/SCRIPTING.md docs/PLUGINS.md docs/plugins.html docs/config.html; do
+if [ "$LEAN" -eq 0 ]; then
+  for doc in docs/SCRIPTING.md docs/PLUGINS.md docs/plugins.html docs/config.html; do
     if [ -f "$doc" ]; then
         mkdir -p "$STAGE/docs"
         install -m 0644 "$doc" "$STAGE/docs/"
     fi
-done
+  done
+fi
 # In-app icon-set licence/credits (assets are embedded in the binary; MIT-0).
 if [ -f "assets/icons/LICENSE.txt" ]; then
     mkdir -p "$STAGE/assets/icons"
@@ -88,7 +109,7 @@ if [ -f "assets/icons/LICENSE.txt" ]; then
     fi
 fi
 # Ready-to-copy Lua templates (config + example plugin).
-if [ -f "examples/config.lua" ]; then
+if [ "$LEAN" -eq 0 ] && [ -f "examples/config.lua" ]; then
     mkdir -p "$STAGE/examples/plugins"
     install -m 0644 "examples/config.lua" "$STAGE/examples/config.lua"
     [ -f "examples/config.zh-CN.lua" ] && install -m 0644 "examples/config.zh-CN.lua" "$STAGE/examples/config.zh-CN.lua"
