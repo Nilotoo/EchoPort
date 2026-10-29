@@ -18,13 +18,13 @@
           <Component Id="MainExecutable" Guid="@GUID_EXE@">
             <File Id="EchoPortExe" Name="echoport.exe" Source="@STAGE@/echoport.exe" KeyPath="yes">
               <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuDir" Name="EchoPort"
-                        WorkingDirectory="EchoPortDir" Advertise="no"/>
+                        WorkingDirectory="EchoPortDir" Icon="EchoPortIcon" Advertise="no"/>
             </File>
           </Component>
           <Component Id="CleanUninstaller" Guid="@GUID_CLEAN@">
             <File Id="CleanUninstallCmd" Name="clean-uninstall.cmd" Source="@STAGE@/clean-uninstall.cmd" KeyPath="yes">
               <Shortcut Id="CleanUninstallShortcut" Directory="ProgramMenuDir"
-                        Name="Uninstall EchoPort (clean app data)" Advertise="no"/>
+                        Name="Uninstall EchoPort (clean app data)" Icon="EchoPortIcon" Advertise="no"/>
             </File>
           </Component>
 @TOOLS_COMPONENT@

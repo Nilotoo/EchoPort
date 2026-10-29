@@ -511,15 +511,14 @@ fn downloads(
                     .download_dir
                     .to_string_lossy()
                     .into_owned();
-                style::paint_elided(
-                    ui.painter(),
-                    Pos2::new(ui.cursor().min.x, ui.cursor().min.y + 10.0),
-                    &dir,
-                    style::font(11.0),
-                    theme.text,
-                    (ui.available_width() - 190.0).max(80.0),
-                );
-                ui.add_space((ui.available_width() - 186.0).max(80.0));
+                ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                    let label = egui::Label::new(RichText::new(dir).size(11.0).color(theme.text))
+                        .truncate();
+                    ui.add_sized(
+                        Vec2::new((ui.available_width() - 200.0).max(80.0), 30.0),
+                        label,
+                    );
+                });
                 if style::button_sized(
                     ui,
                     theme,
@@ -1171,9 +1170,17 @@ fn about(
             }
         });
         ui.add_space(12.0);
-        if style::button(ui, theme, app.state.tr(Key::OpenDataFolder), Variant::Ghost).clicked() {
-            pending.push(Command::OpenDataFolder);
-        }
+        ui.horizontal(|ui| {
+            if style::button(ui, theme, app.state.tr(Key::OpenDataFolder), Variant::Ghost).clicked()
+            {
+                pending.push(Command::OpenDataFolder);
+            }
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if style::button(ui, theme, app.state.tr(Key::Quit), Variant::Ghost).clicked() {
+                    pending.push(Command::Quit);
+                }
+            });
+        });
         let _ = (width, Page::Settings);
     });
 }

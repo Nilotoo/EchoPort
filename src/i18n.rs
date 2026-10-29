@@ -275,6 +275,9 @@ pub enum Key {
     UpdateCheckFailed,
     PluginDocs,
     ConfigDocs,
+    Quit,
+    BackgroundNotice,
+    UpdatePageOpened,
     // v0.1.3 UI round
     DoubleClickPlay,
     DoubleClickOpen,
@@ -647,6 +650,15 @@ impl Key {
             UpdateCheckFailed => ("Update check failed", "更新检查失败"),
             PluginDocs => ("Plugin docs", "插件开发文档"),
             ConfigDocs => ("Config reference", "配置参考"),
+            Quit => ("Quit EchoPort", "退出 EchoPort"),
+            BackgroundNotice => (
+                "EchoPort is still running in the background — restore it from the taskbar, or use Settings → Quit.",
+                "EchoPort 已转入后台继续播放：从任务栏恢复窗口，或在设置 → 退出 EchoPort。",
+            ),
+            UpdatePageOpened => (
+                "Update page opened in your browser. Install the new version, then restart EchoPort.",
+                "已在浏览器打开发布页：安装新版本后重新启动 EchoPort 即可。",
+            ),
             DoubleClickPlay => ("Double-click to play", "双击播放"),
             DoubleClickOpen => ("Double-click to open", "双击打开"),
             OpenOriginalPage => ("Open original page", "打开原始页面"),

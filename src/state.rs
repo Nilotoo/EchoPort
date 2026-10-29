@@ -171,6 +171,8 @@ impl DownloadsView {
 #[derive(Clone, Debug, Default)]
 pub struct UpdateView {
     pub checking: bool,
+    /// A user-initiated check (show a result toast even when up to date).
+    pub manual_check: bool,
     pub available: Option<UpdateInfo>,
     pub dismissed: bool,
     pub last_checked: Option<std::time::Instant>,
