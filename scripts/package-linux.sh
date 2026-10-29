@@ -69,6 +69,9 @@ if [ -f VERSION ]; then install -m 0644 VERSION "$STAGE/VERSION"; fi
 if [ -f "LICENSE" ]; then
     install -m 0644 "LICENSE" "$STAGE/LICENSE"
 fi
+if [ -f "NOTICE" ]; then
+    install -m 0644 "NOTICE" "$STAGE/NOTICE"
+fi
 # User-facing docs for the optional Lua scripting / plugin layer.
 for doc in docs/SCRIPTING.md docs/PLUGINS.md docs/plugins.html docs/config.html; do
     if [ -f "$doc" ]; then

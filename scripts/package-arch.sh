@@ -31,8 +31,9 @@ for size in 32 48 128 256; do
 done
 install -m0755 "$BIN" "$STAGE/usr/bin/echoport"
 install -m0644 packaging/echoport.desktop "$STAGE/usr/share/applications/echoport.desktop"
-install -m0644 README.md LICENSE "$STAGE/usr/share/doc/$PKGNAME/"
+install -m0644 README.md LICENSE NOTICE "$STAGE/usr/share/doc/$PKGNAME/"
 install -m0644 LICENSE "$STAGE/usr/share/licenses/$PKGNAME/LICENSE"
+install -m0644 NOTICE "$STAGE/usr/share/licenses/$PKGNAME/NOTICE"
 for doc in SCRIPTING.md PLUGINS.md plugins.html config.html; do
     cp "docs/$doc" "$STAGE/usr/share/doc/$PKGNAME/$doc"
 done
