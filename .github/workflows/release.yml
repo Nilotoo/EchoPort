@@ -80,6 +80,7 @@ jobs:
             Copy-Item -Path assets/echoport.ico -Destination "dist/$name/echoport.ico"
             Copy-Item -Path README.md -Destination "dist/$name/"
             Copy-Item -Path LICENSE -Destination "dist/$name/"
+            Copy-Item -Path NOTICE -Destination "dist/$name/"
             Copy-Item -Path docs/* -Destination "dist/$name/docs/" -Recurse
             Copy-Item -Path examples/* -Destination "dist/$name/examples/" -Recurse
             Copy-Item -Path dist/tools -Destination "dist/$name/tools" -Recurse
