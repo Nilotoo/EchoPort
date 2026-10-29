@@ -84,7 +84,6 @@ pub struct EchoPortApp {
     pub splash_done: bool,
     fake_update_sent: bool,
     quitting: bool,
-    background_notice_shown: bool,
 }
 
 impl EchoPortApp {
@@ -230,7 +229,6 @@ impl EchoPortApp {
             splash_done: skip_splash,
             fake_update_sent: false,
             quitting: false,
-            background_notice_shown: false,
         };
 
         if std::env::var("ECHOPORT_PROFILE_EDIT").is_ok() {
@@ -830,18 +828,10 @@ impl EchoPortApp {
         }
 
         if ctx.input(|input| input.viewport().close_requested()) {
+            // Closing the window exits on every platform (Linux/X11 has no
+            // reliable "background app" model). Minimize explicitly if you
+            // want playback to continue in the background.
             self.save_now();
-            if !self.quitting {
-                // Keep audio/playback alive: closing the window minimizes it
-                // instead of terminating the process.
-                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-                ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
-                if !self.background_notice_shown {
-                    self.background_notice_shown = true;
-                    self.toast(ToastKind::Info, Key::BackgroundNotice);
-                }
-                ctx.request_repaint();
-            }
         }
 
         let busy = self.state.playback.state.is_active()
