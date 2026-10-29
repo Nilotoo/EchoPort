@@ -1,0 +1,24 @@
+/target
+/dist
+# Temporary/automation screenshots are ignored; curated screenshots stay tracked.
+/screenshots/_infra-*
+/screenshots/*.tmp.png
+/.testing
+
+# Private runtime data and QA artefacts (never publish profiles/caches/logs)
+*.echoport-profile.json
+*.echoport.json
+profiles/
+config.lua
+plugins/
+screenshots/*.log
+screenshots/_*
+/.testing/
+*.log
+
+# Shipped Lua templates/examples must not be ignored by the runtime patterns
+!examples/config.lua
+!examples/config.zh-CN.lua
+!examples/config.en.lua
+!examples/plugins/
+!examples/plugins/**

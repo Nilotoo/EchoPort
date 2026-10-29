@@ -1,0 +1,22 @@
+[Desktop Entry]
+# EchoPort — lightweight, local-first desktop music player.
+# Install: copy this file to ~/.local/share/applications/ (or /usr/share/applications/)
+# and put the `echoport` binary on your PATH (or point Exec at its absolute path).
+Type=Application
+Version=1.5
+Name=EchoPort
+Name[zh_CN]=回声港 EchoPort
+GenericName=Music Player
+GenericName[zh_CN]=音乐播放器
+Comment=Lightweight, local-first music player for local files and many web sources
+Comment[zh_CN]=轻量、本地优先的音乐播放器，支持本地音乐与多音源在线播放
+Exec=echoport
+TryExec=echoport
+Icon=echoport
+Terminal=false
+Categories=AudioVideo;Audio;Player;
+Keywords=music;audio;player;playlist;yt-dlp;podcast;
+Keywords[zh_CN]=音乐;音频;播放器;歌单;下载;
+StartupNotify=true
+StartupWMClass=echoport
+X-GNOME-UsesNotifications=false

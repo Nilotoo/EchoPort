@@ -1,0 +1,38 @@
+# Maintainer: nilotoo <https://github.com/Nilotoo>
+# AUR-ready PKGBUILD for EchoPort (Arch Linux, x86_64).
+# Update pkgver/url/sha256 when a GitHub Release is published (the release workflow
+# attaches echoport-$pkgver-linux-x86_64.tar.gz + matching .sha256).
+pkgname=echoport
+pkgver=0.2.0
+pkgrel=1
+pkgdesc="Local-first music player for YouTube, SoundCloud, Bilibili, Netease, Apple Music and local files"
+arch=('x86_64')
+url="https://github.com/Nilotoo/EchoPort"
+license=('GPL-3.0-only')
+depends=('glibc' 'gcc-libs')
+optdepends=('yt-dlp: stream and download online audio'
+            'ffmpeg: transcode downloaded audio')
+source=("$url/releases/download/v$pkgver/echoport-$pkgver-linux-x86_64.tar.gz")
+sha256sums=('40836e7de55135f30c716c273494bba178ea3eede23fda712811fb435e0de45d')  # replace with the published tarball sha256 before AUR upload
+
+package() {
+    install -Dm0755 "$srcdir/echoport-$pkgver-linux-x86_64/echoport" "$pkgdir/usr/bin/echoport"
+    install -Dm0644 "$srcdir/echoport-$pkgver-linux-x86_64/echoport.desktop" \
+        "$pkgdir/usr/share/applications/echoport.desktop"
+    for size in 32 48 128 256; do
+        install -Dm0644 "$srcdir/echoport-$pkgver-linux-x86_64/icon-$size.png" \
+            "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/echoport.png"
+    done
+    install -d "$pkgdir/usr/share/doc/echoport/examples"
+    install -m0644 "$srcdir/echoport-$pkgver-linux-x86_64/README.md" \
+        "$srcdir/echoport-$pkgver-linux-x86_64/LICENSE" "$pkgdir/usr/share/doc/echoport/"
+    for doc in SCRIPTING.md PLUGINS.md plugins.html config.html; do
+        install -m0644 "$srcdir/echoport-$pkgver-linux-x86_64/docs/$doc" "$pkgdir/usr/share/doc/echoport/$doc" 2>/dev/null || true
+    done
+    for cfg in config.lua config.zh-CN.lua config.en.lua; do
+        install -m0644 "$srcdir/echoport-$pkgver-linux-x86_64/examples/$cfg" \
+            "$pkgdir/usr/share/doc/echoport/examples/$cfg" 2>/dev/null || true
+    done
+    install -Dm0644 "$srcdir/echoport-$pkgver-linux-x86_64/VERSION" "$pkgdir/usr/share/echoport/VERSION" 2>/dev/null || true
+    install -Dm0644 "$srcdir/echoport-$pkgver-linux-x86_64/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

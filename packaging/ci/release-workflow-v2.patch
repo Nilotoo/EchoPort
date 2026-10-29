@@ -1,0 +1,26 @@
+--- a/.github/workflows/release.yml
++++ b/.github/workflows/release.yml
+@@ -25,20 +25,10 @@
+       - uses: dtolnay/rust-toolchain@stable
+       - name: Build release
+         run: cargo build --release
+-      - name: Package Linux tarball
++      - name: "Package Linux tarball (script: icons, VERSION, install-arch, checksums)"
+         run: |
+-          VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+-          NAME="echoport-${VERSION}-linux-x86_64"
+-          mkdir -p "dist/$NAME/docs" "dist/$NAME/examples/plugins" "dist/$NAME/assets"
+-          install -m755 target/release/echoport "dist/$NAME/echoport"
+-          install -m644 packaging/echoport.desktop "dist/$NAME/echoport.desktop"
+-          install -m644 assets/icon-128.png "dist/$NAME/echoport.png"
+-          install -m644 README.md LICENSE INSTALL.md "dist/$NAME/" 2>/dev/null || true
+-          cp -r docs/* "dist/$NAME/docs/"
+-          cp -r examples/* "dist/$NAME/examples/"
+-          cp assets/icons/LICENSE.txt "dist/$NAME/assets/" 2>/dev/null || true
+-          tar -C dist -czf "dist/$NAME.tar.gz" "$NAME"
+-          (cd dist && sha256sum "$NAME.tar.gz" > "$NAME.tar.gz.sha256")
++          chmod +x scripts/package-linux.sh
++          ./scripts/package-linux.sh
+       - name: Package Arch pacman package
+         run: |
+           sudo apt-get install -y --no-install-recommends libarchive-tools zstd

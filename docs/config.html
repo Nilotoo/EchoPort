@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>EchoPort · 配置参考 / Config reference</title>
+<style>
+*,*::before,*::after{box-sizing:border-box}
+:root{--bg:#f3f6fb;--panel:#fff;--panel2:#f8fafd;--ink:#16233a;--muted:#5a6b82;--accent:#044bb5;--accent-soft:#e3ecfb;--teal:#2dacb5;--lime:#bbff5c;--lime-ink:#1d3300;--border:#dfe7f3;--code-bg:#101a2b;--code-ink:#e7eefb;--radius:16px;--shadow:0 10px 30px rgba(12,36,74,.08)}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1521;--panel:#161f30;--panel2:#1b2537;--ink:#e9eef8;--muted:#9fb0c7;--accent:#7aa2f7;--accent-soft:#1f2d46;--teal:#59c9d0;--border:#26334a;--code-bg:#0b1220;--shadow:0 10px 30px rgba(0,0,0,.35)}}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif}
+a{color:var(--accent)}
+.topbar{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--panel) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}
+.topbar-inner{max-width:1120px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.2px;color:var(--ink);text-decoration:none}
+.dot{width:11px;height:11px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 5px var(--accent-soft)}
+.brand small{color:var(--muted);font-weight:500}
+.spacer{flex:1}
+.lang-switch{display:flex;gap:4px;padding:3px;background:var(--panel2);border:1px solid var(--border);border-radius:999px}
+.lang-btn{border:0;background:transparent;color:var(--muted);font:inherit;font-size:13px;padding:5px 14px;border-radius:999px;cursor:pointer;transition:.15s}
+.lang-btn:hover{color:var(--ink)}
+.lang-btn.is-active{background:var(--accent);color:#fff;box-shadow:0 2px 8px rgba(4,75,181,.35)}
+html[data-lang="zh"] .lang-en,html[data-lang="en"] .lang-zh{display:none!important}
+.wrap{max-width:1120px;margin:0 auto;padding:28px 20px 80px}
+.hero{padding:26px 0 6px}
+.hero h1{font-size:clamp(28px,4vw,40px);line-height:1.15;margin:0 0 10px}
+.hero p{color:var(--muted);margin:0;max-width:800px}
+.badges{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 6px}
+.badge{font-size:12px;padding:4px 10px;border-radius:999px;background:var(--panel);border:1px solid var(--border);color:var(--muted)}
+.badge.lime{background:var(--lime);color:var(--lime-ink);border-color:transparent;font-weight:600}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:22px 24px;margin:18px 0;box-shadow:var(--shadow)}
+.card h2{margin:0 0 12px;font-size:22px;scroll-margin-top:80px}
+.card h3{margin:22px 0 8px;font-size:16.5px;color:var(--accent)}
+.toc{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;margin-top:6px}
+.toc a{display:block;padding:9px 12px;border-radius:10px;background:var(--panel2);border:1px solid var(--border);text-decoration:none;color:var(--ink);font-size:14px}
+.toc a:hover{border-color:var(--accent);color:var(--accent)}
+.toc .num{color:var(--accent);font-weight:700;margin-right:6px}
+.muted{color:var(--muted)}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}
+:not(pre)>code{font-size:.88em;background:var(--accent-soft);color:var(--accent);padding:1.5px 6px;border-radius:6px}
+table{width:100%;border-collapse:collapse;font-size:14.5px;margin:10px 0 6px;display:block;overflow-x:auto}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+th{background:var(--panel2);color:var(--muted);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em}
+tr:hover td{background:var(--panel2)}
+td code{white-space:nowrap}
+.note{border-left:4px solid var(--teal);background:var(--panel2);padding:12px 16px;border-radius:0 10px 10px 0;margin:14px 0;color:var(--muted)}
+.note strong{color:var(--ink)}
+.warn{border-left-color:#e8a33d}
+.code{position:relative;margin:14px 0;border-radius:12px;overflow:hidden;background:var(--code-bg)}
+.code pre{margin:0;padding:16px 18px;overflow-x:auto;color:var(--code-ink);font-size:13.5px;line-height:1.6}
+.code code{font-size:inherit}
+.copy{position:absolute;top:8px;right:8px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#dfe8f8;font:inherit;font-size:11.5px;padding:4px 10px;border-radius:8px;cursor:pointer;opacity:.85;transition:.15s}
+.copy:hover{opacity:1;background:rgba(255,255,255,.16)}
+.kbd{display:inline-block;font-size:12px;padding:1px 7px;border:1px solid var(--border);border-bottom-width:2px;border-radius:6px;background:var(--panel2);color:var(--ink);font-family:ui-monospace,monospace}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+footer{border-top:1px solid var(--border);color:var(--muted);font-size:13.5px;padding:22px 20px;text-align:center}
+footer a{color:var(--accent)}
+@media print{.topbar,.copy,.lang-switch{display:none!important}.lang-en{display:none!important}.card{box-shadow:none;break-inside:avoid}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#zh-top"><span class="dot"></span>EchoPort <small>· Lua 配置 / Config</small></a>
+    <span class="spacer"></span>
+    <div class="lang-switch" role="group" aria-label="Language / 语言">
+      <button class="lang-btn is-active" data-lang="zh" aria-pressed="true">中文</button>
+      <button class="lang-btn" data-lang="en" aria-pressed="false">English</button>
+    </div>
+  </div>
+</header>
+
+<!-- ======================= 中文版 / CHINESE ======================= -->
+<div class="lang-zh">
+<div class="wrap" id="zh-top">
+  <section class="hero">
+    <h1>EchoPort 配置参考 <span class="muted">config.lua</span></h1>
+    <p>用一份可选的 Lua 5.4 文件定制 EchoPort：界面语言与主题、启动页面、缩放、音量、搜索与下载、缓存、键盘快捷键、播放步长，以及事件钩子与自定义动作。所有设置都是可选的，非法值只会产生警告，不会让应用崩溃。</p>
+    <div class="badges">
+      <span class="badge lime">v0.1.6</span>
+      <span class="badge">Lua 5.4 · 无需安装 Lua</span>
+      <span class="badge">本地文件 · 不上传</span>
+      <span class="badge">设置页 → 重新加载脚本 生效</span>
+    </div>
+  </section>
+
+  <div class="card">
+    <h2 id="zh-toc">目录</h2>
+    <nav class="toc">
+      <a href="#zh-quick"><span class="num">1</span>快速开始</a>
+      <a href="#zh-files"><span class="num">2</span>文件位置与生效方式</a>
+      <a href="#zh-options"><span class="num">3</span>全部选项</a>
+      <a href="#zh-values"><span class="num">4</span>取值格式：主题 / 颜色 / 路径 / 页面</a>
+      <a href="#zh-keyboard"><span class="num">5</span>键盘快捷键</a>
+      <a href="#zh-actions"><span class="num">6</span>自定义动作与绑定</a>
+      <a href="#zh-full"><span class="num">7</span>完整示例</a>
+      <a href="#zh-templates"><span class="num">8</span>内置模板与本地化版本</a>
+      <a href="#zh-trouble"><span class="num">9</span>故障排查</a>
+      <a href="#zh-links"><span class="num">10</span>相关文件</a>
+    </nav>
+  </div>
+
+  <div class="card" id="zh-quick">
+    <h2>1. 快速开始</h2>
+    <p>首次启动且文件不存在时，EchoPort 会自动生成一份<strong>全注释的模板</strong>（不会覆盖已有文件）。编辑后从 <strong>设置 → 重新加载脚本</strong> 生效。</p>
+    <div class="code"><button class="copy" data-label="复制" data-copied="已复制">复制</button><pre><code>-- ~/.config/echoport/config.lua  (Linux)
+-- %APPDATA%\echoport\config.lua   (Windows)
+echoport.config = {
+  language = "zh",          -- 界面语言 / UI language
+  theme = "ink",            -- 主题 / theme
+  ui_scale = 1.25,          -- 界面缩放 / UI zoom
+  startup_page = "search",  -- 启动页面 / startup page
+  volume = 0.6,             -- 初始音量 / initial volume
+  keyboard = {
+    ["Space"] = "play_pause",
+    ["Ctrl+ArrowRight"] = "next",
+  },
+}</code></pre></div>
+    <div class="note"><strong>提示：</strong>只写你想改的键即可，其余保持注释或用档案默认值。配置文件以你的用户权限在本机执行，属于<strong>受信任的本地脚本</strong>，不是沙箱。</div>
+  </div>
+
+  <div class="card" id="zh-files">
+    <h2>2. 文件位置与生效方式</h2>
+    <table>
+      <thead><tr><th>平台</th><th>配置文件</th><th>插件目录</th></tr></thead>
+      <tbody>
+        <tr><td>Linux</td><td><code>~/.config/echoport/config.lua</code></td><td><code>~/.config/echoport/plugins/</code></td></tr>
+        <tr><td>macOS</td><td><code>~/Library/Application Support/echoport/config.lua</code></td><td><code>…/echoport/plugins/</code></td></tr>
+        <tr><td>Windows</td><td><code>%APPDATA%\echoport\config.lua</code></td><td><code>%APPDATA%\echoport\plugins\</code></td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li><strong>首次运行：</strong>目录和模板自动创建；已有 <code>config.lua</code> 永远不会被覆盖。</li>
+      <li><strong>修改后：</strong>设置 → 重新加载脚本（或重启应用）。重新加载会重建整个 Lua 状态并重新执行所有插件。</li>
+      <li><strong>重新加载失败：</strong>例如 Lua 语法错误，会保留上一次成功的配置与插件，并在设置页显示一条警告。</li>
+      <li><strong>恢复默认：</strong>删除 <code>config.lua</code> 后下次启动会重新生成模板（插件不受影响）。</li>
+      <li><strong>警告上限：</strong>设置页最多显示 100 条脚本警告，避免刷屏。</li>
+    </ul>
+  </div>
+
+  <div class="card" id="zh-options">
+    <h2>3. 全部选项</h2>
+    <p>所有键都写在 <code>echoport.config = { ... }</code> 表里；全部可选。类型不符或越界的值会得到一条警告，并按“截断/忽略”处理。</p>
+    <table>
+      <thead><tr><th>键 / key</th><th>类型</th><th>默认</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>language</code></td><td>字符串</td><td>系统语言</td><td><code>"en"</code> / <code>"zh"</code></td></tr>
+        <tr><td><code>startup_page</code></td><td>字符串</td><td><code>home</code></td><td><code>home</code>、<code>search</code>、<code>library</code>、<code>playlists</code>、<code>downloads</code>、<code>now_playing</code>、<code>artist</code>、<code>profile</code>、<code>settings</code></td></tr>
+        <tr><td><code>ui_scale</code></td><td>数字</td><td><code>1.0</code></td><td>界面缩放，范围 0.8–2.0；设置页预设 100% / 110% / 125% / 150%</td></tr>
+        <tr><td><code>volume</code></td><td>数字</td><td><code>0.72</code></td><td>初始音量 0–1，越界截断</td></tr>
+        <tr><td><code>theme</code></td><td>字符串</td><td><code>pulse</code></td><td><code>pulse</code> / <code>tide</code> / <code>ink</code>；旧别名见第 4 节</td></tr>
+        <tr><td><code>follow_cover_accent</code></td><td>布尔</td><td><code>true</code></td><td>是否跟随当前封面取色</td></tr>
+        <tr><td><code>accent</code></td><td>颜色</td><td>主题色</td><td>强调色，如 <code>"#044BB5"</code></td></tr>
+        <tr><td><code>highlight</code></td><td>颜色</td><td>主题色</td><td>荧光高亮色，如 <code>"#BBFF5C"</code></td></tr>
+        <tr><td><code>macaron</code></td><td>表</td><td>内置五色</td><td>正好 5 个颜色字符串</td></tr>
+        <tr><td><code>seek_step</code></td><td>数字</td><td><code>5.0</code></td><td>快进/快退步长（秒），1–120</td></tr>
+        <tr><td><code>volume_step</code></td><td>数字</td><td><code>0.05</code></td><td>音量键步长，0.01–0.5</td></tr>
+        <tr><td><code>results_per_platform</code></td><td>整数</td><td><code>12</code></td><td>每个平台的搜索结果数，2–50</td></tr>
+        <tr><td><code>download_format</code></td><td>字符串</td><td><code>mp3</code></td><td><code>mp3</code> / <code>m4a</code> / <code>opus</code> / <code>flac</code></td></tr>
+        <tr><td><code>download_dir</code></td><td>路径</td><td><code>~/Music/EchoPort</code></td><td>下载目录，支持 <code>~</code> 与 <code>$VAR</code></td></tr>
+        <tr><td><code>music_dirs</code></td><td>路径表</td><td><code>{ "~/Music" }</code></td><td>本地曲库扫描目录，至少 1 个</td></tr>
+        <tr><td><code>cache_limit_mb</code></td><td>整数</td><td><code>1024</code></td><td>音频缓存上限（MiB），0–10240；0 = 不保留已播放缓存；设置页预设 0 / 512 / 1024 / 2048</td></tr>
+        <tr><td><code>keyboard</code></td><td>表</td><td>内置快捷键</td><td><code>[按键] = 动作</code>；值也可以是函数，见第 5 节</td></tr>
+      </tbody>
+    </table>
+    <div class="note"><strong>提示：</strong><code>ui_scale</code> 与 <code>cache_limit_mb</code> 在 v0.1.6 起可由 Lua 配置；在设置页修改会把值写回个人档案。未知键（<code>plugins</code>、<code>custom</code>、<code>hooks</code> 三个命名空间除外）会得到一条 <code>unknown setting</code> 警告。</div>
+  </div>
+
+  <div class="card" id="zh-values">
+    <h2>4. 取值格式</h2>
+    <h3>主题</h3>
+    <table>
+      <thead><tr><th>值</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>pulse</code></td><td>默认：瓷白 + 亮蓝 + 荧光青柠高亮</td></tr>
+        <tr><td><code>tide</code></td><td>浅水青 + 湖蓝 + 深海军蓝</td></tr>
+        <tr><td><code>ink</code></td><td>低饱和深色石板</td></tr>
+        <tr><td>旧别名</td><td><code>blue_white</code> / <code>album</code> / <code>porcelain</code> → <code>pulse</code>；<code>midnight</code> → <code>ink</code></td></tr>
+      </tbody>
+    </table>
+    <h3>颜色</h3>
+    <p>接受 <code>"#RGB"</code>、<code>"#RRGGBB"</code>、<code>"#RRGGBBAA"</code>（<code>#</code> 可省略，也接受 <code>0x</code> 前缀）。<code>macaron</code> 必须正好 5 个颜色，否则整项忽略并警告。</p>
+    <h3>路径</h3>
+    <p>开头 <code>~/</code>（或 <code>~\</code>）展开为家目录；<code>$VAR</code> / <code>${VAR}</code> 展开环境变量，未定义的变量保持原样。示例：<code>"~/Music/EchoPort"</code>。</p>
+    <h3>页面</h3>
+    <p><code>home</code> · <code>search</code> · <code>library</code> · <code>playlists</code> · <code>downloads</code> · <code>now_playing</code> · <code>artist</code> · <code>profile</code> · <code>settings</code>（也接受 <code>now-playing</code>、<code>nowplaying</code> 等写法）。</p>
+  </div>
+
+  <div class="card" id="zh-keyboard">
+    <h2>5. 键盘快捷键</h2>
+    <p>写法：<code>["按键组合"] = "动作"</code>。修饰键大小写不敏感，可用 <span class="kbd">Ctrl</span> <span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">Cmd</span>（Windows/Linux 上 Cmd 等价于 Ctrl）。</p>
+    <div class="code"><button class="copy" data-label="复制" data-copied="已复制">复制</button><pre><code>echoport.config = {
+  keyboard = {
+    ["Space"] = "play_pause",
+    ["Ctrl+ArrowRight"] = "next",
+    ["Ctrl+ArrowLeft"] = "previous",
+    ["Ctrl+Shift+F"] = "toggle_favorite",
+    ["Ctrl+Alt+J"] = "action:hello",         -- 自定义动作 / custom action
+    ["Ctrl+Alt+M"] = function()               -- 也可以直接写函数 / function value
+      echoport.notify("键盘函数回调 / keyboard function fired")
+    end,
+  },
+}</code></pre></div>
+    <h3>内置动作</h3>
+    <table>
+      <thead><tr><th>动作名</th><th>作用</th><th>动作名</th><th>作用</th></tr></thead>
+      <tbody>
+        <tr><td><code>play_pause</code></td><td>播放 / 暂停</td><td><code>next</code></td><td>下一首</td></tr>
+        <tr><td><code>previous</code></td><td>上一首</td><td><code>seek_forward</code></td><td>向前快进</td></tr>
+        <tr><td><code>seek_backward</code></td><td>向后快退</td><td><code>volume_up</code></td><td>音量 +</td></tr>
+        <tr><td><code>volume_down</code></td><td>音量 −</td><td><code>toggle_queue</code></td><td>显示/隐藏队列</td></tr>
+        <tr><td><code>toggle_favorite</code></td><td>收藏当前曲目</td><td><code>toggle_shuffle</code></td><td>随机播放</td></tr>
+        <tr><td><code>cycle_repeat</code></td><td>循环模式</td><td><code>open_search</code></td><td>搜索页</td></tr>
+        <tr><td><code>open_settings</code></td><td>设置页</td><td><code>open_home</code></td><td>主页</td></tr>
+      </tbody>
+    </table>
+    <h3>按键名</h3>
+    <p><code>Space</code>、<code>A</code>–<code>Z</code>、<code>0</code>–<code>9</code>、<code>F1</code>–<code>F35</code>、<code>ArrowLeft/Right/Up/Down</code>（可写 <code>Left</code>…）、<code>Esc</code>/<code>Escape</code>、<code>Enter</code>、<code>Tab</code>、<code>Backspace</code>、<code>Delete</code>、<code>Insert</code>、<code>Home</code>、<code>End</code>、<code>PageUp</code>/<code>PgUp</code>、<code>PageDown</code>/<code>PgDn</code>、<code>Comma</code>、<code>Period</code>、<code>Slash</code>、<code>Backslash</code>、<code>Minus</code>、<code>Plus</code>、<code>Equals</code>、<code>Backtick</code> 等。</p>
+    <div class="note"><strong>优先级：</strong>输入框聚焦时快捷键会被抑制，避免打字触发播放。重复的按键组合以后注册的为准，并记录一条警告；自定义动作写作 <code>"action:&lt;id&gt;"</code>。</div>
+  </div>
+
+  <div class="card" id="zh-actions">
+    <h2>6. 自定义动作与绑定</h2>
+    <p>动作会出现在设置页的脚本动作列表里，可被 <code>keyboard</code> 或 <code>echoport.bind</code> 引用。</p>
+    <div class="code"><button class="copy" data-label="复制" data-copied="已复制">复制</button><pre><code>-- 注册一个动作 / register an action
+echoport.actions.add({
+  id = "focus_mode",                -- 必填、唯一 / required, unique
+  title = "专注模式 / Focus mode",  -- 必填 / required
+  description = "音量降到 30% 并暂停", -- 可选 / optional
+  keys = "Ctrl+Alt+F",              -- 可选：字符串或字符串表
+  run = function()
+    echoport.set_volume(0.3)
+    echoport.command("play_pause")
+    echoport.notify("专注模式已开启 / focus mode on")
+  end,
+})
+
+-- 绑定快捷键 / bind keys
+echoport.bind("Ctrl+Alt+N", "next")
+echoport.bind("Ctrl+Alt+D", function()
+  echoport.notify("自定义绑定 / custom binding")
+end)</code></pre></div>
+    <p>纯配置也可以不写任何代码，只设置上面的选项表；事件钩子与完整 Lua API 见 <a href="plugins.html">docs/plugins.html</a>。</p>
+  </div>
+
+  <div class="card" id="zh-full">
+    <h2>7. 完整示例</h2>
+    <p>可直接复制替换整个 <code>config.lua</code>（所有值都合法）：</p>
+    <div class="code"><button class="copy" data-label="复制" data-copied="已复制">复制</button><pre><code>echoport.config = {
+  language = "zh",
+  startup_page = "home",
+  ui_scale = 1.1,
+  volume = 0.72,
+
+  theme = "pulse",
+  follow_cover_accent = true,
+  accent = "#044BB5",
+  highlight = "#BBFF5C",
+  macaron = { "#BBCFF5", "#C3E9EA", "#F9E7A6", "#D9CCF2", "#FAD3B8" },
+
+  seek_step = 5.0,
+  volume_step = 0.05,
+  results_per_platform = 12,
+  download_format = "mp3",
+  download_dir = "~/Music/EchoPort",
+  music_dirs = { "~/Music" },
+  cache_limit_mb = 1024,
+
+  keyboard = {
+    ["Space"] = "play_pause",
+    ["Ctrl+ArrowRight"] = "next",
+    ["Ctrl+ArrowLeft"] = "previous",
+    ["Ctrl+Alt+Q"] = "toggle_queue",
+  },
+}
+
+-- 可选：事件钩子（详见 docs/plugins.html）
+echoport.on("track_start", function(track)
+  if track ~= nil then
+    echoport.log("playing: " .. track.title)
+  end
+end)</code></pre></div>
+  </div>
+
+  <div class="card" id="zh-templates">
+    <h2>8. 内置模板与本地化版本</h2>
+    <p>仓库里有两套完整注释模板，选项键完全一致，复制任意一个到配置位置即可：</p>
+    <table>
+      <thead><tr><th>文件</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><a href="../examples/config.zh-CN.lua"><code>examples/config.zh-CN.lua</code></a></td><td>全中文注释的完整版本（推荐中文用户）</td></tr>
+        <tr><td><a href="../examples/config.en.lua"><code>examples/config.en.lua</code></a></td><td>full English-commented edition</td></tr>
+        <tr><td><a href="../examples/config.lua"><code>examples/config.lua</code></a></td><td>首次运行自动生成的中英双语模板（与内置默认模板相同）</td></tr>
+      </tbody>
+    </table>
+    <p>默认首次生成的是 <code>examples/config.lua</code> 的内容；中文/英文完整版用于喜欢全单一语言注释的用户。</p>
+  </div>
+
+  <div class="card" id="zh-trouble">
+    <h2>9. 故障排查</h2>
+    <table>
+      <thead><tr><th>现象</th><th>处理</th></tr></thead>
+      <tbody>
+        <tr><td>改了配置没生效</td><td>设置 → 重新加载脚本；若仍无效，检查 LUA 文件是否保存到正确路径。</td></tr>
+        <tr><td>设置页出现 <code>syntax error</code></td><td>检查 Lua 语法（逗号、括号、<code>end</code>、引号）。应用会保留上一次可用配置。</td></tr>
+        <tr><td><code>unknown setting "x"</code></td><td>键名拼写错误；本页第 3 节是完整键名列表。</td></tr>
+        <tr><td>主题/颜色不生效</td><td>颜色必须是带引号的 <code>#RRGGBB</code>；<code>macaron</code> 必须正好 5 个。</td></tr>
+        <tr><td>快捷键不响应</td><td>输入框聚焦时会抑制快捷键；确认动作名拼写；重复组合以最后注册为准。</td></tr>
+        <tr><td>想恢复默认</td><td>删除 <code>config.lua</code> 后重启或重新加载，模板会重新生成。</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card" id="zh-links">
+    <h2>10. 相关文件</h2>
+    <ul>
+      <li><a href="plugins.html">docs/plugins.html</a> — 插件开发手册（事件、动作、API、Rust 扩展点）</li>
+      <li><a href="SCRIPTING.md">docs/SCRIPTING.md</a> — Markdown 版配置 / Lua API 参考</li>
+      <li><a href="PLUGINS.md">docs/PLUGINS.md</a> — Markdown 版插件开发指南</li>
+      <li><a href="../examples/config.zh-CN.lua">examples/config.zh-CN.lua</a> · <a href="../examples/config.en.lua">examples/config.en.lua</a> · <a href="../examples/plugins/example.lua">examples/plugins/example.lua</a></li>
+    </ul>
+  </div>
+</div>
+</div>
+
+<!-- ======================= ENGLISH ======================= -->
+<div class="lang-en">
+<div class="wrap" id="en-top">
+  <section class="hero">
+    <h1>EchoPort config reference <span class="muted">config.lua</span></h1>
+    <p>Customize EchoPort with an optional Lua 5.4 file: UI language and theme, startup page, zoom, volume, search and downloads, cache limit, keyboard shortcuts, playback steps, plus event hooks and custom actions. Every setting is optional and invalid values only produce warnings — never a crash.</p>
+    <div class="badges">
+      <span class="badge lime">v0.1.6</span>
+      <span class="badge">Lua 5.4 · nothing to install</span>
+      <span class="badge">Local file · never uploaded</span>
+      <span class="badge">Apply: Settings → Reload scripts</span>
+    </div>
+  </section>
+
+  <div class="card">
+    <h2 id="en-toc">Contents</h2>
+    <nav class="toc">
+      <a href="#en-quick"><span class="num">1</span>Quick start</a>
+      <a href="#en-files"><span class="num">2</span>File locations &amp; reloading</a>
+      <a href="#en-options"><span class="num">3</span>All options</a>
+      <a href="#en-values"><span class="num">4</span>Value formats: themes / colours / paths / pages</a>
+      <a href="#en-keyboard"><span class="num">5</span>Keyboard shortcuts</a>
+      <a href="#en-actions"><span class="num">6</span>Custom actions &amp; bindings</a>
+      <a href="#en-full"><span class="num">7</span>Complete example</a>
+      <a href="#en-templates"><span class="num">8</span>Shipped &amp; localized templates</a>
+      <a href="#en-trouble"><span class="num">9</span>Troubleshooting</a>
+      <a href="#en-links"><span class="num">10</span>Related files</a>
+    </nav>
+  </div>
+
+  <div class="card" id="en-quick">
+    <h2>1. Quick start</h2>
+    <p>On first run, when the file does not exist, EchoPort writes a <strong>fully commented template</strong> (it never overwrites an existing file). Apply edits with <strong>Settings → Reload scripts</strong>.</p>
+    <div class="code"><button class="copy" data-label="Copy" data-copied="Copied">Copy</button><pre><code>-- ~/.config/echoport/config.lua  (Linux)
+-- %APPDATA%\echoport\config.lua   (Windows)
+echoport.config = {
+  language = "en",          -- UI language / 界面语言
+  theme = "ink",            -- theme / 主题
+  ui_scale = 1.25,          -- whole-UI zoom
+  startup_page = "search",  -- startup page
+  volume = 0.6,             -- initial volume
+  keyboard = {
+    ["Space"] = "play_pause",
+    ["Ctrl+ArrowRight"] = "next",
+  },
+}</code></pre></div>
+    <div class="note"><strong>Tip:</strong> only write the keys you want to change; everything else stays commented out and keeps the profile default. The config file runs locally with your user permissions: it is <strong>trusted local code</strong>, not a sandbox.</div>
+  </div>
+
+  <div class="card" id="en-files">
+    <h2>2. File locations &amp; reloading</h2>
+    <table>
+      <thead><tr><th>Platform</th><th>Config file</th><th>Plugin folder</th></tr></thead>
+      <tbody>
+        <tr><td>Linux</td><td><code>~/.config/echoport/config.lua</code></td><td><code>~/.config/echoport/plugins/</code></td></tr>
+        <tr><td>macOS</td><td><code>~/Library/Application Support/echoport/config.lua</code></td><td><code>…/echoport/plugins/</code></td></tr>
+        <tr><td>Windows</td><td><code>%APPDATA%\echoport\config.lua</code></td><td><code>%APPDATA%\echoport\plugins\</code></td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li><strong>First run:</strong> directories and the template are created automatically; an existing <code>config.lua</code> is never overwritten.</li>
+      <li><strong>After editing:</strong> Settings → Reload scripts (or restart). Reloading rebuilds the entire Lua state and re-executes all plugins.</li>
+      <li><strong>Failed reload:</strong> a syntax error, for example, keeps the previous working configuration and plugins, and surfaces a warning in Settings.</li>
+      <li><strong>Reset:</strong> deleting <code>config.lua</code> recreates the template on the next start (plugins are untouched).</li>
+      <li><strong>Warning cap:</strong> Settings shows at most 100 script warnings.</li>
+    </ul>
+  </div>
+
+  <div class="card" id="en-options">
+    <h2>3. All options</h2>
+    <p>Every key lives inside the <code>echoport.config = { ... }</code> table and is optional. Wrong types or out-of-range values produce a warning and are clamped / ignored.</p>
+    <table>
+      <thead><tr><th>Key</th><th>Type</th><th>Default</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><code>language</code></td><td>string</td><td>system language</td><td><code>"en"</code> / <code>"zh"</code></td></tr>
+        <tr><td><code>startup_page</code></td><td>string</td><td><code>home</code></td><td><code>home</code>, <code>search</code>, <code>library</code>, <code>playlists</code>, <code>downloads</code>, <code>now_playing</code>, <code>artist</code>, <code>profile</code>, <code>settings</code></td></tr>
+        <tr><td><code>ui_scale</code></td><td>number</td><td><code>1.0</code></td><td>UI zoom, 0.8–2.0; Settings presets 100% / 110% / 125% / 150%</td></tr>
+        <tr><td><code>volume</code></td><td>number</td><td><code>0.72</code></td><td>initial volume 0–1, clamped</td></tr>
+        <tr><td><code>theme</code></td><td>string</td><td><code>pulse</code></td><td><code>pulse</code> / <code>tide</code> / <code>ink</code>; legacy aliases in section 4</td></tr>
+        <tr><td><code>follow_cover_accent</code></td><td>boolean</td><td><code>true</code></td><td>derive accents from the current cover art</td></tr>
+        <tr><td><code>accent</code></td><td>colour</td><td>theme colour</td><td>accent colour, e.g. <code>"#044BB5"</code></td></tr>
+        <tr><td><code>highlight</code></td><td>colour</td><td>theme colour</td><td>fluorescent highlight, e.g. <code>"#BBFF5C"</code></td></tr>
+        <tr><td><code>macaron</code></td><td>table</td><td>built-in five</td><td>exactly five colour strings</td></tr>
+        <tr><td><code>seek_step</code></td><td>number</td><td><code>5.0</code></td><td>seek step in seconds, 1–120</td></tr>
+        <tr><td><code>volume_step</code></td><td>number</td><td><code>0.05</code></td><td>volume button step, 0.01–0.5</td></tr>
+        <tr><td><code>results_per_platform</code></td><td>integer</td><td><code>12</code></td><td>search results per platform, 2–50</td></tr>
+        <tr><td><code>download_format</code></td><td>string</td><td><code>mp3</code></td><td><code>mp3</code> / <code>m4a</code> / <code>opus</code> / <code>flac</code></td></tr>
+        <tr><td><code>download_dir</code></td><td>path</td><td><code>~/Music/EchoPort</code></td><td>download folder, supports <code>~</code> and <code>$VAR</code></td></tr>
+        <tr><td><code>music_dirs</code></td><td>table of paths</td><td><code>{ "~/Music" }</code></td><td>local library scan folders, at least 1</td></tr>
+        <tr><td><code>cache_limit_mb</code></td><td>integer</td><td><code>1024</code></td><td>audio cache cap in MiB, 0–10240; 0 = keep no played tracks; Settings presets 0 / 512 / 1024 / 2048</td></tr>
+        <tr><td><code>keyboard</code></td><td>table</td><td>built-in shortcuts</td><td><code>[chord] = action</code>; values may also be functions (section 5)</td></tr>
+      </tbody>
+    </table>
+    <div class="note"><strong>Note:</strong> <code>ui_scale</code> and <code>cache_limit_mb</code> are configurable from Lua since v0.1.6; changing them in Settings writes the value back to your profile. Unknown keys (except the free-form namespaces <code>plugins</code>, <code>custom</code>, <code>hooks</code>) produce an <code>unknown setting</code> warning.</div>
+  </div>
+
+  <div class="card" id="en-values">
+    <h2>4. Value formats</h2>
+    <h3>Themes</h3>
+    <table>
+      <thead><tr><th>Value</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>pulse</code></td><td>default: porcelain white + vivid blue + fluorescent lime highlight</td></tr>
+        <tr><td><code>tide</code></td><td>light aqua + teal + deep navy</td></tr>
+        <tr><td><code>ink</code></td><td>low-saturation dark slate</td></tr>
+        <tr><td>legacy</td><td><code>blue_white</code> / <code>album</code> / <code>porcelain</code> → <code>pulse</code>; <code>midnight</code> → <code>ink</code></td></tr>
+      </tbody>
+    </table>
+    <h3>Colours</h3>
+    <p>Accepts <code>"#RGB"</code>, <code>"#RRGGBB"</code>, <code>"#RRGGBBAA"</code> (the <code>#</code> may be omitted and <code>0x</code> is accepted). <code>macaron</code> must contain exactly five colours, otherwise the whole value is ignored with a warning.</p>
+    <h3>Paths</h3>
+    <p>A leading <code>~/</code> (or <code>~\</code>) expands to your home directory; <code>$VAR</code> / <code>${VAR}</code> expand environment variables (unknown variables are left untouched). Example: <code>"~/Music/EchoPort"</code>.</p>
+    <h3>Pages</h3>
+    <p><code>home</code> · <code>search</code> · <code>library</code> · <code>playlists</code> · <code>downloads</code> · <code>now_playing</code> · <code>artist</code> · <code>profile</code> · <code>settings</code> (spelling variants such as <code>now-playing</code> and <code>nowplaying</code> are accepted).</p>
+  </div>
+
+  <div class="card" id="en-keyboard">
+    <h2>5. Keyboard shortcuts</h2>
+    <p>Syntax: <code>["chord"] = "action"</code>. Modifiers are case-insensitive: <span class="kbd">Ctrl</span> <span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">Cmd</span> (Cmd == Ctrl on Windows/Linux).</p>
+    <div class="code"><button class="copy" data-label="Copy" data-copied="Copied">Copy</button><pre><code>echoport.config = {
+  keyboard = {
+    ["Space"] = "play_pause",
+    ["Ctrl+ArrowRight"] = "next",
+    ["Ctrl+ArrowLeft"] = "previous",
+    ["Ctrl+Shift+F"] = "toggle_favorite",
+    ["Ctrl+Alt+J"] = "action:hello",         -- custom action
+    ["Ctrl+Alt+M"] = function()               -- function value is allowed too
+      echoport.notify("keyboard function fired / 键盘函数回调")
+    end,
+  },
+}</code></pre></div>
+    <h3>Built-in actions</h3>
+    <table>
+      <thead><tr><th>Action</th><th>Effect</th><th>Action</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr><td><code>play_pause</code></td><td>play / pause</td><td><code>next</code></td><td>next track</td></tr>
+        <tr><td><code>previous</code></td><td>previous track</td><td><code>seek_forward</code></td><td>seek forward</td></tr>
+        <tr><td><code>seek_backward</code></td><td>seek backward</td><td><code>volume_up</code></td><td>volume +</td></tr>
+        <tr><td><code>volume_down</code></td><td>volume −</td><td><code>toggle_queue</code></td><td>toggle queue panel</td></tr>
+        <tr><td><code>toggle_favorite</code></td><td>favourite current track</td><td><code>toggle_shuffle</code></td><td>shuffle</td></tr>
+        <tr><td><code>cycle_repeat</code></td><td>cycle repeat mode</td><td><code>open_search</code></td><td>open search</td></tr>
+        <tr><td><code>open_settings</code></td><td>open Settings</td><td><code>open_home</code></td><td>open Home</td></tr>
+      </tbody>
+    </table>
+    <h3>Key names</h3>
+    <p><code>Space</code>, <code>A</code>–<code>Z</code>, <code>0</code>–<code>9</code>, <code>F1</code>–<code>F35</code>, <code>ArrowLeft/Right/Up/Down</code> (or <code>Left</code>…), <code>Esc</code>/<code>Escape</code>, <code>Enter</code>, <code>Tab</code>, <code>Backspace</code>, <code>Delete</code>, <code>Insert</code>, <code>Home</code>, <code>End</code>, <code>PageUp</code>/<code>PgUp</code>, <code>PageDown</code>/<code>PgDn</code>, <code>Comma</code>, <code>Period</code>, <code>Slash</code>, <code>Backslash</code>, <code>Minus</code>, <code>Plus</code>, <code>Equals</code>, <code>Backtick</code>, and more.</p>
+    <div class="note"><strong>Precedence:</strong> shortcuts are suppressed while a text field has keyboard focus so typing never triggers playback. Duplicate chords keep the last registration and log a warning. Custom actions are referenced as <code>"action:&lt;id&gt;"</code>.</div>
+  </div>
+
+  <div class="card" id="en-actions">
+    <h2>6. Custom actions &amp; bindings</h2>
+    <p>Actions appear in the Settings script-action list and can be referenced from <code>keyboard</code> or <code>echoport.bind</code>.</p>
+    <div class="code"><button class="copy" data-label="Copy" data-copied="Copied">Copy</button><pre><code>-- register an action / 注册一个动作
+echoport.actions.add({
+  id = "focus_mode",                  -- required, unique / 必填、唯一
+  title = "Focus mode",               -- required / 必填
+  description = "volume 30% + pause", -- optional / 可选
+  keys = "Ctrl+Alt+F",                -- optional string or list of strings
+  run = function()
+    echoport.set_volume(0.3)
+    echoport.command("play_pause")
+    echoport.notify("focus mode on / 专注模式已开启")
+  end,
+})
+
+-- bind keys / 绑定快捷键
+echoport.bind("Ctrl+Alt+N", "next")
+echoport.bind("Ctrl+Alt+D", function()
+  echoport.notify("custom binding / 自定义绑定")
+end)</code></pre></div>
+    <p>A config file can also stay code-free and only use the option table; see <a href="plugins.html">docs/plugins.html</a> for event hooks and the full Lua API.</p>
+  </div>
+
+  <div class="card" id="en-full">
+    <h2>7. Complete example</h2>
+    <p>Copy-paste this to replace the whole <code>config.lua</code> (every value is valid):</p>
+    <div class="code"><button class="copy" data-label="Copy" data-copied="Copied">Copy</button><pre><code>echoport.config = {
+  language = "en",
+  startup_page = "home",
+  ui_scale = 1.1,
+  volume = 0.72,
+
+  theme = "pulse",
+  follow_cover_accent = true,
+  accent = "#044BB5",
+  highlight = "#BBFF5C",
+  macaron = { "#BBCFF5", "#C3E9EA", "#F9E7A6", "#D9CCF2", "#FAD3B8" },
+
+  seek_step = 5.0,
+  volume_step = 0.05,
+  results_per_platform = 12,
+  download_format = "mp3",
+  download_dir = "~/Music/EchoPort",
+  music_dirs = { "~/Music" },
+  cache_limit_mb = 1024,
+
+  keyboard = {
+    ["Space"] = "play_pause",
+    ["Ctrl+ArrowRight"] = "next",
+    ["Ctrl+ArrowLeft"] = "previous",
+    ["Ctrl+Alt+Q"] = "toggle_queue",
+  },
+}
+
+-- Optional: event hooks (see docs/plugins.html)
+echoport.on("track_start", function(track)
+  if track ~= nil then
+    echoport.log("playing: " .. track.title)
+  end
+end)</code></pre></div>
+  </div>
+
+  <div class="card" id="en-templates">
+    <h2>8. Shipped &amp; localized templates</h2>
+    <p>The repository ships two fully commented templates with exactly the same option keys; copy either one over your config file:</p>
+    <table>
+      <thead><tr><th>File</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><a href="../examples/config.zh-CN.lua"><code>examples/config.zh-CN.lua</code></a></td><td>full Chinese-commented edition / 全中文注释的完整版本</td></tr>
+        <tr><td><a href="../examples/config.en.lua"><code>examples/config.en.lua</code></a></td><td>full English-commented edition (recommended for English users)</td></tr>
+        <tr><td><a href="../examples/config.lua"><code>examples/config.lua</code></a></td><td>the bilingual template written on first run (same as the built-in default)</td></tr>
+      </tbody>
+    </table>
+    <p>The file generated on first run is the content of <code>examples/config.lua</code>; the localized editions are for users who prefer comments in a single language.</p>
+  </div>
+
+  <div class="card" id="en-trouble">
+    <h2>9. Troubleshooting</h2>
+    <table>
+      <thead><tr><th>Symptom</th><th>Fix</th></tr></thead>
+      <tbody>
+        <tr><td>Changes do not apply</td><td>Settings → Reload scripts; double-check the file is at the right path and saved.</td></tr>
+        <tr><td><code>syntax error</code> in Settings</td><td>Check Lua syntax (commas, brackets, <code>end</code>, quotes). EchoPort keeps the previous working configuration.</td></tr>
+        <tr><td><code>unknown setting "x"</code></td><td>Typo in the key name; section 3 is the complete list.</td></tr>
+        <tr><td>Theme / colour ignored</td><td>Colours must be quoted <code>#RRGGBB</code>; <code>macaron</code> must contain exactly five.</td></tr>
+        <tr><td>Shortcut does nothing</td><td>Shortcuts are suppressed while typing in a text field; check the action spelling; duplicate chords keep the last one.</td></tr>
+        <tr><td>Start over</td><td>Delete <code>config.lua</code>, then restart / reload — the template is recreated.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card" id="en-links">
+    <h2>10. Related files</h2>
+    <ul>
+      <li><a href="plugins.html">docs/plugins.html</a> — plugin development manual (events, actions, API, Rust extension point)</li>
+      <li><a href="SCRIPTING.md">docs/SCRIPTING.md</a> — Markdown config / Lua API reference</li>
+      <li><a href="PLUGINS.md">docs/PLUGINS.md</a> — Markdown plugin development guide</li>
+      <li><a href="../examples/config.zh-CN.lua">examples/config.zh-CN.lua</a> · <a href="../examples/config.en.lua">examples/config.en.lua</a> · <a href="../examples/plugins/example.lua">examples/plugins/example.lua</a></li>
+    </ul>
+  </div>
+</div>
+</div>
+
+<footer>
+  <span class="lang-zh">EchoPort · <a href="plugins.html">插件手册</a> · <a href="SCRIPTING.md">SCRIPTING.md</a> · <a href="PLUGINS.md">PLUGINS.md</a> · <a href="../examples/config.zh-CN.lua">配置模板</a></span>
+  <span class="lang-en">EchoPort · <a href="plugins.html">plugin manual</a> · <a href="SCRIPTING.md">SCRIPTING.md</a> · <a href="PLUGINS.md">PLUGINS.md</a> · <a href="../examples/config.en.lua">config template</a></span>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+  var STORAGE_KEY = "echoport-docs-lang";
+
+  function readStored() {
+    try { return window.localStorage.getItem(STORAGE_KEY); } catch (error) { return null; }
+  }
+  function store(lang) {
+    try { window.localStorage.setItem(STORAGE_KEY, lang); } catch (error) { /* file:// or private mode */ }
+  }
+  function apply(lang) {
+    var value = lang === "en" ? "en" : "zh";
+    var root = document.documentElement;
+    root.setAttribute("data-lang", value);
+    root.setAttribute("lang", value === "en" ? "en" : "zh-CN");
+    var buttons = document.querySelectorAll(".lang-btn");
+    for (var i = 0; i < buttons.length; i += 1) {
+      var active = buttons[i].getAttribute("data-lang") === value;
+      buttons[i].classList.toggle("is-active", active);
+      buttons[i].setAttribute("aria-pressed", active ? "true" : "false");
+    }
+  }
+  function initialLang() {
+    try {
+      var params = new URLSearchParams(window.location.search);
+      if (params.get("lang") === "en" || params.get("lang") === "zh") { return params.get("lang"); }
+    } catch (error) { /* very old browsers */ }
+    return readStored() || "zh";
+  }
+
+  apply(initialLang());
+
+  var buttons = document.querySelectorAll(".lang-btn");
+  for (var i = 0; i < buttons.length; i += 1) {
+    buttons[i].addEventListener("click", function (event) {
+      var lang = event.currentTarget.getAttribute("data-lang");
+      apply(lang);
+      store(lang);
+    });
+  }
+
+  // Copy-to-clipboard buttons inside code blocks (optional, never fatal).
+  var copyButtons = document.querySelectorAll(".copy");
+  for (var j = 0; j < copyButtons.length; j += 1) {
+    copyButtons[j].addEventListener("click", function (event) {
+      var button = event.currentTarget;
+      var block = button.parentNode ? button.parentNode.querySelector("pre code") : null;
+      if (!block) { return; }
+      var text = block.textContent;
+      var label = button.getAttribute("data-label") || "Copy";
+      var copied = button.getAttribute("data-copied") || "Copied";
+      var reset = function () {
+        button.textContent = copied;
+        window.setTimeout(function () { button.textContent = label; }, 1400);
+      };
+      var fallback = function () {
+        try {
+          var area = document.createElement("textarea");
+          area.value = text;
+          area.setAttribute("readonly", "");
+          area.style.position = "fixed";
+          area.style.opacity = "0";
+          document.body.appendChild(area);
+          area.select();
+          document.execCommand("copy");
+          document.body.removeChild(area);
+          reset();
+        } catch (error) {
+          button.textContent = copied;
+          window.setTimeout(function () { button.textContent = label; }, 1400);
+        }
+      };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(reset, fallback);
+        } else {
+          fallback();
+        }
+      } catch (error) {
+        fallback();
+      }
+    });
+  }
+})();
+</script>
+</body>
+</html>
