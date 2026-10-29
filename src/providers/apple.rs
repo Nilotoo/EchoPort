@@ -7,7 +7,7 @@
 
 use serde::Deserialize;
 
-use crate::model::{Artist as ModelArtist, Platform, Track};
+use crate::model::{Album as ModelAlbum, Artist as ModelArtist, Platform, Track};
 use crate::net::Http;
 
 use super::util;
@@ -63,6 +63,8 @@ struct ITunesItem {
     release_date: Option<String>,
     #[serde(default, rename = "trackTimeMillis")]
     track_time_millis: Option<f64>,
+    #[serde(default, rename = "trackCount")]
+    track_count: Option<u32>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -285,6 +287,147 @@ pub fn search_artists(http: &Http, query: &str, limit: usize) -> Result<Vec<Mode
         .get_json(&url, &[])
         .map_err(|err| format!("Apple Music artist search failed: {err}"))?;
     Ok(build_artists(&response.results, limit))
+}
+
+// ---------------------------------------------------------------------------
+// Albums (search / detail / artist discography)
+// ---------------------------------------------------------------------------
+
+fn build_album(item: &ITunesItem) -> Option<ModelAlbum> {
+    let id = item.collection_id?;
+    let title = item.collection_name.as_deref().and_then(util::clean)?;
+    let artist = util::clean(item.artist_name.as_deref().unwrap_or_default()).unwrap_or_default();
+    let mut album = ModelAlbum::new(Platform::AppleMusic, &id.to_string(), title, artist);
+    if let Some(art) = item
+        .artwork_url100
+        .as_deref()
+        .or(item.artwork_url60.as_deref())
+        .and_then(upgrade_artwork)
+    {
+        album = album.with_art(art);
+    }
+    if let Some(year) = item.release_date.as_deref().and_then(util::year_from_iso) {
+        album = album.with_year(year);
+    }
+    if let Some(count) = item.track_count {
+        album = album.with_track_count(count);
+    }
+    if let Some(page) = item
+        .collection_view_url
+        .as_deref()
+        .and_then(util::https_url)
+    {
+        album = album.with_page(page);
+    }
+    Some(album)
+}
+
+/// Search albums through the public iTunes Search API (`entity=album`).
+pub fn search_albums(http: &Http, query: &str, limit: usize) -> Result<Vec<ModelAlbum>, String> {
+    let limit = limit.clamp(1, 50);
+    let url = format!(
+        "{SEARCH_URL}?term={}&entity=album&limit={limit}&country={DEFAULT_STOREFRONT}",
+        util::pct(query.trim())
+    );
+    let response: ITunesResponse = http
+        .get_json(&url, &[])
+        .map_err(|err| format!("Apple Music album search failed: {err}"))?;
+    let mut albums = Vec::new();
+    let mut seen = Vec::new();
+    for item in &response.results {
+        let Some(id) = item.collection_id else {
+            continue;
+        };
+        if seen.contains(&id) {
+            continue;
+        }
+        if let Some(album) = build_album(item) {
+            seen.push(id);
+            albums.push(album);
+            if albums.len() >= limit {
+                break;
+            }
+        }
+    }
+    Ok(albums)
+}
+
+/// Fetch the songs of an Apple Music album, preserving the album order.
+pub fn album_tracks(http: &Http, album: &ModelAlbum) -> Result<Vec<Track>, String> {
+    let id = album
+        .source_id
+        .trim()
+        .parse::<u64>()
+        .map_err(|_| "This Apple Music album has an invalid source id.".to_owned())?;
+    let url = format!("{LOOKUP_URL}?id={id}&entity=song&limit=200&country={DEFAULT_STOREFRONT}");
+    let response: ITunesResponse = http
+        .get_json(&url, &[])
+        .map_err(|err| format!("Apple Music album lookup failed: {err}"))?;
+    let mut tracks = Vec::new();
+    for item in &response.results {
+        if !item.is_song() {
+            continue;
+        }
+        if item.collection_id.is_some() && item.collection_id != Some(id) {
+            continue;
+        }
+        if let Some(mut track) = build_track(item) {
+            if track.album.is_none() {
+                track.album = Some(album.title.clone());
+            }
+            if track.art_url.is_none() {
+                track.art_url = album.art_url.clone();
+            }
+            tracks.push(track);
+        }
+    }
+    if tracks.is_empty() {
+        return Err(
+            "This Apple Music album has no playable songs in the selected store.".to_owned(),
+        );
+    }
+    Ok(tracks)
+}
+
+/// Other albums by the same Apple Music artist (album series / discography).
+pub fn artist_albums(
+    http: &Http,
+    artist_name: &str,
+    limit: usize,
+) -> Result<Vec<ModelAlbum>, String> {
+    let limit = limit.clamp(1, 30);
+    // The artist lookup requires an artist id, which album search results do
+    // not carry; a focused album search by artist name is the keyless route.
+    let mut albums = search_albums(http, artist_name, limit.saturating_mul(2))?;
+    albums.retain(|album| {
+        album
+            .artist
+            .to_lowercase()
+            .contains(&artist_name.to_lowercase())
+            || artist_name
+                .to_lowercase()
+                .contains(&album.artist.to_lowercase())
+    });
+    albums.truncate(limit);
+    Ok(albums)
+}
+
+/// Best-effort portrait for an iTunes artist: the artwork of their first
+/// album (iTunes artist search itself does not return portraits). Called from
+/// a background prefetch worker, never on the UI thread.
+pub fn artist_portrait(http: &Http, artist: &ModelArtist) -> Option<String> {
+    let id = artist.source_id.trim().parse::<u64>().ok()?;
+    let url = format!("{LOOKUP_URL}?id={id}&entity=album&limit=1&country={DEFAULT_STOREFRONT}");
+    let response: ITunesResponse = http.get_json(&url, &[]).ok()?;
+    response
+        .results
+        .iter()
+        .find_map(|item| {
+            item.artwork_url100
+                .clone()
+                .or_else(|| item.artwork_url60.clone())
+        })
+        .and_then(|url| util::https_url(&url))
 }
 
 /// Hot songs for an iTunes artist (lookup by artistId + `entity=song`).

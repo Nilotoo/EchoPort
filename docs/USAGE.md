@@ -32,11 +32,11 @@ EchoPort（回声港）是一个本地优先的多音源桌面音乐播放器：
   桌面项 + hicolor 32/48/128/256 图标；发布包解包后也可运行 `./install-arch.sh`。
 * 仓库 URL 仍为占位假设（等待确认远端/认证），因此真实网络更新检查尚未验证。
 
-### 1.2 安装方式（v0.2.3）
+### 1.2 安装方式（v0.3.0）
 
-* **Arch pacman 包**：发布资产 `echoport-0.2.3-1-x86_64.pkg.tar.zst`；
-  `sudo pacman -U echoport-0.2.3-1-x86_64.pkg.tar.zst`（AUR-ready PKGBUILD 在 `packaging/arch/`）。
-* **Windows MSI（per-user）**：`echoport-0.2.3-windows-x86_64.msi`，双击安装（无需管理员），
+* **Arch pacman 包**：发布资产 `echoport-0.3.0-1-x86_64.pkg.tar.zst`；
+  `sudo pacman -U echoport-0.3.0-1-x86_64.pkg.tar.zst`（AUR-ready PKGBUILD 在 `packaging/arch/`）。
+* **Windows setup.exe 安装器（推荐，NSIS）**：`echoport-0.3.0-windows-x86_64-setup.exe`，双击安装（无需管理员），
   开始菜单快捷方式 + 标准卸载；开始菜单中的 **「Uninstall EchoPort (clean app data)」** 会额外删除
   设置/资料/缓存并保留 `%USERPROFILE%\Music\EchoPort` 中已下载音乐。未签名 → SmartScreen 提示。绿色版 zip 仍可用。
 * **macOS**：仓库 CI 的 `macos-latest` job 构建 universal `.app`（`EchoPort.app.zip`）；
@@ -101,14 +101,10 @@ EchoPort（回声港）是一个本地优先的多音源桌面音乐播放器：
   （查不到就留空，不塞无关内容），以及相关采访/解读视频与延伸阅读链接；均为可点击的公开链接。
 * 队列面板可查看、删除、清空队列；「下一首播放」可插队。
 
-### 5.1 迷你播放器与后台性能模式（v0.1.7）
+### 5.1 后台性能模式（v0.1.7）
 
-* 点击侧边栏顶部的 **EchoPort logo** 可打开/关闭 **迷你播放器**：420×142、始终置顶的浮动窗口，
-  含封面（点击恢复主窗口）、标题/歌手、进度条与时间、上一首/播放暂停/下一首、打开主窗口、关闭。
-  播放不会中断；主窗口可以被最小化或遮挡。
 * **后台性能模式**：主窗口失焦或最小化时 UI 重绘节奏自动降速（播放中 66 ms → 1000 ms、
   有后台任务 90 ms → 1000 ms、布局 50 ms → 关闭），动画冻结但音频继续；回前台自动恢复。
-* QA：`ECHOPORT_MINI=1` 启动即打开迷你窗口；`scripts/qa-mini-player.sh` 可在 X11 下截图/自检。
 
 ### 6. 歌单（跨平台混排）
 
@@ -329,15 +325,11 @@ one quiet interface. **No account, and nothing is uploaded.**
 * The queue panel lets you inspect, remove and clear upcoming tracks; **Play
   next** inserts a track.
 
-### 5.1 Mini player & background performance mode (v0.1.7)
+### 5.1 Background performance mode (v0.1.7)
 
-* Click the **EchoPort logo** at the top of the sidebar to toggle the **mini player** — a 420×142
-  always-on-top window with cover (click = restore main), title/artist, progress + times,
-  previous/play-pause/next, open-main and close. Playback continues while the main window is hidden.
 * **Background performance mode**: when the main window is unfocused/minimized the UI repaint cadence
   is throttled automatically (playing 66 ms → 1000 ms, busy 90 ms → 1000 ms, layout 50 ms → off);
   animations freeze but audio keeps playing; foreground cadence returns when focused again.
-* QA: `ECHOPORT_MINI=1` auto-opens it; `scripts/qa-mini-player.sh` captures the window on X11.
 
 ### 6. Playlists (mixed platforms)
 

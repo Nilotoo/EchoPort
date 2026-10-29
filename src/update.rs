@@ -31,7 +31,12 @@ pub struct UpdateInfo {
 /// NSIS setup; Linux/macOS use the archives produced by the release workflow.
 pub fn asset_for_current_platform(info: &UpdateInfo) -> Option<&UpdateAsset> {
     #[cfg(target_os = "windows")]
-    let preferred: &[&str] = &["setup.exe", "windows-x86_64.msi", "windows-x86_64.zip"];
+    let preferred: &[&str] = &[
+        "inno-setup.exe",
+        "setup.exe",
+        "windows-x86_64.msi",
+        "windows-x86_64.zip",
+    ];
     #[cfg(target_os = "linux")]
     let preferred: &[&str] = &["linux-x86_64.tar.gz"];
     #[cfg(target_os = "macos")]

@@ -31,6 +31,10 @@ pub fn draw(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec
         }
         stats_section(ui, app, theme);
         ui.add_space(16.0);
+        playlists_section(ui, app, theme);
+        ui.add_space(16.0);
+        favorite_albums_section(ui, app, theme, pending);
+        ui.add_space(16.0);
         history_card(ui, app, theme, pending);
         ui.add_space(16.0);
         privacy_card(ui, app, theme, pending);
@@ -489,6 +493,92 @@ fn stats_section(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme) {
         });
         ui.add_space(gap);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Playlists (with cover images)
+// ---------------------------------------------------------------------------
+
+fn playlists_section(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme) {
+    let playlists = app.state.profile.playlists.clone();
+    if playlists.is_empty() {
+        return;
+    }
+    ui.horizontal(|ui| {
+        ui.label(
+            RichText::new(app.state.tr(Key::YourPlaylists))
+                .size(14.0)
+                .strong()
+                .color(theme.text),
+        );
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            ui.label(
+                RichText::new(format!("{}", playlists.len()))
+                    .size(10.5)
+                    .color(theme.text_weak),
+            );
+        });
+    });
+    ui.add_space(8.0);
+    style::card(theme).show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
+        for playlist in playlists.iter().take(4) {
+            let subtitle = if playlist.description.trim().is_empty() {
+                format!("{} {}", playlist.len(), app.state.tr(Key::TracksCount))
+            } else {
+                playlist.description.clone()
+            };
+            let selected = app.state.selected_playlist.as_deref() == Some(&playlist.id);
+            let response =
+                widgets::playlist_home_row(ui, app, theme, playlist, &subtitle, selected)
+                    .on_hover_cursor(egui::CursorIcon::PointingHand);
+            if response.clicked() {
+                app.state.selected_playlist = Some(playlist.id.clone());
+                app.ui.selected_playlist = Some(playlist.id.clone());
+                app.state.page = Page::Playlists;
+            }
+        }
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Favorite albums
+// ---------------------------------------------------------------------------
+
+fn favorite_albums_section(
+    ui: &mut Ui,
+    app: &mut EchoPortApp,
+    theme: &Theme,
+    pending: &mut Vec<Command>,
+) {
+    let albums = app.state.profile.favorite_albums.clone();
+    ui.horizontal(|ui| {
+        ui.label(
+            RichText::new(app.state.tr(Key::FavoriteAlbums))
+                .size(14.0)
+                .strong()
+                .color(theme.text),
+        );
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            ui.label(
+                RichText::new(format!("{}", albums.len()))
+                    .size(10.5)
+                    .color(theme.text_weak),
+            );
+        });
+    });
+    ui.add_space(8.0);
+    if albums.is_empty() {
+        style::hint_line(ui, theme, app.state.tr(Key::NoFavoriteAlbums));
+        return;
+    }
+    let width = ((ui.available_width() - 20.0) / 2.0).clamp(220.0, 360.0);
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 10.0;
+        for album in &albums {
+            widgets::album_card(ui, app, theme, pending, album, width);
+        }
+    });
 }
 
 // ---------------------------------------------------------------------------

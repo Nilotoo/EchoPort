@@ -497,13 +497,21 @@ fn downloads(
                 }
             });
             ui.add_space(12.0);
-            ui.label(
-                RichText::new(app.state.tr(Key::DownloadFolder))
-                    .size(11.0)
-                    .color(theme.text_weak),
-            );
-            ui.add_space(6.0);
+            // One centered row: label, path and buttons all share the same
+            // vertical centre (the path used to look a few pixels too high).
             ui.horizontal(|ui| {
+                ui.allocate_ui_with_layout(
+                    Vec2::new(86.0, 30.0),
+                    Layout::left_to_right(Align::Center),
+                    |ui| {
+                        ui.label(
+                            RichText::new(app.state.tr(Key::DownloadFolder))
+                                .size(11.0)
+                                .color(theme.text_weak),
+                        );
+                    },
+                );
+                ui.add_space(6.0);
                 let dir = app
                     .state
                     .profile
@@ -511,14 +519,19 @@ fn downloads(
                     .download_dir
                     .to_string_lossy()
                     .into_owned();
-                ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
-                    let label = egui::Label::new(RichText::new(dir).size(11.0).color(theme.text))
-                        .truncate();
-                    ui.add_sized(
-                        Vec2::new((ui.available_width() - 200.0).max(80.0), 30.0),
-                        label,
-                    );
-                });
+                let path_width = (ui.available_width() - 190.0).max(100.0);
+                let hover_path = dir.clone();
+                ui.allocate_ui_with_layout(
+                    Vec2::new(path_width, 30.0),
+                    Layout::left_to_right(Align::Center),
+                    |ui| {
+                        ui.add(
+                            egui::Label::new(RichText::new(dir).size(11.0).color(theme.text))
+                                .truncate(),
+                        )
+                        .on_hover_text(hover_path);
+                    },
+                );
                 if style::button_sized(
                     ui,
                     theme,

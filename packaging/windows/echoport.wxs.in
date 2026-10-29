@@ -14,6 +14,7 @@
 
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="LocalAppDataFolder">
+        <Directory Id="ProgramsDir" Name="Programs">
         <Directory Id="EchoPortDir" Name="EchoPort">
           <Component Id="MainExecutable" Guid="@GUID_EXE@">
             <File Id="EchoPortExe" Name="echoport.exe" Source="@STAGE@/echoport.exe" KeyPath="yes">
@@ -41,6 +42,7 @@
             <File Id="ConfigEn" Name="config.en.lua" Source="@STAGE@/examples/config.en.lua"/>
             <File Id="PluginExample" Name="example.lua" Source="@STAGE@/examples/example.lua"/>
           </Component>
+        </Directory>
         </Directory>
       </Directory>
       <Directory Id="ProgramMenuFolder">

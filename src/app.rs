@@ -77,13 +77,18 @@ pub struct EchoPortApp {
     applied_scale: f32,
     /// Cache file of the track that is currently loaded (for "no cache" mode).
     current_cache_path: Option<PathBuf>,
-    /// Always-on-top mini player window open.
-    pub mini_player: bool,
     /// Short startup animation / update prompt state.
     pub startup_started: std::time::Instant,
     pub splash_done: bool,
     fake_update_sent: bool,
     quitting: bool,
+    /// Low-res cover files fetched for the current search results.
+    search_cover_paths: Vec<PathBuf>,
+    search_generation: u64,
+    last_page: Page,
+    /// Track ids whose low-res page covers were already queued.
+    prefetched_covers: std::collections::HashSet<String>,
+    cover_prefetch_page: Option<Page>,
 }
 
 impl EchoPortApp {
@@ -224,17 +229,77 @@ impl EchoPortApp {
             shot,
             applied_scale: 1.0,
             current_cache_path: None,
-            mini_player: std::env::var("ECHOPORT_MINI").is_ok(),
             startup_started: std::time::Instant::now(),
             splash_done: skip_splash,
             fake_update_sent: false,
             quitting: false,
+            search_cover_paths: Vec::new(),
+            search_generation: 0,
+            last_page: Page::Home,
+            prefetched_covers: std::collections::HashSet::new(),
+            cover_prefetch_page: None,
         };
 
+        app.merge_local_files_into_library();
         if std::env::var("ECHOPORT_PROFILE_EDIT").is_ok() {
             app.ui.profile_editing = true;
             app.ui.profile_bio = app.state.profile.bio.clone();
             app.ui.profile_bio_for = Some(app.state.profile.name.clone());
+        }
+        // QA hook: start a live search without UI automation.
+        if let Ok(query) = std::env::var("ECHOPORT_SEARCH_QUERY") {
+            if !app.demo && !query.trim().is_empty() {
+                app.state.page = Page::Search;
+                app.start_search(query, Platform::REMOTE.to_vec());
+            }
+        }
+        if let Ok(paths) = std::env::var("ECHOPORT_QA_DROP") {
+            if !app.demo {
+                let files: Vec<egui::DroppedFile> = paths
+                    .split(';')
+                    .filter(|path| !path.trim().is_empty())
+                    .map(|path| egui::DroppedFile {
+                        name: String::new(),
+                        mime: String::new(),
+                        last_modified: None,
+                        bytes: None,
+                        path: Some(std::path::PathBuf::from(path.trim())),
+                    })
+                    .collect();
+                if !files.is_empty() {
+                    app.handle_dropped_files(files);
+                }
+            }
+        }
+        if let Ok(query) = std::env::var("ECHOPORT_QA_ALBUM") {
+            if !app.demo && !query.trim().is_empty() {
+                let http = app.http.clone();
+                let albums = providers::search_albums(
+                    &http,
+                    &query,
+                    &[Platform::AppleMusic, Platform::Netease],
+                    1,
+                );
+                if let Some(album) = albums.into_iter().flat_map(|group| group.albums).next() {
+                    app.open_album(album);
+                    app.state.search.tab = crate::state::SearchTab::Albums;
+                }
+            }
+        }
+        if let Ok(lang) = std::env::var("ECHOPORT_LANG") {
+            app.state
+                .set_language(if lang.trim().eq_ignore_ascii_case("zh") {
+                    crate::i18n::Language::Zh
+                } else {
+                    crate::i18n::Language::En
+                });
+        }
+        if let Ok(tab) = std::env::var("ECHOPORT_SEARCH_TAB") {
+            app.state.search.tab = match tab.trim().to_ascii_lowercase().as_str() {
+                "artists" | "artist" => crate::state::SearchTab::Artists,
+                "albums" | "album" => crate::state::SearchTab::Albums,
+                _ => crate::state::SearchTab::All,
+            };
         }
         if !app.demo {
             app.refresh_script_status();
@@ -472,6 +537,16 @@ impl EchoPortApp {
                     self.mark_dirty();
                 }
             }
+            Command::SetPlaylistDescription { id, description } => {
+                if let Some(playlist) = self.state.profile.playlist_mut(&id) {
+                    playlist.description = description.trim().to_owned();
+                    playlist.touch();
+                    self.mark_dirty();
+                }
+            }
+            Command::SetPlaylistCover { id, source } => {
+                self.apply_playlist_cover(&id, source);
+            }
             Command::DeletePlaylist(id) => {
                 if self.state.profile.delete_playlist(&id) {
                     if self.state.selected_playlist.as_deref() == Some(&id) {
@@ -585,10 +660,6 @@ impl EchoPortApp {
                 self.state.set_follow_cover_accent(follow);
                 self.mark_dirty();
             }
-            Command::ToggleMiniPlayer => {
-                self.mini_player = !self.mini_player;
-                self.ctx.request_repaint();
-            }
             Command::CheckForUpdates => {
                 self.state.updates.manual_check = true;
                 self.toast(ToastKind::Info, Key::CheckingForUpdates);
@@ -626,17 +697,23 @@ impl EchoPortApp {
                 self.toast(ToastKind::Info, Key::UpdatePageOpened);
                 self.ctx.request_repaint();
             }
-            Command::RestoreMainWindow => {
-                self.mini_player = false;
-                self.ctx.send_viewport_cmd_to(
-                    egui::ViewportId::ROOT,
-                    egui::ViewportCommand::Minimized(false),
-                );
-                self.ctx
-                    .send_viewport_cmd_to(egui::ViewportId::ROOT, egui::ViewportCommand::Focus);
-                self.ctx.request_repaint();
-            }
             Command::OpenArtist(artist) => self.open_artist(*artist),
+            Command::OpenAlbum(album) => self.open_album(*album),
+            Command::ToggleFavoriteAlbum(album) => {
+                let now_favorite = self.state.profile.toggle_favorite_album(&album);
+                self.toast(
+                    ToastKind::Success,
+                    if now_favorite {
+                        TextOrKey::Key(Key::AlbumFavorited)
+                    } else {
+                        TextOrKey::Key(Key::AlbumUnfavorited)
+                    },
+                );
+                self.mark_dirty();
+            }
+            Command::SaveDroppedToLibrary(tracks) => {
+                self.save_dropped_to_library(tracks);
+            }
             Command::BackToSearch => {
                 self.state.page = Page::Search;
             }
@@ -717,11 +794,25 @@ impl EchoPortApp {
 
     pub fn update_frame(&mut self, ctx: &Context) {
         self.frames += 1;
+        let dropped = ctx.input(|input| input.raw.dropped_files.clone());
+        if !dropped.is_empty() {
+            self.handle_dropped_files(dropped);
+        }
         // User adjustable UI zoom (HiDPI / big monitors).
         let scale = self.state.ui_scale.clamp(0.8, 2.0);
         if (scale - self.applied_scale).abs() > 0.001 {
             ctx.set_zoom_factor(scale);
             self.applied_scale = scale;
+        }
+        if self.state.search.results.is_none()
+            || (self.last_page == Page::Search && self.state.page != Page::Search)
+        {
+            self.clear_search_covers();
+        }
+        self.last_page = self.state.page;
+        if self.cover_prefetch_page != Some(self.state.page) {
+            self.cover_prefetch_page = Some(self.state.page);
+            self.prefetch_page_covers();
         }
         let (focused, minimized) = ctx.input(|input| {
             let viewport = input.viewport();
@@ -736,7 +827,6 @@ impl EchoPortApp {
             self.handle_shortcuts(ctx);
         }
         crate::ui::layout(ctx, self);
-        crate::ui::mini::show(ctx, self);
         self.handle_screenshot(ctx);
         if self.state.playback.state.is_playing() {
             let interval = if self.state.ui_backgrounded { 1000 } else { 66 };
@@ -746,6 +836,18 @@ impl EchoPortApp {
 
     fn tick(&mut self, ctx: &egui::Context) {
         let now = ctx.input(|i| i.time);
+        // QA hook: navigate away from a live search after N seconds so cover
+        // cache eviction can be exercised in a headless run.
+        if let Ok(after) = std::env::var("ECHOPORT_SEARCH_CLEAR_AFTER") {
+            if let (Ok(secs), Some(_)) = (after.parse::<f32>(), self.state.search.results.as_ref())
+            {
+                if self.state.page == Page::Search
+                    && self.startup_started.elapsed().as_secs_f32() > secs
+                {
+                    self.state.page = Page::Home;
+                }
+            }
+        }
         // QA/demo hook: show the startup update prompt without network access.
         if !self.fake_update_sent {
             if let Ok(fake) = std::env::var("ECHOPORT_FAKE_UPDATE") {
@@ -849,6 +951,30 @@ impl EchoPortApp {
     fn handle_shortcuts(&mut self, ctx: &egui::Context) {
         if ctx.input(|input| input.modifiers.ctrl && input.key_pressed(egui::Key::Q)) {
             self.dispatch(Command::Quit);
+            return;
+        }
+        if self.state.page == Page::Search
+            && self.ui.dialog.is_none()
+            && !self.state.search.input.trim().is_empty()
+            && ctx.input(|input| input.key_pressed(egui::Key::Enter))
+        {
+            let query = self.state.search.input.trim().to_owned();
+            if crate::ui::looks_like_url(&query) {
+                self.dispatch(Command::ImportLink(query));
+                return;
+            }
+            let platforms: Vec<Platform> = Platform::REMOTE
+                .into_iter()
+                .filter(|platform| self.state.search.platforms.contains(platform))
+                .collect();
+            self.start_search(
+                query,
+                if platforms.is_empty() {
+                    Platform::REMOTE.to_vec()
+                } else {
+                    platforms
+                },
+            );
             return;
         }
         if ctx.memory(|memory| memory.focused().is_some()) {
@@ -1004,6 +1130,9 @@ impl EchoPortApp {
                 }
                 self.state.search.query = results.query.clone();
                 self.state.search.results = Some(results);
+                self.prefetch_search_covers();
+                self.prefetch_artist_images();
+                self.prefetch_album_covers();
                 self.mark_dirty();
             }
             AppEvent::Resolved {
@@ -1105,7 +1234,64 @@ impl EchoPortApp {
                     self.state.artist_page.error = None;
                     let tracks = self.state.artist_page.hot_tracks.clone();
                     self.state.profile.remember_many(&tracks);
+                    self.prefetch_artist_images();
                     self.mark_dirty();
+                }
+            }
+            AppEvent::ArtistPortrait { artist_id, url } => {
+                if let Some(results) = self.state.search.results.as_mut() {
+                    for group in &mut results.artists {
+                        for artist in &mut group.artists {
+                            if artist.id == artist_id && artist.image_url.is_none() {
+                                artist.image_url = Some(url.clone());
+                            }
+                        }
+                    }
+                }
+                if let Some(artist) = self.state.artist_page.artist.as_mut() {
+                    if artist.id == artist_id && artist.image_url.is_none() {
+                        artist.image_url = Some(url);
+                    }
+                }
+                self.prefetch_artist_images();
+                ctx.request_repaint();
+            }
+            AppEvent::CoverPrefetched => {
+                ctx.request_repaint();
+            }
+            AppEvent::ArtistImageReady => {
+                ctx.request_repaint();
+            }
+            AppEvent::AlbumDetailReady(detail) => {
+                let same_album = self
+                    .state
+                    .album_page
+                    .album
+                    .as_ref()
+                    .zip(detail.album.as_ref())
+                    .map(|(page, incoming)| page.id == incoming.id)
+                    .unwrap_or(true);
+                if same_album {
+                    self.state.album_page.loading = false;
+                    self.state.album_page.album = detail.album;
+                    self.state.album_page.tracks = detail.tracks;
+                    self.state.album_page.bio = detail.bio;
+                    self.state.album_page.series = detail.series;
+                    self.state.album_page.error = None;
+                    let tracks = self.state.album_page.tracks.clone();
+                    self.state.profile.remember_many(&tracks);
+                    self.prefetch_page_covers();
+                    self.prefetch_album_covers();
+                    self.mark_dirty();
+                }
+            }
+            AppEvent::SearchCoverReady { generation, path } => {
+                if generation != self.search_generation {
+                    // A stale prefetch from an earlier search/query.
+                    let _ = std::fs::remove_file(path);
+                } else if !self.search_cover_paths.contains(&path) {
+                    self.search_cover_paths.push(path);
+                    ctx.request_repaint();
                 }
             }
             AppEvent::CoverReady {
@@ -1199,6 +1385,7 @@ impl EchoPortApp {
                 self.state.library.scanning = false;
                 self.state.library.scanned_once = true;
                 self.state.library.tracks = tracks;
+                self.merge_local_files_into_library();
                 let count = self.state.library.tracks.len();
                 let text = format!("{} {}", count, self.state.tr(Key::TracksCount));
                 self.toast(ToastKind::Info, TextOrKey::Text(text));
@@ -1541,6 +1728,8 @@ impl EchoPortApp {
         if query.is_empty() {
             return;
         }
+        self.clear_search_covers();
+        let search_started = std::time::Instant::now();
         self.state.search.query = query.clone();
         self.state.search.input = query.clone();
         self.state.search.loading = true;
@@ -1551,26 +1740,75 @@ impl EchoPortApp {
         let config = self.resolve_config.clone();
         let tx = self.tx.clone();
         let limit = self.state.profile.settings.results_per_platform;
+        let http_platforms: Vec<Platform> = platforms
+            .iter()
+            .copied()
+            .filter(|platform| matches!(platform, Platform::AppleMusic | Platform::Netease))
+            .collect();
         std::thread::spawn(move || {
-            // Track search and producer/artist search are independent network
-            // round-trips; run them in parallel so results appear in ~2.5 s
-            // instead of ~5 s (user-visible latency).
-            let (results, artists) = std::thread::scope(|scope| {
+            // Track search and the HTTP artist catalogues run side by side.
+            // Creator cards for yt-dlp platforms are derived from the track
+            // results, avoiding a duplicated yt-dlp search per platform.
+            let (results, mut artists, albums) = std::thread::scope(|scope| {
                 let tracks_handle =
                     scope.spawn(|| providers::search(&http, &config, &query, &platforms, limit));
-                let artists_handle = scope
-                    .spawn(|| providers::search_artists(&http, &config, &query, &platforms, limit));
+                let artists_handle = scope.spawn(|| {
+                    providers::search_artists(&http, &config, &query, &http_platforms, limit)
+                });
+                let albums_handle =
+                    scope.spawn(|| providers::search_albums(&http, &query, &platforms, limit));
                 (
                     tracks_handle.join().unwrap_or_default(),
                     artists_handle.join().unwrap_or_default(),
+                    albums_handle.join().unwrap_or_default(),
                 )
             });
+            artists.extend(providers::artists_from_tracks(&query, &results, limit));
+            log::info!(
+                "search {:?} completed in {:?}: {} groups, {} artist groups",
+                query,
+                search_started.elapsed(),
+                results.len(),
+                artists.len()
+            );
             let _ = tx.send(AppEvent::SearchDone(SearchResults {
                 query,
                 results,
                 artists,
+                albums,
             }));
         });
+    }
+
+    fn apply_playlist_cover(&mut self, id: &str, source: Option<std::path::PathBuf>) {
+        let Some(playlist) = self.state.profile.playlist_mut(id) else {
+            return;
+        };
+        let old = playlist.cover_path.clone();
+        let target = source.and_then(|source| {
+            let extension = source
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .unwrap_or("png")
+                .to_ascii_lowercase();
+            let directory = self.paths.data_dir.join("playlist-covers");
+            std::fs::create_dir_all(&directory).ok()?;
+            let target = directory.join(format!("{id}.{extension}"));
+            std::fs::copy(&source, &target).ok()?;
+            Some(target)
+        });
+        if let Some(playlist) = self.state.profile.playlist_mut(id) {
+            playlist.cover_path = target.clone();
+            playlist.touch();
+        }
+        if let Some(old) = old {
+            if target.as_deref() != Some(old.as_path())
+                && old.starts_with(self.paths.data_dir.join("playlist-covers"))
+            {
+                let _ = std::fs::remove_file(old);
+            }
+        }
+        self.mark_dirty();
     }
 
     fn spawn_tool_detection(&self) {
@@ -1600,6 +1838,272 @@ impl EchoPortApp {
         std::thread::spawn(move || {
             let tracks = library::scan_dirs(&dirs);
             let _ = tx.send(AppEvent::LibraryScanned(tracks));
+        });
+    }
+
+    fn clear_search_covers(&mut self) {
+        if self.search_cover_paths.is_empty() {
+            return;
+        }
+        self.search_generation = self.search_generation.wrapping_add(1);
+        let paths = std::mem::take(&mut self.search_cover_paths);
+        log::info!("clearing {} search cover cache files", paths.len());
+        for path in &paths {
+            let _ = std::fs::remove_file(path);
+        }
+        self.ui.covers.forget_paths(&paths);
+        self.ctx.request_repaint();
+    }
+
+    fn merge_local_files_into_library(&mut self) {
+        for path in self.state.profile.local_files.clone() {
+            if !path.is_file() {
+                continue;
+            }
+            let track = Track::from_local_path(path);
+            if !self
+                .state
+                .library
+                .tracks
+                .iter()
+                .any(|kept| kept.id == track.id)
+            {
+                self.state.profile.remember(&track);
+                self.state.library.tracks.push(track);
+            }
+        }
+    }
+
+    fn save_dropped_to_library(&mut self, tracks: Vec<Track>) {
+        let mut added = 0usize;
+        for track in &tracks {
+            let Some(path) = track.local_path.clone() else {
+                continue;
+            };
+            if !self
+                .state
+                .profile
+                .local_files
+                .iter()
+                .any(|kept| kept == &path)
+            {
+                self.state.profile.local_files.push(path);
+                added += 1;
+            }
+            self.state.profile.remember(track);
+            if !self
+                .state
+                .library
+                .tracks
+                .iter()
+                .any(|kept| kept.id == track.id)
+            {
+                self.state.library.tracks.push(track.clone());
+            }
+        }
+        self.state.drop_prompt = None;
+        self.toast(
+            ToastKind::Success,
+            TextOrKey::Text(format!("{added} local file(s) saved to Library")),
+        );
+        self.mark_dirty();
+    }
+
+    fn handle_dropped_files(&mut self, files: Vec<egui::DroppedFile>) {
+        let mut tracks: Vec<Track> = Vec::new();
+        for file in files {
+            let Some(path) = file.path else { continue };
+            if !is_audio_path(&path) {
+                continue;
+            }
+            let track = Track::from_local_path(path);
+            if !tracks.iter().any(|existing| existing.id == track.id) {
+                tracks.push(track);
+            }
+        }
+        if tracks.is_empty() {
+            self.toast(ToastKind::Error, Key::DropAudioOnly);
+            return;
+        }
+        self.dispatch(Command::PlayTracks(tracks.clone()));
+        self.state.drop_prompt = Some(tracks);
+        self.ctx.request_repaint();
+    }
+
+    fn prefetch_page_covers(&mut self) {
+        let mut tracks: Vec<Track> = Vec::new();
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut push = |track: &Track| {
+            if track.art_url.is_some() && seen.insert(track.id.clone()) {
+                tracks.push(track.clone());
+            }
+        };
+        match self.state.page {
+            Page::Home | Page::Profile => {
+                for entry in self.state.profile.history.iter().rev().take(30) {
+                    if let Some(track) = self.state.profile.track(&entry.track_id) {
+                        push(track);
+                    }
+                }
+                for id in self.state.profile.favorites.iter().take(20) {
+                    if let Some(track) = self.state.profile.track(id) {
+                        push(track);
+                    }
+                }
+                for playlist in self.state.profile.playlists.iter().take(10) {
+                    for track in self.state.profile.playlist_tracks(&playlist.id) {
+                        push(&track);
+                        break;
+                    }
+                }
+            }
+            Page::Playlists => {
+                for playlist in self.state.profile.playlists.iter().take(10) {
+                    for track in self.state.profile.playlist_tracks(&playlist.id) {
+                        push(&track);
+                        break;
+                    }
+                }
+            }
+            Page::Album => {
+                for track in self.state.album_page.tracks.iter().take(60) {
+                    push(track);
+                }
+            }
+            _ => {}
+        }
+        if self.state.page == Page::Profile {
+            self.prefetch_album_covers();
+        }
+        let mut queue = Vec::new();
+        for track in tracks {
+            if self.prefetched_covers.insert(track.id.clone()) {
+                queue.push(track);
+            }
+        }
+        if queue.is_empty() {
+            return;
+        }
+        let art = self.art.clone();
+        let http = self.http.clone();
+        let tx = self.tx.clone();
+        std::thread::spawn(move || {
+            for track in queue {
+                if art.resolve_thumb(&http, &track).is_some() {
+                    let _ = tx.send(AppEvent::CoverPrefetched);
+                }
+            }
+        });
+    }
+
+    fn prefetch_album_covers(&mut self) {
+        let mut albums: Vec<crate::model::Album> = Vec::new();
+        if let Some(results) = self.state.search.results.as_ref() {
+            for group in &results.albums {
+                albums.extend(group.albums.iter().cloned());
+            }
+        }
+        albums.extend(self.state.profile.favorite_albums.iter().cloned());
+        if let Some(album) = self.state.album_page.album.clone() {
+            albums.push(album);
+        }
+        albums.extend(self.state.album_page.series.iter().cloned());
+        albums.sort_by(|a, b| a.id.cmp(&b.id));
+        albums.dedup_by(|a, b| a.id == b.id);
+        let art = self.art.clone();
+        let http = self.http.clone();
+        let tx = self.tx.clone();
+        std::thread::spawn(move || {
+            for album in albums {
+                let Some(url) = album.art_url.as_deref() else {
+                    continue;
+                };
+                if art.resolve_url(&http, url).is_some() {
+                    let _ = tx.send(AppEvent::CoverPrefetched);
+                }
+            }
+        });
+    }
+
+    fn prefetch_artist_images(&mut self) {
+        let mut urls: Vec<String> = Vec::new();
+        let mut missing: Vec<crate::model::Artist> = Vec::new();
+        if let Some(results) = self.state.search.results.as_ref() {
+            for group in &results.artists {
+                for artist in &group.artists {
+                    if let Some(url) = artist.image_url.as_deref() {
+                        let url = url.trim();
+                        if !url.is_empty() && !urls.iter().any(|kept| kept == url) {
+                            urls.push(url.to_owned());
+                        }
+                    } else if artist.platform == Platform::AppleMusic {
+                        missing.push(artist.clone());
+                    }
+                }
+            }
+        }
+        if let Some(url) = self
+            .state
+            .artist_page
+            .artist
+            .as_ref()
+            .and_then(|artist| artist.image_url.as_deref())
+        {
+            let url = url.trim();
+            if !url.is_empty() && !urls.iter().any(|kept| kept == url) {
+                urls.push(url.to_owned());
+            }
+        }
+        if urls.is_empty() && missing.is_empty() {
+            return;
+        }
+        let art = self.art.clone();
+        let http = self.http.clone();
+        let tx = self.tx.clone();
+        std::thread::spawn(move || {
+            for artist in missing {
+                if let Some(url) = providers::artist_portrait(&http, &artist) {
+                    let _ = tx.send(AppEvent::ArtistPortrait {
+                        artist_id: artist.id,
+                        url,
+                    });
+                }
+            }
+            for url in urls {
+                if art.resolve_url(&http, &url).is_some() {
+                    let _ = tx.send(AppEvent::ArtistImageReady);
+                }
+            }
+        });
+    }
+
+    fn prefetch_search_covers(&mut self) {
+        let Some(results) = self.state.search.results.as_ref() else {
+            return;
+        };
+        let mut seen = std::collections::HashSet::new();
+        let mut tracks: Vec<Track> = Vec::new();
+        for group in &results.results {
+            for track in group.tracks.iter().take(12) {
+                if track.art_url.is_some() && seen.insert(track.id.clone()) {
+                    tracks.push(track.clone());
+                }
+            }
+        }
+        tracks.truncate(30);
+        if tracks.is_empty() {
+            return;
+        }
+        let art = self.art.clone();
+        let http = self.http.clone();
+        let tx = self.tx.clone();
+        let generation = self.search_generation;
+        std::thread::spawn(move || {
+            for track in tracks {
+                if let Some(path) = art.resolve_thumb(&http, &track) {
+                    let _ = tx.send(AppEvent::SearchCoverReady { generation, path });
+                }
+            }
         });
     }
 
@@ -1883,6 +2387,8 @@ Start-Sleep -Milliseconds 400
 try { Wait-Process -Id $AppPid -Timeout 90 -ErrorAction SilentlyContinue } catch {}
 if ($Installer.ToLower().EndsWith('.msi')) {
     Start-Process -FilePath 'msiexec.exe' -ArgumentList '/i', ('"' + $Installer + '"'), '/qn' -Wait
+} elseif ($Installer.ToLower().Contains('inno-setup')) {
+    Start-Process -FilePath $Installer -ArgumentList ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="' + $InstallDir + '"') -Wait
 } else {
     Start-Process -FilePath $Installer -ArgumentList ('/S /D="' + $InstallDir + '"') -Wait
 }
@@ -2025,6 +2531,25 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
                 .unwrap_or(false)
     }
 
+    fn open_album(&mut self, album: crate::model::Album) {
+        self.state.album_page = crate::state::AlbumPageView {
+            album: Some(album.clone()),
+            tracks: Vec::new(),
+            bio: None,
+            series: Vec::new(),
+            loading: true,
+            error: None,
+        };
+        self.state.page = Page::Album;
+        self.ctx.request_repaint();
+        let http = self.http.clone();
+        let tx = self.tx.clone();
+        std::thread::spawn(move || {
+            let detail = providers::album_detail(&http, &album);
+            let _ = tx.send(AppEvent::AlbumDetailReady(Box::new(detail)));
+        });
+    }
+
     fn open_artist(&mut self, artist: crate::model::Artist) {
         // Local history for this artist (case-insensitive name match).
         let needle = artist.name.to_lowercase();
@@ -2078,11 +2603,17 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
         let tx = self.tx.clone();
         std::thread::spawn(move || {
             let results = providers::search(&http, &config, &query, &[platform], limit);
-            let artists = providers::search_artists(&http, &config, &query, &[platform], 6);
+            let artists = if matches!(platform, Platform::AppleMusic | Platform::Netease) {
+                providers::search_artists(&http, &config, &query, &[platform], 6)
+            } else {
+                providers::artists_from_tracks(&query, &results, 6)
+            };
+            let albums = providers::search_albums(&http, &query, &[platform], 6);
             let _ = tx.send(AppEvent::SearchMoreDone(SearchResults {
                 query,
                 results,
                 artists,
+                albums,
             }));
         });
     }
@@ -2630,6 +3161,7 @@ fn seed_demo(state: &mut AppState, paths: &AppPaths) {
         platforms: Platform::REMOTE.into_iter().collect(),
         loading: false,
         loading_more: None,
+        tab: crate::state::SearchTab::All,
         results: Some(SearchResults {
             query: "Aurora Lune".to_owned(),
             results,
@@ -2643,6 +3175,7 @@ fn seed_demo(state: &mut AppState, paths: &AppPaths) {
                 .with_page("https://www.youtube.com/results?search_query=Aurora+Lune")],
                 error: None,
             }],
+            albums: Vec::new(),
         }),
         error: None,
     };
@@ -2877,4 +3410,27 @@ fn encode_avatar_data_url(path: &std::path::Path) -> Result<String, String> {
 fn is_safe_web_url(url: &str) -> bool {
     (url.starts_with("https://") || url.starts_with("http://"))
         && !url.chars().any(|c| c.is_whitespace() || c.is_control())
+}
+
+fn is_audio_path(path: &std::path::Path) -> bool {
+    let extension = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    matches!(
+        extension.as_str(),
+        "mp3"
+            | "m4a"
+            | "aac"
+            | "flac"
+            | "wav"
+            | "ogg"
+            | "opus"
+            | "wma"
+            | "alac"
+            | "aiff"
+            | "aif"
+            | "ape"
+    )
 }

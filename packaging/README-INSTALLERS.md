@@ -9,7 +9,9 @@ Windows/macOS artifacts are cross-built/CI-only in this round).
 | Linux (portable) | `echoport-<ver>-linux-x86_64.tar.gz` | `scripts/package-linux.sh` | binary + desktop + icons + docs/examples; extract & run |
 | Arch Linux | `echoport-<ver>-1-x86_64.pkg.tar.zst` | `scripts/package-arch.sh` | pacman package; AUR recipe at `packaging/arch/PKGBUILD` |
 | Windows | `echoport-<ver>-windows-x86_64.zip` | `scripts/package-windows-cross.sh` (CI: native `windows-latest`) | portable zip |
-| Windows | `echoport-<ver>-windows-x86_64.msi` | `scripts/package-msi.sh` (msitools/wixl on Linux; CI Ubuntu job) | **per-user** install (`%LOCALAPPDATA%\EchoPort`), Start Menu shortcut, uninstall support; unsigned |
+| Windows | `echoport-<ver>-windows-x86_64-setup.exe` | `scripts/package-nsis.sh` (CI Ubuntu) | **per-user** install (`%LOCALAPPDATA%\Programs\EchoPort`), directory choice, desktop option, Start Menu, uninstaller; unsigned |
+| Windows MSI | `...msi` | `package-msi.sh` | Silent per-user deployment |
+| Windows Inno (prepared) | `...-inno-setup.exe` | `scripts/package-inno.sh` (local/Wine) | Not yet in CI; future preferred installer |
 | macOS (CI-only) | `EchoPort.app.zip` | `scripts/package-macos.sh` (CI `macos-latest`) | universal aarch64+x86_64 `.app` with icon; ad-hoc unsigned, not notarized |
 
 Every artifact gets a sibling `.sha256` file. The GitHub release workflow

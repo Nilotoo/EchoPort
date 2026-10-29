@@ -408,7 +408,7 @@ fn playlists(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme) {
         let count = playlist.len();
         let subtitle = format!("{} {}", count, app.state.tr(Key::TracksCount));
         let selected = app.ui.selected_playlist.as_deref() == Some(playlist.id.as_str());
-        let response = widgets::playlist_home_row(ui, theme, playlist, &subtitle, selected)
+        let response = widgets::playlist_home_row(ui, app, theme, playlist, &subtitle, selected)
             .on_hover_cursor(egui::CursorIcon::PointingHand)
             .on_hover_text(app.state.tr(Key::DoubleClickOpen));
         if response.clicked() {

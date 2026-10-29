@@ -12,11 +12,11 @@
 
 mod covers;
 mod icons;
-pub mod mini;
 mod pages;
 pub mod splash;
 mod style;
 mod widgets;
+pub(crate) use widgets::looks_like_url;
 
 use std::collections::HashSet;
 use std::time::Duration;
@@ -43,11 +43,28 @@ use style::Icon;
 /// A modal dialog currently being edited. Owned by the UI only.
 #[derive(Clone, Debug)]
 pub enum Dialog {
-    NewPlaylist { seed: Vec<Track>, name: String },
-    RenamePlaylist { id: String, name: String },
-    DeletePlaylist { id: String, name: String },
-    NewProfile { name: String },
-    DeleteProfile { name: String },
+    NewPlaylist {
+        seed: Vec<Track>,
+        name: String,
+    },
+    RenamePlaylist {
+        id: String,
+        name: String,
+        description: String,
+        existing_cover: Option<std::path::PathBuf>,
+        new_cover: Option<std::path::PathBuf>,
+        clear_cover: bool,
+    },
+    DeletePlaylist {
+        id: String,
+        name: String,
+    },
+    NewProfile {
+        name: String,
+    },
+    DeleteProfile {
+        name: String,
+    },
 }
 
 pub struct UiState {
@@ -209,6 +226,7 @@ pub fn layout(ctx: &egui::Context, app: &mut EchoPortApp) {
     }
 
     toasts(ctx, app, &theme, player_height);
+    drop_prompt(ctx, app, &theme, player_height, &mut pending);
     dialogs(ctx, app, &theme, &mut pending);
     handle_escape(ctx, app);
     splash::draw(ctx, app, &mut pending);
@@ -227,10 +245,7 @@ fn sidebar(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec<
     let short = screen_h < 620.0;
     ui.spacing_mut().item_spacing = Vec2::new(4.0, if short { 1.0 } else { 3.0 });
     ui.add_space(if short { 6.0 } else { 16.0 });
-    let brand_response = brand(ui, theme, (screen_h / 800.0).clamp(0.95, 1.35));
-    if brand_response.clicked() {
-        pending.push(Command::ToggleMiniPlayer);
-    }
+    let _ = brand(ui, theme, (screen_h / 800.0).clamp(0.95, 1.35));
     ui.add_space(if short { 8.0 } else { 24.0 });
 
     let active_downloads = app.state.downloads.active().count();
@@ -529,7 +544,7 @@ fn player_bar(
     let playing = app.state.playback.state.is_playing();
     let loading = app.state.playback.state == PlaybackState::Loading;
 
-    // Subtle divider between the mini-player and the transport column.
+    // Subtle divider between the navigation and the transport column.
     let line_top = panel.top() + (height * 0.18).clamp(10.0, 22.0);
     let line_bottom = panel.bottom() - (height * 0.18).clamp(10.0, 22.0);
     ui.painter().vline(
@@ -978,6 +993,92 @@ fn queue_panel(
 // Toasts
 // ---------------------------------------------------------------------------
 
+/// Non-modal prompt shown after audio files are dropped: playback has already
+/// started, so the user can decide whether to keep the files in the Library.
+fn drop_prompt(
+    ctx: &egui::Context,
+    app: &mut EchoPortApp,
+    theme: &Theme,
+    player_height: f32,
+    pending: &mut Vec<Command>,
+) {
+    let Some(tracks) = app.state.drop_prompt.clone() else {
+        return;
+    };
+    let mut save = false;
+    let mut dismiss = false;
+    egui::Area::new(Id::new("drop-prompt"))
+        .order(Order::Foreground)
+        .anchor(
+            Align2::RIGHT_BOTTOM,
+            Vec2::new(-18.0, -(player_height + 74.0)),
+        )
+        .interactable(true)
+        .show(ctx, |ui| {
+            Frame::new()
+                .fill(theme.surface)
+                .stroke(Stroke::new(1.0_f32, theme.border))
+                .corner_radius(CornerRadius::same(style::R_MD))
+                .inner_margin(Margin::symmetric(14, 12))
+                .shadow(style::shadow(theme))
+                .show(ui, |ui| {
+                    ui.set_width(330.0);
+                    ui.label(
+                        RichText::new(app.state.tr(Key::DroppedAudioPrompt))
+                            .size(11.5)
+                            .color(theme.text),
+                    );
+                    ui.add_space(3.0);
+                    let name = tracks
+                        .first()
+                        .map(|track| {
+                            track
+                                .local_path
+                                .as_ref()
+                                .and_then(|path| path.file_name())
+                                .map(|name| name.to_string_lossy().into_owned())
+                                .unwrap_or_else(|| track.title.clone())
+                        })
+                        .unwrap_or_default();
+                    let extra = tracks.len().saturating_sub(1);
+                    let detail = if extra == 0 {
+                        name
+                    } else {
+                        format!("{name} +{extra}")
+                    };
+                    ui.label(RichText::new(detail).size(10.0).color(theme.text_weak));
+                    ui.add_space(9.0);
+                    ui.horizontal(|ui| {
+                        if style::button(
+                            ui,
+                            theme,
+                            app.state.tr(Key::SaveToLibrary),
+                            style::Variant::Primary,
+                        )
+                        .clicked()
+                        {
+                            save = true;
+                        }
+                        if style::button(
+                            ui,
+                            theme,
+                            app.state.tr(Key::DontSave),
+                            style::Variant::Ghost,
+                        )
+                        .clicked()
+                        {
+                            dismiss = true;
+                        }
+                    });
+                });
+        });
+    if save {
+        pending.push(Command::SaveDroppedToLibrary(tracks));
+    } else if dismiss {
+        app.state.drop_prompt = None;
+    }
+}
+
 fn toasts(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, player_height: f32) {
     if app.state.toasts.is_empty() {
         return;
@@ -1087,7 +1188,7 @@ fn dialogs(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, pending: &
                     false,
                 ),
                 Dialog::RenamePlaylist { .. } => (
-                    app.state.tr(Key::RenamePlaylist),
+                    app.state.tr(Key::EditPlaylist),
                     "",
                     app.state.tr(Key::Save),
                     false,
@@ -1119,9 +1220,7 @@ fn dialogs(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, pending: &
             }
             let mut submitted = false;
             match &mut dialog {
-                Dialog::NewPlaylist { name, .. }
-                | Dialog::RenamePlaylist { name, .. }
-                | Dialog::NewProfile { name } => {
+                Dialog::NewPlaylist { name, .. } | Dialog::NewProfile { name } => {
                     let response = dialog_text_input(
                         ui,
                         theme,
@@ -1133,6 +1232,84 @@ fn dialogs(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, pending: &
                         && ui.input(|input| input.key_pressed(egui::Key::Enter))
                     {
                         submitted = true;
+                    }
+                }
+                Dialog::RenamePlaylist {
+                    name,
+                    description,
+                    existing_cover,
+                    new_cover,
+                    clear_cover,
+                    ..
+                } => {
+                    let response = dialog_text_input(
+                        ui,
+                        theme,
+                        "dialog-name",
+                        name,
+                        app.state.tr(Key::PlaylistName),
+                    );
+                    if response.lost_focus()
+                        && ui.input(|input| input.key_pressed(egui::Key::Enter))
+                    {
+                        submitted = true;
+                    }
+                    ui.add_space(10.0);
+                    ui.label(
+                        RichText::new(app.state.tr(Key::PlaylistDescription))
+                            .size(11.0)
+                            .color(theme.text_weak),
+                    );
+                    ui.add_space(4.0);
+                    ui.add(
+                        egui::TextEdit::multiline(description)
+                            .font(style::font(12.0))
+                            .text_color(theme.text)
+                            .desired_rows(2)
+                            .desired_width(ui.available_width()),
+                    );
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        if style::button(
+                            ui,
+                            theme,
+                            app.state.tr(Key::ChooseCover),
+                            style::Variant::Secondary,
+                        )
+                        .clicked()
+                        {
+                            if let Some(path) = rfd::FileDialog::new()
+                                .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])
+                                .pick_file()
+                            {
+                                *new_cover = Some(path);
+                                *clear_cover = false;
+                            }
+                        }
+                        if existing_cover.is_some() || new_cover.is_some() {
+                            if style::button(
+                                ui,
+                                theme,
+                                app.state.tr(Key::RemoveCover),
+                                style::Variant::Ghost,
+                            )
+                            .clicked()
+                            {
+                                *new_cover = None;
+                                *clear_cover = true;
+                            }
+                        }
+                    });
+                    if let Some(path) = new_cover.as_ref() {
+                        ui.add_space(2.0);
+                        style::hint_line(
+                            ui,
+                            theme,
+                            &path
+                                .file_name()
+                                .map(|name| name.to_string_lossy().into_owned())
+                                .unwrap_or_default(),
+                        );
                     }
                 }
                 Dialog::DeletePlaylist { .. } | Dialog::DeleteProfile { .. } => {}
@@ -1176,12 +1353,34 @@ fn dialogs(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, pending: &
                             });
                             keep = false;
                         }
-                        Dialog::RenamePlaylist { id, name } => {
+                        Dialog::RenamePlaylist {
+                            id,
+                            name,
+                            description,
+                            new_cover,
+                            clear_cover,
+                            ..
+                        } => {
                             if !name.trim().is_empty() {
                                 pending.push(Command::RenamePlaylist {
                                     id: id.clone(),
                                     name: name.trim().to_owned(),
                                 });
+                                pending.push(Command::SetPlaylistDescription {
+                                    id: id.clone(),
+                                    description: description.clone(),
+                                });
+                                if *clear_cover {
+                                    pending.push(Command::SetPlaylistCover {
+                                        id: id.clone(),
+                                        source: None,
+                                    });
+                                } else if let Some(path) = new_cover.clone() {
+                                    pending.push(Command::SetPlaylistCover {
+                                        id: id.clone(),
+                                        source: Some(path),
+                                    });
+                                }
                             }
                             keep = false;
                         }

@@ -94,6 +94,20 @@ impl CoverCache {
         texture
     }
 
+    /// Drop textures whose underlying cache files were deleted (e.g. search
+    /// covers after leaving the search page).
+    pub fn forget_paths(&mut self, paths: &[std::path::PathBuf]) {
+        for path in paths {
+            let key = path.to_string_lossy().into_owned();
+            let blur = blur_key(path);
+            self.textures.remove(&key);
+            self.textures.remove(&blur);
+            self.last_used.remove(&key);
+            self.last_used.remove(&blur);
+            self.misses.remove(&key);
+        }
+    }
+
     fn evict_oldest(&mut self) {
         let Some((oldest, _)) = self
             .last_used

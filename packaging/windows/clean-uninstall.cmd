@@ -25,13 +25,16 @@ rmdir /s /q "%LOCALAPPDATA%\echoport" >nul 2>&1
 echo Uninstalling EchoPort...
 set "PRODUCTCODE="
 for /f "usebackq tokens=*" %%K in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$k=(Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like 'EchoPort*' } | Select-Object -First 1).PSChildName; if($k){$k}"`) do set "PRODUCTCODE=%%K"
-if defined PRODUCTCODE (
+if exist "%APPDIR%unins000.exe" (
+    echo Running Inno Setup uninstaller...
+    start "" /wait "%APPDIR%unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+) else if defined PRODUCTCODE (
     msiexec /x "%PRODUCTCODE%" /qn
 ) else if exist "%APPDIR%Uninstall.exe" (
     echo Running NSIS uninstaller...
     start "" /wait "%APPDIR%Uninstall.exe" /S
 ) else (
-    echo No MSI/NSIS uninstall entry found; removing per-user install folder...
+    echo No Inno/MSI/NSIS uninstall entry found; removing per-user install folder...
     rmdir /s /q "%LOCALAPPDATA%\EchoPort" >nul 2>&1
     rmdir /s /q "%LOCALAPPDATA%\Programs\EchoPort" >nul 2>&1
 )

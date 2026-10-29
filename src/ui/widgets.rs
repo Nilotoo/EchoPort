@@ -33,7 +33,11 @@ pub fn cover_for(app: &EchoPortApp, track: &Track) -> Option<PathBuf> {
     if is_current && app.state.cover.track_id.as_deref() == Some(track.id.as_str()) {
         app.state.cover.path.clone()
     } else {
-        app.art.cached(track)
+        // Lists/cards use the low-res rendition when it is cached; the
+        // NowPlaying view keeps the full-resolution cover.
+        app.art
+            .cached_thumb(track)
+            .or_else(|| app.art.cached(track))
     }
 }
 
@@ -346,8 +350,7 @@ pub fn artist_avatar_path(app: &EchoPortApp, artist: &Artist) -> Option<PathBuf>
     if url.is_empty() {
         return None;
     }
-    let path = app.art.path_for_url(url);
-    path.is_file().then_some(path)
+    app.art.cached_url(url)
 }
 
 /// Circular artist avatar: cached image when available, otherwise a calm
@@ -397,6 +400,134 @@ pub fn paint_artist_avatar(
             style::font((size * 0.40).max(10.0)),
             theme::readable_on(theme.text, theme.accent_soft, 4.0),
         );
+    }
+}
+
+/// Cached cover path for an album (no network IO).
+pub fn album_cover_path(app: &EchoPortApp, album: &crate::model::Album) -> Option<PathBuf> {
+    album
+        .art_url
+        .as_deref()
+        .and_then(|url| app.art.cached_url(url))
+}
+
+/// Album card used in search results, the album page series and favorites.
+pub fn album_card(
+    ui: &mut Ui,
+    app: &mut EchoPortApp,
+    theme: &Theme,
+    pending: &mut Vec<Command>,
+    album: &crate::model::Album,
+    width: f32,
+) {
+    let width = width.max(180.0);
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(width, 82.0), Sense::click());
+    let hover =
+        ui.ctx()
+            .animate_bool_with_time(response.id.with("hover"), response.hovered(), 0.12);
+    ui.painter().rect_filled(
+        rect,
+        CornerRadius::same(style::R_MD),
+        theme::mix(theme.surface, theme.surface_hover, hover),
+    );
+    ui.painter().rect_stroke(
+        rect,
+        CornerRadius::same(style::R_MD),
+        Stroke::new(
+            1.0_f32,
+            theme::mix(theme.border, theme.accent, 0.22 * hover),
+        ),
+        StrokeKind::Inside,
+    );
+    let cover = Rect::from_min_size(
+        Pos2::new(rect.left() + 10.0, rect.center().y - 27.0),
+        Vec2::splat(54.0),
+    );
+    if let Some(path) = album_cover_path(app, album) {
+        app.ui.covers.paint(
+            ui,
+            theme,
+            Some(&path),
+            cover,
+            style::R_SM,
+            &album.title,
+            &album.id,
+        );
+    } else {
+        let (a, b) = style::generated_cover_colors(theme, &album.id);
+        style::gradient_cover(
+            ui.painter(),
+            cover,
+            style::R_SM,
+            a,
+            b,
+            Some(&album.title.chars().next().unwrap_or('♫').to_string()),
+        );
+    }
+    let text_left = cover.right() + 10.0;
+    let text_right = rect.right() - 42.0;
+    style::paint_elided(
+        ui.painter(),
+        Pos2::new(text_left, rect.center().y - 17.0),
+        &album.title,
+        style::font(12.5),
+        theme.text,
+        (text_right - text_left).max(20.0),
+    );
+    style::paint_elided(
+        ui.painter(),
+        Pos2::new(text_left, rect.center().y - 1.0),
+        &album.artist,
+        style::font(10.5),
+        theme.text_weak,
+        (text_right - text_left).max(20.0),
+    );
+    let meta = match (album.year, album.track_count) {
+        (Some(year), Some(count)) => format!("{year} · {count}"),
+        (Some(year), None) => format!("{year}"),
+        (None, Some(count)) => format!("{count}"),
+        _ => album.platform.label().to_owned(),
+    };
+    style::paint_elided(
+        ui.painter(),
+        Pos2::new(text_left, rect.center().y + 15.0),
+        &meta,
+        style::font(9.5),
+        style::weak_text(theme),
+        (text_right - text_left).max(20.0),
+    );
+    let favorite = app.state.profile.is_favorite_album(&album.id);
+    let heart = Rect::from_center_size(
+        Pos2::new(rect.right() - 22.0, rect.center().y),
+        Vec2::splat(28.0),
+    );
+    if style::icon_button_at(
+        ui,
+        heart,
+        ("album-favorite", album.id.clone(), favorite),
+        theme,
+        if favorite {
+            Icon::HeartFill
+        } else {
+            Icon::Heart
+        },
+        favorite,
+        app.state.tr(if favorite {
+            Key::FavoriteAlbums
+        } else {
+            Key::AlbumFavorited
+        }),
+    )
+    .clicked()
+    {
+        pending.push(Command::ToggleFavoriteAlbum(Box::new(album.clone())));
+    }
+    if response
+        .on_hover_cursor(CursorIcon::PointingHand)
+        .on_hover_text(app.state.tr(Key::AlbumPage))
+        .clicked()
+    {
+        pending.push(Command::OpenAlbum(Box::new(album.clone())));
     }
 }
 
@@ -1008,8 +1139,26 @@ fn playlist_glyph(playlist: &Playlist) -> String {
 }
 
 /// A rich playlist row used on the playlists page (left column).
+/// Cover for a playlist: a user-picked image, otherwise the first track's
+/// cached cover. No network IO happens in layout.
+pub fn playlist_cover_path(app: &EchoPortApp, playlist: &Playlist) -> Option<PathBuf> {
+    if let Some(path) = playlist.cover_path.as_ref() {
+        if path.is_file() {
+            return Some(path.clone());
+        }
+    }
+    let first = app
+        .state
+        .profile
+        .playlist_tracks(&playlist.id)
+        .into_iter()
+        .next()?;
+    cover_for(app, &first)
+}
+
 pub fn playlist_list_row(
     ui: &mut Ui,
+    app: &mut EchoPortApp,
     theme: &Theme,
     playlist: &Playlist,
     subtitle: &str,
@@ -1042,19 +1191,31 @@ pub fn playlist_list_row(
             theme.accent,
         );
     }
-    let (a, b) = style::generated_cover_colors(theme, &playlist.id);
     let cover = Rect::from_min_size(
         Pos2::new(rect.left() + 10.0, rect.center().y - 21.0),
         Vec2::splat(42.0),
     );
-    style::gradient_cover(
-        ui.painter(),
-        cover,
-        style::R_SM,
-        a,
-        b,
-        Some(&playlist_glyph(playlist)),
-    );
+    if let Some(path) = playlist_cover_path(app, playlist) {
+        app.ui.covers.paint(
+            ui,
+            theme,
+            Some(&path),
+            cover,
+            style::R_SM,
+            &playlist.name,
+            &playlist.id,
+        );
+    } else {
+        let (a, b) = style::generated_cover_colors(theme, &playlist.id);
+        style::gradient_cover(
+            ui.painter(),
+            cover,
+            style::R_SM,
+            a,
+            b,
+            Some(&playlist_glyph(playlist)),
+        );
+    }
     let text_left = cover.right() + 12.0;
     let text_right = rect.right() - 12.0;
     style::paint_elided(
@@ -1082,6 +1243,7 @@ pub fn playlist_list_row(
 /// Compact playlist row used inside the home "Your playlists" card.
 pub fn playlist_home_row(
     ui: &mut Ui,
+    app: &mut EchoPortApp,
     theme: &Theme,
     playlist: &Playlist,
     subtitle: &str,
@@ -1112,19 +1274,31 @@ pub fn playlist_home_row(
             StrokeKind::Inside,
         );
     }
-    let (a, b) = style::generated_cover_colors(theme, &playlist.id);
     let cover = Rect::from_center_size(
         Pos2::new(rect.left() + 20.0, rect.center().y),
         Vec2::splat(36.0),
     );
-    style::gradient_cover(
-        ui.painter(),
-        cover,
-        style::R_SM,
-        a,
-        b,
-        Some(&playlist_glyph(playlist)),
-    );
+    if let Some(path) = playlist_cover_path(app, playlist) {
+        app.ui.covers.paint(
+            ui,
+            theme,
+            Some(&path),
+            cover,
+            style::R_SM,
+            &playlist.name,
+            &playlist.id,
+        );
+    } else {
+        let (a, b) = style::generated_cover_colors(theme, &playlist.id);
+        style::gradient_cover(
+            ui.painter(),
+            cover,
+            style::R_SM,
+            a,
+            b,
+            Some(&playlist_glyph(playlist)),
+        );
+    }
     let text_left = cover.right() + 10.0;
     style::paint_elided(
         ui.painter(),

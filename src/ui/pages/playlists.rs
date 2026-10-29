@@ -172,9 +172,10 @@ fn list_panel(
             };
             let is_selected = selected.as_deref() == Some(playlist.id.as_str())
                 || app.ui.selected_playlist.as_deref() == Some(playlist.id.as_str());
-            let response = widgets::playlist_list_row(ui, theme, playlist, &subtitle, is_selected)
-                .on_hover_cursor(egui::CursorIcon::PointingHand)
-                .on_hover_text(app.state.tr(Key::DoubleClickOpen));
+            let response =
+                widgets::playlist_list_row(ui, app, theme, playlist, &subtitle, is_selected)
+                    .on_hover_cursor(egui::CursorIcon::PointingHand)
+                    .on_hover_text(app.state.tr(Key::DoubleClickOpen));
             if response.clicked() {
                 app.ui.selected_playlist = Some(playlist.id.clone());
                 app.ui.selected_track = None;
@@ -226,21 +227,33 @@ fn detail_panel(
         // Header: generated cover + title / description / meta.
         ui.horizontal_top(|ui| {
             let (cover_rect, _) = ui.allocate_exact_size(Vec2::splat(92.0), egui::Sense::hover());
-            let (color_a, color_b) = style::generated_cover_colors(theme, &playlist.id);
-            let glyph = playlist
-                .name
-                .chars()
-                .find(|c| c.is_alphanumeric())
-                .map(|c| c.to_uppercase().to_string())
-                .unwrap_or_else(|| "♫".to_owned());
-            style::gradient_cover(
-                ui.painter(),
-                cover_rect,
-                style::R_MD,
-                color_a,
-                color_b,
-                Some(&glyph),
-            );
+            if let Some(path) = widgets::playlist_cover_path(app, playlist) {
+                app.ui.covers.paint(
+                    ui,
+                    theme,
+                    Some(&path),
+                    cover_rect,
+                    style::R_MD,
+                    &playlist.name,
+                    &playlist.id,
+                );
+            } else {
+                let (color_a, color_b) = style::generated_cover_colors(theme, &playlist.id);
+                let glyph = playlist
+                    .name
+                    .chars()
+                    .find(|c| c.is_alphanumeric())
+                    .map(|c| c.to_uppercase().to_string())
+                    .unwrap_or_else(|| "♫".to_owned());
+                style::gradient_cover(
+                    ui.painter(),
+                    cover_rect,
+                    style::R_MD,
+                    color_a,
+                    color_b,
+                    Some(&glyph),
+                );
+            }
             ui.add_space(14.0);
             ui.vertical(|ui| {
                 ui.add(
@@ -309,10 +322,16 @@ fn detail_panel(
                     });
                 }
                 ui.add_space(2.0);
-                if style::button(ui, theme, app.state.tr(Key::Rename), Variant::Ghost).clicked() {
+                if style::button(ui, theme, app.state.tr(Key::EditPlaylist), Variant::Ghost)
+                    .clicked()
+                {
                     app.ui.dialog = Some(Dialog::RenamePlaylist {
                         id: playlist.id.clone(),
                         name: playlist.name.clone(),
+                        description: playlist.description.clone(),
+                        existing_cover: playlist.cover_path.clone(),
+                        new_cover: None,
+                        clear_cover: false,
                     });
                 }
                 ui.add_space(2.0);

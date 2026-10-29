@@ -34,7 +34,7 @@ use crate::process;
 /// Minimum size for a cache file to be considered complete.
 pub(crate) const MIN_CACHE_BYTES: u64 = 32 * 1024;
 /// yt-dlp process cap across every workstream.
-const MAX_YTDLP_PROCESSES: usize = 2;
+const MAX_YTDLP_PROCESSES: usize = 3;
 /// Resolution timeout (see CONTRACT §9).
 const RESOLVE_TIMEOUT: Duration = Duration::from_secs(120);
 /// Search timeout: yt-dlp searches take 1–3 s, this is only a safety net.

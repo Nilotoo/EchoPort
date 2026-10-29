@@ -3,9 +3,9 @@
 > Status: this build is **source-audited and cross-built**; the Windows `.exe` has not been
 > executed on a real Windows machine in this QA round. Please report anything that looks off.
 
-**Bundled dependencies:** both the MSI and the portable zip ship `tools\yt-dlp.exe` and
+**Bundled dependencies:** the NSIS setup, MSI and the portable zip ship `tools\yt-dlp.exe` and
 `tools\ffmpeg.exe` (plus licence notes), so search, online playback and conversion work
-without a separate dependency installation. For normal use download the **MSI**; use the
+without a separate dependency installation. For normal use download the **NSIS setup.exe**; use the
 zip only if you want a portable folder.
 
 ## Run

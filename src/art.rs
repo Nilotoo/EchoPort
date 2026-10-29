@@ -35,6 +35,112 @@ impl ArtCache {
         Self { dir }
     }
 
+    /// A low-resolution variant of the cover URL for lists/search (fewer bytes,
+    /// faster search rendering). Falls back to the normal art URL.
+    pub fn thumb_url(track: &Track) -> Option<String> {
+        let art = track.art_url.as_deref()?.trim();
+        if art.is_empty() {
+            return None;
+        }
+        // Common CDN size patterns. Keep the same image, just request a small
+        // rendition; unknown URLs simply stay untouched.
+        if art.contains("100x100bb") {
+            return Some(art.replace("100x100bb", "60x60bb"));
+        }
+        if art.contains("t500x500") {
+            return Some(art.replace("t500x500", "t120x120"));
+        }
+        if art.contains("maxresdefault") {
+            return Some(art.replace("maxresdefault", "mqdefault"));
+        }
+        if let Some(base) = art.strip_suffix(".jpg") {
+            if base.contains("music.126.net") {
+                return Some(format!("{base}.jpg?param=100y100"));
+            }
+        }
+        if art.contains("bilibili") || art.contains("hdslb") {
+            return Some(format!("{art}@120w_120h"));
+        }
+        Some(art.to_owned())
+    }
+
+    /// Resolve a small cover for search/list rows; downloads the low-res URL
+    /// first and only falls back to the full image if that fails.
+    pub fn resolve_thumb(&self, http: &Http, track: &Track) -> Option<PathBuf> {
+        if let Some(path) = self.cached_thumb(track) {
+            return Some(path);
+        }
+        let thumb = Self::thumb_url(track);
+        if let Some(url) = thumb.as_deref() {
+            if let Some(path) = self.fetch_and_store(http, track, url) {
+                return Some(path);
+            }
+        }
+        self.resolve(http, track)
+    }
+
+    fn fetch_and_store(&self, http: &Http, track: &Track, url: &str) -> Option<PathBuf> {
+        if self.ensure().is_err() {
+            return None;
+        }
+        let mut candidates = vec![url.to_owned()];
+        if let Some(rest) = url.strip_prefix("http://") {
+            candidates.push(format!("https://{rest}"));
+        }
+        for candidate in candidates {
+            if let Ok(bytes) = http.get_bytes(&candidate, &[]) {
+                if let Some(path) = self.store(url, &bytes) {
+                    return Some(path);
+                }
+            }
+        }
+        let _ = track;
+        None
+    }
+
+    /// Already cached low-res cover, if present.
+    pub fn cached_thumb(&self, track: &Track) -> Option<PathBuf> {
+        let url = Self::thumb_url(track)?;
+        self.cached_for_url(&url)
+    }
+
+    /// Already cached arbitrary image URL (artist avatars etc.).
+    pub fn cached_url(&self, url: &str) -> Option<PathBuf> {
+        self.cached_for_url(url.trim())
+    }
+
+    /// Download and cache an arbitrary image URL (artist avatar).
+    pub fn resolve_url(&self, http: &Http, url: &str) -> Option<PathBuf> {
+        let url = url.trim();
+        if url.is_empty() || url.starts_with("data:") {
+            return None;
+        }
+        if let Some(path) = self.cached_url(url) {
+            return Some(path);
+        }
+        self.ensure().ok()?;
+        let mut candidates = vec![url.to_owned()];
+        if let Some(rest) = url.strip_prefix("http://") {
+            candidates.push(format!("https://{rest}"));
+        }
+        for candidate in candidates {
+            if let Ok(bytes) = http.get_bytes(&candidate, &[]) {
+                if let Some(path) = self.store(url, &bytes) {
+                    return Some(path);
+                }
+            }
+        }
+        None
+    }
+
+    /// Delete a cached cover file (by URL or path) from disk.
+    pub fn forget_url(&self, url: &str) {
+        let stem = cache_stem(url);
+        for extension in KNOWN_EXTENSIONS {
+            let _ = std::fs::remove_file(self.dir.join(format!("{stem}.{extension}")));
+        }
+    }
+
     /// Return a local path for the track's cover, downloading it if needed.
     pub fn resolve(&self, http: &Http, track: &Track) -> Option<PathBuf> {
         if let Some(path) = self.cached(track) {
@@ -272,5 +378,24 @@ mod tests {
         let image = image::open(&path).expect("cover decodes");
         assert!(image.width() >= 100);
         assert_eq!(cache.resolve(&http, &track), Some(path));
+    }
+    #[test]
+    fn low_res_cover_urls() {
+        assert_eq!(
+            ArtCache::thumb_url(
+                &Track::new(Platform::AppleMusic, "1", "x", "y")
+                    .with_art("https://is1.mzstatic.com/thumb/100x100bb.jpg")
+            )
+            .as_deref(),
+            Some("https://is1.mzstatic.com/thumb/60x60bb.jpg")
+        );
+        assert_eq!(
+            ArtCache::thumb_url(
+                &Track::new(Platform::YouTube, "2", "x", "y")
+                    .with_art("https://i.ytimg.com/vi/abc/maxresdefault.jpg")
+            )
+            .as_deref(),
+            Some("https://i.ytimg.com/vi/abc/mqdefault.jpg")
+        );
     }
 }
