@@ -32,11 +32,11 @@ EchoPort（回声港）是一个本地优先的多音源桌面音乐播放器：
   桌面项 + hicolor 32/48/128/256 图标；发布包解包后也可运行 `./install-arch.sh`。
 * 仓库 URL 仍为占位假设（等待确认远端/认证），因此真实网络更新检查尚未验证。
 
-### 1.2 安装方式（v0.2.2）
+### 1.2 安装方式（v0.2.3）
 
-* **Arch pacman 包**：发布资产 `echoport-0.2.2-1-x86_64.pkg.tar.zst`；
-  `sudo pacman -U echoport-0.2.2-1-x86_64.pkg.tar.zst`（AUR-ready PKGBUILD 在 `packaging/arch/`）。
-* **Windows MSI（per-user）**：`echoport-0.2.2-windows-x86_64.msi`，双击安装（无需管理员），
+* **Arch pacman 包**：发布资产 `echoport-0.2.3-1-x86_64.pkg.tar.zst`；
+  `sudo pacman -U echoport-0.2.3-1-x86_64.pkg.tar.zst`（AUR-ready PKGBUILD 在 `packaging/arch/`）。
+* **Windows MSI（per-user）**：`echoport-0.2.3-windows-x86_64.msi`，双击安装（无需管理员），
   开始菜单快捷方式 + 标准卸载；开始菜单中的 **「Uninstall EchoPort (clean app data)」** 会额外删除
   设置/资料/缓存并保留 `%USERPROFILE%\Music\EchoPort` 中已下载音乐。未签名 → SmartScreen 提示。绿色版 zip 仍可用。
 * **macOS**：仓库 CI 的 `macos-latest` job 构建 universal `.app`（`EchoPort.app.zip`）；
