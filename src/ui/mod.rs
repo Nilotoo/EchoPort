@@ -990,7 +990,9 @@ fn toasts(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, player_heig
             Align2::RIGHT_BOTTOM,
             Vec2::new(-18.0, -(player_height + 14.0)),
         )
-        .interactable(true)
+        // Toasts are informational only: never intercept clicks on the app
+        // underneath (auto-fade handles dismissal).
+        .interactable(false)
         .show(ctx, |ui| {
             ui.set_width(310.0);
             ui.with_layout(Layout::bottom_up(Align::Max), |ui| {

@@ -210,7 +210,9 @@ rustup target add x86_64-pc-windows-gnu
 * 产物：绿色版 `dist/echoport-0.2.0-windows-x86_64.zip` 与 per-user MSI
   `dist/echoport-0.2.0-windows-x86_64.msi`（无需管理员、开始菜单快捷方式 + 标准卸载）；MSI 还带
   **「Uninstall EchoPort (clean app data)」** 一键干净卸载（删除设置/资料/缓存，保留已下载音乐）。
-  **MSI 和 zip 都内置 yt-dlp.exe + ffmpeg.exe**，普通用户无需另装依赖；推荐下载 **MSI** 安装，zip 仅适合便携使用。
+  **安装器（setup.exe）、MSI 和 zip 都内置 yt-dlp.exe + ffmpeg.exe**，普通用户无需另装依赖。
+  **推荐下载 `-setup.exe` 安装器**（有安装目录/桌面快捷方式选择、开始菜单、卸载器）；MSI 是静默 per-user 安装（无界面选项）；
+  zip 仅适合便携使用。
   MSI 在 Linux 用
   msitools/wixl 交叉构建，**未在 Windows 真机执行**，未签名 → SmartScreen 提示。
   **未签名、未在 Windows 实机运行**；首次运行请留意 SmartScreen 与 OpenGL 驱动要求。

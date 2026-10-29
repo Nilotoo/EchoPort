@@ -82,6 +82,8 @@ pub struct EchoPortApp {
     pub startup_started: std::time::Instant,
     pub splash_done: bool,
     fake_update_sent: bool,
+    quitting: bool,
+    background_notice_shown: bool,
 }
 
 impl EchoPortApp {
@@ -226,6 +228,8 @@ impl EchoPortApp {
             startup_started: std::time::Instant::now(),
             splash_done: skip_splash,
             fake_update_sent: false,
+            quitting: false,
+            background_notice_shown: false,
         };
 
         if std::env::var("ECHOPORT_PROFILE_EDIT").is_ok() {
@@ -586,7 +590,11 @@ impl EchoPortApp {
                 self.mini_player = !self.mini_player;
                 self.ctx.request_repaint();
             }
-            Command::CheckForUpdates => self.spawn_update_check(),
+            Command::CheckForUpdates => {
+                self.state.updates.manual_check = true;
+                self.toast(ToastKind::Info, Key::CheckingForUpdates);
+                self.spawn_update_check();
+            }
             Command::DismissUpdate => {
                 self.state.updates.dismissed = true;
                 self.splash_done = true;
@@ -615,6 +623,7 @@ impl EchoPortApp {
                 }
                 self.state.updates.dismissed = true;
                 self.splash_done = true;
+                self.toast(ToastKind::Info, Key::UpdatePageOpened);
                 self.ctx.request_repaint();
             }
             Command::RestoreMainWindow => {
@@ -694,6 +703,7 @@ impl EchoPortApp {
                 let _ = open::that(&self.paths.data_dir);
             }
             Command::Quit => {
+                self.quitting = true;
                 self.save_now();
                 self.ctx.send_viewport_cmd(ViewportCommand::Close);
             }
@@ -819,6 +829,17 @@ impl EchoPortApp {
 
         if ctx.input(|input| input.viewport().close_requested()) {
             self.save_now();
+            if !self.quitting {
+                // Keep audio/playback alive: closing the window minimizes it
+                // instead of terminating the process.
+                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                if !self.background_notice_shown {
+                    self.background_notice_shown = true;
+                    self.toast(ToastKind::Info, Key::BackgroundNotice);
+                }
+                ctx.request_repaint();
+            }
         }
 
         let busy = self.state.playback.state.is_active()
@@ -834,6 +855,10 @@ impl EchoPortApp {
     }
 
     fn handle_shortcuts(&mut self, ctx: &egui::Context) {
+        if ctx.input(|input| input.modifiers.ctrl && input.key_pressed(egui::Key::Q)) {
+            self.dispatch(Command::Quit);
+            return;
+        }
         if ctx.memory(|memory| memory.focused().is_some()) {
             return;
         }
@@ -924,6 +949,7 @@ impl EchoPortApp {
                 self.state.updates.last_checked = Some(std::time::Instant::now());
                 match result {
                     Ok(Some(info)) => {
+                        let manual = self.state.updates.manual_check;
                         log::info!(
                             "update available: current {} latest {}",
                             info.current,
@@ -931,19 +957,28 @@ impl EchoPortApp {
                         );
                         self.state.updates.available = Some(info);
                         self.state.updates.dismissed = false;
-                        if self.splash_done {
+                        if self.splash_done || manual {
                             self.toast(ToastKind::Info, Key::UpdateAvailable);
                         }
                     }
                     Ok(None) => {
+                        let manual = self.state.updates.manual_check;
                         self.state.updates.available = None;
                         self.state.updates.error = None;
+                        if manual {
+                            self.toast(ToastKind::Success, Key::UpToDate);
+                        }
                     }
                     Err(err) => {
+                        let manual = self.state.updates.manual_check;
                         log::debug!("update check failed: {err}");
                         self.state.updates.error = Some(err);
+                        if manual {
+                            self.toast(ToastKind::Error, Key::UpdateCheckFailed);
+                        }
                     }
                 }
+                self.state.updates.manual_check = false;
                 ctx.request_repaint();
             }
             AppEvent::SearchDone(results) => {
