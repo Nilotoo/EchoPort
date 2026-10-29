@@ -346,13 +346,13 @@ defaults to `~/Music/EchoPort`.
   `CARGO_PKG_VERSION`. If the repo has no Release it falls back to the raw `VERSION` file on
   `main`/`master`. Repo defaults to `nilotoo/EchoPort` and is runtime-overridable with
   `ECHOPORT_UPDATE_REPO=owner/name`. Startup check + every 6 h; `About → Check for updates` triggers one
-  manually. An available update only exposes a link/Update button opening the release page — there is
+  manually. An available update exposes an Update button which downloads the platform asset, verifies its published sha256, then silently applies it and restarts (Windows setup.exe /S; Linux atomic binary replace); macOS opens the release page — there is
   **no auto-download or install**. `ECHOPORT_NO_UPDATE_CHECK=1` disables the checker;
   `ECHOPORT_FAKE_UPDATE=9.9.9` injects a fake result for tests/screenshots.
 * **`ui/splash.rs`**: short startup overlay (target ~0.9 s, held up to ~1.4 s while the first check is in
   flight) with the ringless app mark, EchoPort wordmark and a thin progress line. If a newer version is
   known during the splash it shows `Update available vX` + **Stay on this version / Update** buttons
-  (Update opens the release page; Stay dismisses). `ECHOPORT_SPLASH=1` forces the splash for QA,
+  (Update downloads/verifies/installs and restarts; Stay dismisses). `ECHOPORT_SPLASH=1` forces the splash for QA,
   `ECHOPORT_NO_SPLASH=1` skips it; `ECHOPORT_SHOT_AFTER=<secs>` delays screenshot capture for QA.
 * **Icon assets (v0.1.9)**: `assets/icon.png` (256), `icon-128.png`, `icon-48.png`, `icon-32.png` and the
   multi-size `echoport.ico` are ringless redraws; `main.rs` loads `assets/icon.png` at runtime and the
@@ -366,7 +366,7 @@ defaults to `~/Music/EchoPort`.
 * **Verification status**: update-check/version-comparison logic is covered by unit tests and verified with
   fake/local data; **no live GitHub request was made this round** because the repo URL/auth are pending.
 
-### Security, slimming & installers (v0.2.1) / 安全、精简与安装包
+### Security, slimming & installers (v0.2.2) / 安全、精简与安装包
 
 * **Update-check hardening**: `update::repo()` only accepts `owner/name` (GitHub-safe chars), release
   URLs are restricted to `https://github.com/…`, version strings are whitelisted, and the checker

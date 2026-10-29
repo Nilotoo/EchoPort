@@ -7,7 +7,7 @@
 many web sources — with mixed-platform playlists, downloads and song background.
 **No account. No cloud. No telemetry.**
 
-`Rust 1.85+` · `egui 0.32` · `Linux / Windows / macOS` · `GPL-3.0` · `v0.2.1`
+`Rust 1.85+` · `egui 0.32` · `Linux / Windows / macOS` · `GPL-3.0` · `v0.2.2`
 · 中文 | [English](#english)
 
 ---
@@ -151,8 +151,8 @@ C 编译器用于编译内置 Lua 5.4（mlua vendored），不需要安装系统
 内含：`echoport` 二进制、`echoport.desktop`、`echoport.png`、`README.md`、`INSTALL.txt`。安装：
 
 ```bash
-tar -xzf echoport-0.2.1-linux-x86_64.tar.gz
-cd echoport-0.2.1-linux-x86_64
+tar -xzf echoport-0.2.2-linux-x86_64.tar.gz
+cd echoport-0.2.2-linux-x86_64
 mkdir -p ~/.local/bin ~/.local/share/applications ~/.local/share/icons/hicolor/256x256/apps
 install -m755 echoport        ~/.local/bin/echoport
 install -m644 echoport.desktop ~/.local/share/applications/echoport.desktop
@@ -161,15 +161,15 @@ echoport   # 或从应用菜单启动 EchoPort
 ```
 
 * **Arch 用户**：源码目录运行 `./scripts/install-arch.sh`（无 sudo，自动安装到 `~/.local`）；
-  发布包提供 pacman 包：`sudo pacman -U echoport-0.2.1-1-x86_64.pkg.tar.zst`（AUR PKGBUILD 见
+  发布包提供 pacman 包：`sudo pacman -U echoport-0.2.2-1-x86_64.pkg.tar.zst`（AUR PKGBUILD 见
   `packaging/arch/`，依赖 glibc/gcc-libs，可选 yt-dlp/ffmpeg）。
 
-* **发布资产 / release assets**：`echoport-0.2.1-linux-x86_64.tar.gz`（绿色版）、
-  `echoport-0.2.1-1-x86_64.pkg.tar.zst`（Arch pacman）、`echoport-0.2.1-windows-x86_64.zip`（绿色版）、
-  `echoport-0.2.1-windows-x86_64.msi`（per-user 安装）、macOS `EchoPort.app.zip`（CI 构建），
+* **发布资产 / release assets**：`echoport-0.2.2-linux-x86_64.tar.gz`（绿色版）、
+  `echoport-0.2.2-1-x86_64.pkg.tar.zst`（Arch pacman）、`echoport-0.2.2-windows-x86_64.zip`（绿色版）、
+  `echoport-0.2.2-windows-x86_64.msi`（per-user 安装）、macOS `EchoPort.app.zip`（CI 构建），
   每个文件附 `.sha256`。
 
-> 发布包**不含** yt-dlp / ffmpeg，请按上面的依赖说明另外安装。当前项目处于 0.2.1
+> 发布包**不含** yt-dlp / ffmpeg，请按上面的依赖说明另外安装。当前项目处于 0.2.2
 > 开发阶段，尚未提供官方托管的二进制下载；请按源码构建或使用脚本自行打包。
 
 ### Windows 10 / 11（x86_64）
@@ -203,12 +203,12 @@ rustup target add x86_64-pc-windows-gnu
 
 交叉构建产物是未签名 PE，**未在 Windows 真机运行验证**；正式发布请在 Windows 上原生构建。
 
-**v0.2.1 构建状态**
+**v0.2.2 构建状态**
 
 * 交叉构建的 PE 已通过静态检查：`Subsystem 00000002 (Windows GUI)`（无控制台窗口）、包含
   `.rsrc` 图标资源目录（多尺寸 `assets/echoport.ico`）、外部工具子进程使用 `CREATE_NO_WINDOW`。
-* 产物：绿色版 `dist/echoport-0.2.1-windows-x86_64.zip` 与 per-user MSI
-  `dist/echoport-0.2.1-windows-x86_64.msi`（无需管理员、开始菜单快捷方式 + 标准卸载）；MSI 还带
+* 产物：绿色版 `dist/echoport-0.2.2-windows-x86_64.zip` 与 per-user MSI
+  `dist/echoport-0.2.2-windows-x86_64.msi`（无需管理员、开始菜单快捷方式 + 标准卸载）；MSI 还带
   **「Uninstall EchoPort (clean app data)」** 一键干净卸载（删除设置/资料/缓存，保留已下载音乐）。
   **安装器（setup.exe）、MSI 和 zip 都内置 yt-dlp.exe + ffmpeg.exe**，普通用户无需另装依赖。
   **推荐下载 `-setup.exe` 安装器**（有安装目录/桌面快捷方式选择、开始菜单、卸载器）；MSI 是静默 per-user 安装（无界面选项）；
@@ -397,7 +397,7 @@ ECHOPORT_DEMO=1 cargo run     # 离线演示模式：假数据 + 生成的封面
 
 ---
 
-## 🔐 v0.2.1：安全/隐私加固、精简与安装包
+## 🔐 v0.2.2：安全/隐私加固、精简与安装包
 
 * **安全加固**：更新检查只接受 `owner/name` 仓库与 **https://github.com/** 发布链接；版本字符串白名单
   清洗；`OpenUrl` 只允许 http/https；资料/歌单导入限制 8 MB 文件与头像/简介/名称/歌单/曲目数量上限。
@@ -414,7 +414,7 @@ ECHOPORT_DEMO=1 cargo run     # 离线演示模式：假数据 + 生成的封面
   macOS zip 及各自 sha256。
 * **更新检查仓库**：默认目标现为 `https://github.com/Nilotoo/EchoPort`；仓库尚未 push，真实在线更新
   检查仍未验证（fake/本地路径 + 单元测试覆盖）。
-* 版本与发布包更新为 **v0.2.1**。
+* 版本与发布包更新为 **v0.2.2**。
 
 ---
 
@@ -427,7 +427,7 @@ ECHOPORT_DEMO=1 cargo run     # 离线演示模式：假数据 + 生成的封面
   `ECHOPORT_FAKE_UPDATE=9.9.9` 可伪造更新；`ECHOPORT_NO_UPDATE_CHECK=1` 关闭。
 * **启动动画（约 0.9 s，检查进行中最多 1.4 s）**：无外圈应用标记 + EchoPort 字标 + 细进度线；
   启动期间发现更新则停留显示「Update available vX」+ **Stay on this version / Update**
-  （Update 打开 Release 页面，不自动安装）。`ECHOPORT_SPLASH=1` 强制显示、
+  （Update 自动下载并校验新版本；Windows/Linux 会静默安装并重启；macOS 暂为打开发布页）。`ECHOPORT_SPLASH=1` 强制显示、
   `ECHOPORT_NO_SPLASH=1` 关闭。
 * **新应用图标（去掉外圈）**：`assets/icon.png`（256）、`icon-128.png`、`icon-48.png`、`icon-32.png`
   与多尺寸 `echoport.ico` 重绘；运行时窗口图标读取 `assets/icon.png`，启动动画使用同一标记；
@@ -647,7 +647,7 @@ GPL-3.0 © EchoPort contributors. 见 [LICENSE](LICENSE)。
 mixed-platform playlists, downloads and song background all dock in one place.
 **No account, nothing uploaded.**
 
-`Rust 1.85+` · `egui 0.32` · `Linux / Windows / macOS` · `GPL-3.0` · `v0.2.1`
+`Rust 1.85+` · `egui 0.32` · `Linux / Windows / macOS` · `GPL-3.0` · `v0.2.2`
 · English | [中文](#echoport--回声港)
 
 ## 📸 Screenshots
@@ -798,8 +798,8 @@ release attachments) contains the `echoport` binary, `echoport.desktop`, `echopo
 `README.md` and `INSTALL.txt`. Install with:
 
 ```bash
-tar -xzf echoport-0.2.1-linux-x86_64.tar.gz
-cd echoport-0.2.1-linux-x86_64
+tar -xzf echoport-0.2.2-linux-x86_64.tar.gz
+cd echoport-0.2.2-linux-x86_64
 mkdir -p ~/.local/bin ~/.local/share/applications ~/.local/share/icons/hicolor/256x256/apps
 install -m755 echoport        ~/.local/bin/echoport
 install -m644 echoport.desktop ~/.local/share/applications/echoport.desktop
@@ -808,16 +808,16 @@ echoport   # or launch EchoPort from the application menu
 ```
 
 * **Arch users**: `scripts/install-arch.sh` for a no-sudo `~/.local` install, or the release pacman
-  package: `sudo pacman -U echoport-0.2.1-1-x86_64.pkg.tar.zst` (AUR-ready PKGBUILD in
+  package: `sudo pacman -U echoport-0.2.2-1-x86_64.pkg.tar.zst` (AUR-ready PKGBUILD in
   `packaging/arch/`; depends glibc/gcc-libs, optional yt-dlp/ffmpeg).
 
-* **Release assets**: `echoport-0.2.1-linux-x86_64.tar.gz` (portable Linux),
-  `echoport-0.2.1-1-x86_64.pkg.tar.zst` (Arch pacman), `echoport-0.2.1-windows-x86_64.zip` (portable
-  Windows), `echoport-0.2.1-windows-x86_64.msi` (per-user install) and the CI-built macOS
+* **Release assets**: `echoport-0.2.2-linux-x86_64.tar.gz` (portable Linux),
+  `echoport-0.2.2-1-x86_64.pkg.tar.zst` (Arch pacman), `echoport-0.2.2-windows-x86_64.zip` (portable
+  Windows), `echoport-0.2.2-windows-x86_64.msi` (per-user install) and the CI-built macOS
   `EchoPort.app.zip` — each with a `.sha256` file.
 
 > The tarball does **not** include yt-dlp / ffmpeg — install them as described above. EchoPort is at
-> 0.2.1 and does not yet ship officially hosted binaries; build from source or run the packaging
+> 0.2.2 and does not yet ship officially hosted binaries; build from source or run the packaging
 > script yourself.
 
 ### Windows 10 / 11 (x86_64)
@@ -1042,7 +1042,7 @@ Playback shortcuts are ignored while a text field has focus.
   `LIBGL_ALWAYS_SOFTWARE=1 WAYLAND_DISPLAY= ./target/release/echoport`
   (details in [QA_REPORT.md](docs/QA_REPORT.md)).
 
-## 🔐 v0.2.1: security/privacy hardening, slimming & installers
+## 🔐 v0.2.2: security/privacy hardening, slimming & installers
 
 * **Security hardening**: the update checker only accepts `owner/name` repos and
   **https://github.com/** release links, sanitizes version strings, `OpenUrl` accepts only
@@ -1062,7 +1062,7 @@ Playback shortcuts are ignored while a text field has focus.
   Arch package, Windows zip + MSI, macOS zip and a `.sha256` for each.
 * **Update-check repo**: default is now `https://github.com/Nilotoo/EchoPort`; the repo has not been
   pushed yet, so a real online update check is still unverified (fake/local paths + unit tests only).
-* Version and packages bumped to **v0.2.1**.
+* Version and packages bumped to **v0.2.2**.
 
 ---
 
@@ -1076,7 +1076,8 @@ Playback shortcuts are ignored while a text field has focus.
   `ECHOPORT_NO_UPDATE_CHECK=1` disables the checker.
 * **Startup animation (~0.9 s, up to 1.4 s while a check is in flight)**: ringless app mark + EchoPort
   wordmark + thin progress line. If an update is found during the splash it stays with
-  "Update available vX" + **Stay on this version / Update** (Update opens the release page; no
+  "Update available vX" + **Stay on this version / Update** (Update downloads, verifies and installs automatically;
+  no
   auto-install). `ECHOPORT_SPLASH=1` forces it; `ECHOPORT_NO_SPLASH=1` disables it.
 * **New ringless app icon**: `assets/icon.png` (256), `icon-128.png`, `icon-48.png`, `icon-32.png` and the
   multi-size `echoport.ico` were redrawn; the runtime window icon loads `assets/icon.png` and the splash

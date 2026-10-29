@@ -163,7 +163,7 @@ pub fn draw(ctx: &egui::Context, app: &mut EchoPortApp, pending: &mut Vec<Comman
                             pending.push(Command::DismissUpdate);
                         }
                         if style::button(ui, &theme, update_label, Variant::Primary).clicked() {
-                            pending.push(Command::OpenUpdatePage);
+                            pending.push(Command::InstallUpdate);
                         }
                     });
                 }

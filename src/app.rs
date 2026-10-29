@@ -39,6 +39,7 @@ use crate::store::{self, AppPaths, ProfileStore};
 use crate::theme::{self, Theme, ThemeMode};
 use crate::ui;
 use base64::Engine as _;
+use sha2::{Digest, Sha256};
 
 struct ShotPlan {
     path: PathBuf,
@@ -606,6 +607,7 @@ impl EchoPortApp {
             Command::OpenConfigDocs => {
                 self.open_embedded_doc("config.html", include_str!("../docs/config.html"))
             }
+            Command::InstallUpdate => self.start_update_download(),
             Command::OpenUpdatePage => {
                 if let Some(info) = self.state.updates.available.as_ref() {
                     if info.url.starts_with("https://github.com/")
@@ -960,6 +962,9 @@ impl EchoPortApp {
                         if self.splash_done || manual {
                             self.toast(ToastKind::Info, Key::UpdateAvailable);
                         }
+                        if std::env::var("ECHOPORT_AUTO_UPDATE").is_ok() {
+                            self.start_update_download();
+                        }
                     }
                     Ok(None) => {
                         let manual = self.state.updates.manual_check;
@@ -980,6 +985,26 @@ impl EchoPortApp {
                 }
                 self.state.updates.manual_check = false;
                 ctx.request_repaint();
+            }
+            AppEvent::UpdateProgress(progress) => {
+                self.state.updates.progress = progress;
+                self.ctx.request_repaint();
+            }
+            AppEvent::UpdateDownloaded(path) => {
+                self.state.updates.downloading = false;
+                self.state.updates.progress = Some(1.0);
+                self.toast(ToastKind::Info, Key::UpdateInstalling);
+                self.apply_update(path);
+            }
+            AppEvent::UpdateDownloadFailed(err) => {
+                log::warn!("automatic update failed: {err}");
+                self.state.updates.downloading = false;
+                self.state.updates.progress = None;
+                self.state.updates.error = Some(err);
+                self.toast(ToastKind::Error, Key::UpdateFailed);
+                if let Some(info) = self.state.updates.available.as_ref() {
+                    let _ = open::that(&info.url);
+                }
             }
             AppEvent::SearchDone(results) => {
                 self.fire_script(ScriptEvent::SearchDone(results.query.clone()));
@@ -1764,6 +1789,219 @@ impl EchoPortApp {
         }
     }
 
+    fn start_update_download(&mut self) {
+        if self.state.updates.downloading {
+            return;
+        }
+        let Some(info) = self.state.updates.available.clone() else {
+            return;
+        };
+        let Some(asset) = crate::update::asset_for_current_platform(&info).cloned() else {
+            self.toast(ToastKind::Info, Key::UpdatePageOpened);
+            let _ = open::that(&info.url);
+            return;
+        };
+        if !asset.url.starts_with("https://github.com/")
+            || asset
+                .url
+                .chars()
+                .any(|c| c.is_whitespace() || c.is_control())
+        {
+            self.toast(ToastKind::Error, Key::UpdateFailed);
+            return;
+        }
+        let checksum_url = crate::update::checksum_asset(&info, &asset).map(|a| a.url.clone());
+        let dir = self.paths.cache_dir.join("updates");
+        let dest = dir.join(&asset.name);
+        self.state.updates.downloading = true;
+        self.state.updates.progress = Some(0.0);
+        self.splash_done = true;
+        self.toast(ToastKind::Info, Key::UpdateDownloading);
+        self.ctx.request_repaint();
+        let http = self.http.clone();
+        let tx = self.tx.clone();
+        let progress_tx = self.tx.clone();
+        std::thread::spawn(move || {
+            let result = (|| -> Result<(), String> {
+                let _ = std::fs::create_dir_all(&dir);
+                http.download(&asset.url, &[], &dest, |written, total| {
+                    let _ = progress_tx.send(AppEvent::UpdateProgress(crate::net::percent(
+                        written, total,
+                    )));
+                })
+                .map_err(|err| err.to_string())?;
+                if let Some(checksum_url) = checksum_url {
+                    let expected = http
+                        .get_text(&checksum_url, &[])
+                        .map_err(|err| err.to_string())?;
+                    let expected = expected
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or_default()
+                        .to_ascii_lowercase();
+                    if expected.len() != 64 || !expected.chars().all(|c| c.is_ascii_hexdigit()) {
+                        return Err("invalid published checksum".to_owned());
+                    }
+                    let mut file = std::fs::File::open(&dest).map_err(|err| err.to_string())?;
+                    let mut hasher = Sha256::new();
+                    let mut buffer = vec![0u8; 64 * 1024];
+                    loop {
+                        let read = std::io::Read::read(&mut file, &mut buffer)
+                            .map_err(|err| err.to_string())?;
+                        if read == 0 {
+                            break;
+                        }
+                        hasher.update(&buffer[..read]);
+                    }
+                    let actual = hasher
+                        .finalize()
+                        .iter()
+                        .map(|byte| format!("{byte:02x}"))
+                        .collect::<String>();
+                    if actual != expected {
+                        let _ = std::fs::remove_file(&dest);
+                        return Err("download checksum mismatch".to_owned());
+                    }
+                }
+                Ok(())
+            })();
+            match result {
+                Ok(()) => {
+                    let _ = tx.send(AppEvent::UpdateDownloaded(dest));
+                }
+                Err(err) => {
+                    let _ = tx.send(AppEvent::UpdateDownloadFailed(err));
+                }
+            }
+        });
+    }
+
+    #[cfg(target_os = "windows")]
+    fn apply_update(&mut self, path: std::path::PathBuf) {
+        let Ok(current) = std::env::current_exe() else {
+            let _ = open::that(path);
+            return;
+        };
+        let Some(dir) = current.parent().map(|parent| parent.to_path_buf()) else {
+            let _ = open::that(path);
+            return;
+        };
+        let script = self.paths.cache_dir.join("updates/apply-update.ps1");
+        let script_text = r#"
+param([int]$AppPid, [string]$Installer, [string]$InstallDir)
+Start-Sleep -Milliseconds 400
+try { Wait-Process -Id $AppPid -Timeout 90 -ErrorAction SilentlyContinue } catch {}
+if ($Installer.ToLower().EndsWith('.msi')) {
+    Start-Process -FilePath 'msiexec.exe' -ArgumentList '/i', ('"' + $Installer + '"'), '/qn' -Wait
+} else {
+    Start-Process -FilePath $Installer -ArgumentList ('/S /D="' + $InstallDir + '"') -Wait
+}
+Start-Process -FilePath (Join-Path $InstallDir 'echoport.exe')
+Remove-Item -LiteralPath $Installer -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
+"#;
+        if let Err(err) = std::fs::create_dir_all(self.paths.cache_dir.join("updates")) {
+            log::warn!("could not create update dir: {err}");
+            let _ = open::that(&path);
+            return;
+        }
+        if std::fs::write(&script, script_text).is_err() {
+            let _ = open::that(&path);
+            return;
+        }
+        let pid = std::process::id();
+        let mut cmd = crate::process::quiet("powershell.exe");
+        cmd.args([
+            "-NoProfile",
+            "-WindowStyle",
+            "Hidden",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+        ])
+        .arg(&script)
+        .args(["-AppPid", &pid.to_string()])
+        .arg("-Installer")
+        .arg(&path)
+        .arg("-InstallDir")
+        .arg(&dir);
+        if let Err(err) = cmd.spawn() {
+            log::warn!("could not start update helper: {err}");
+            let _ = open::that(&path);
+            return;
+        }
+        self.quitting = true;
+        self.save_now();
+        self.ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+    }
+
+    #[cfg(target_os = "linux")]
+    fn apply_update(&mut self, path: std::path::PathBuf) {
+        let Ok(current) = std::env::current_exe() else {
+            let _ = open::that(&path);
+            return;
+        };
+        let extract = self.paths.cache_dir.join("updates/extract");
+        let _ = std::fs::remove_dir_all(&extract);
+        if std::fs::create_dir_all(&extract).is_err() {
+            let _ = open::that(&path);
+            return;
+        }
+        let status = std::process::Command::new("tar")
+            .args(["-xzf"])
+            .arg(&path)
+            .arg("-C")
+            .arg(&extract)
+            .status();
+        let Ok(status) = status else {
+            let _ = open::that(&path);
+            return;
+        };
+        if !status.success() {
+            let _ = open::that(&path);
+            return;
+        }
+        let mut found = None;
+        for entry in walkdir::WalkDir::new(&extract).max_depth(3) {
+            let Ok(entry) = entry else { continue };
+            if entry.file_type().is_file() && entry.file_name() == "echoport" {
+                found = Some(entry.into_path());
+                break;
+            }
+        }
+        let Some(new_bin) = found else {
+            let _ = open::that(&path);
+            return;
+        };
+        let tmp = current.with_extension("update-new");
+        if std::fs::copy(&new_bin, &tmp).is_err() {
+            let _ = open::that(&path);
+            return;
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755));
+        }
+        if std::fs::rename(&tmp, &current).is_err() {
+            let _ = std::fs::remove_file(&tmp);
+            let _ = open::that(&path);
+            return;
+        }
+        let _ = std::process::Command::new(&current)
+            .env_remove("ECHOPORT_AUTO_UPDATE")
+            .env_remove("ECHOPORT_CURRENT_VERSION")
+            .spawn();
+        self.quitting = true;
+        self.save_now();
+        self.ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    fn apply_update(&mut self, path: std::path::PathBuf) {
+        let _ = open::that(path);
+    }
+
     fn spawn_update_check(&mut self) {
         if self.state.updates.checking {
             return;
@@ -1773,7 +2011,10 @@ impl EchoPortApp {
         self.ctx.request_repaint();
         let http = self.http.clone();
         let tx = self.tx.clone();
-        let current = self.version().to_owned();
+        let current = std::env::var("ECHOPORT_CURRENT_VERSION")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| self.version().to_owned());
         std::thread::spawn(move || {
             let result = crate::update::check(&http, &current);
             let _ = tx.send(AppEvent::UpdateCheckDone(result));

@@ -177,6 +177,9 @@ pub struct UpdateView {
     pub dismissed: bool,
     pub last_checked: Option<std::time::Instant>,
     pub error: Option<String>,
+    /// Downloading/installing the available update.
+    pub downloading: bool,
+    pub progress: Option<f32>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -522,7 +525,9 @@ pub enum Command {
     CheckForUpdates,
     /// Keep the current version (dismiss the startup update prompt).
     DismissUpdate,
-    /// Open the release page of the available update.
+    /// Download, verify and install the available update.
+    InstallUpdate,
+    /// Open the release page (fallback / release notes).
     OpenUpdatePage,
     /// Open the embedded bilingual plugin-development manual.
     OpenPluginDocs,
@@ -554,6 +559,12 @@ pub enum AppEvent {
     ArtistDetailReady(Box<ArtistDetail>),
     /// Result of the GitHub update check.
     UpdateCheckDone(Result<Option<UpdateInfo>, String>),
+    /// Update asset download progress (0..1 when the size is known).
+    UpdateProgress(Option<f32>),
+    /// A verified update installer/archive is ready to apply.
+    UpdateDownloaded(std::path::PathBuf),
+    /// Update download/verification/install failed.
+    UpdateDownloadFailed(String),
     Resolved {
         track: Track,
         path: PathBuf,
