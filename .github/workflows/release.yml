@@ -15,6 +15,27 @@ permissions:
 #   Source:  GitHub's automatic source tarball/zip
 # No MSI/zip/pacman/macOS assets are published by CI.
 jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config libasound2-dev libxkbcommon-dev \
+            libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxcb1-dev libx11-dev libxi-dev libgl1-mesa-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Tests
+        run: cargo test --locked
+
   linux:
     runs-on: ubuntu-latest
     steps:
@@ -82,10 +103,10 @@ jobs:
           name: windows-setup
           path: |
             dist/echoport-*-windows-x86_64-setup.exe*
-            dist/echoport-*-windows-x86_64-lean-setup.exe*
+            dist/echoport-*-windows-x86_64-lean-installer.exe*
 
   release:
-    needs: [linux, windows-setup]
+    needs: [quality, linux, windows-setup]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -102,7 +123,7 @@ jobs:
             "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/$tag") || exit 0
           ids=$(printf '%s' "$rel" | jq -r '
             .assets[]
-            | select(.name | test("echoport-.*-(windows-x86_64(-lean)?-setup[.]exe|linux-x86_64(-lean)?[.]tar[.]gz)([.]sha256)?$") | not)
+            | select(.name | test("echoport-.*-((windows-x86_64-setup|windows-x86_64-lean-installer)[.]exe|linux-x86_64(-lean)?[.]tar[.]gz)([.]sha256)?$") | not)
             | .id')
           for id in $ids; do
             curl -fsSL -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \

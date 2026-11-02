@@ -473,9 +473,7 @@ impl LinearResampler {
                 // Interpolate between the last frame of the previous block and the
                 // first frame of this one.
                 let frac = (position + 1.0) as f32;
-                for channel in 0..channels {
-                    let a = self.previous[channel];
-                    let b = input[channel];
+                for (a, b) in self.previous.iter().zip(input.iter()).take(channels) {
                     out.push(a + (b - a) * frac);
                 }
             } else {
@@ -602,9 +600,8 @@ fn build_output_stream(
         SampleFormat::U64 => build_typed::<u64>(device, config, shared, consumer),
         _ => Err(cpal::Error::new(cpal::ErrorKind::UnsupportedConfig)),
     }
-    .map(|stream| {
+    .inspect(|_stream| {
         let _ = out_channels;
-        stream
     })
 }
 
@@ -1248,20 +1245,15 @@ mod tests {
         let mut frames = 0u64;
         let mut peak = 0.0f32;
         let mut blocks = 0u32;
-        loop {
-            match decoder.next_block(&mut buffer).expect("decode") {
-                Some(block) => {
-                    assert!(block.rate > 0);
-                    assert!(block.channels > 0);
-                    assert_eq!(buffer.len(), block.frames * block.channels);
-                    for &sample in &buffer {
-                        peak = peak.max(sample.abs());
-                    }
-                    frames += block.frames as u64;
-                    blocks += 1;
-                }
-                None => break,
+        while let Some(block) = decoder.next_block(&mut buffer).expect("decode") {
+            assert!(block.rate > 0);
+            assert!(block.channels > 0);
+            assert_eq!(buffer.len(), block.frames * block.channels);
+            for &sample in &buffer {
+                peak = peak.max(sample.abs());
             }
+            frames += block.frames as u64;
+            blocks += 1;
         }
         assert!(blocks > 10, "expected many mp3 frames, got {blocks} blocks");
         assert!(frames > 0);

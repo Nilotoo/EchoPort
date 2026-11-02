@@ -988,9 +988,7 @@ pub fn play_button_at(ui: &mut Ui, rect: Rect, theme: &Theme, playing: bool) -> 
         rect.shrink(size * 0.28),
         theme.on_accent,
     );
-    response
-        .on_hover_cursor(CursorIcon::PointingHand)
-        .on_hover_text(if playing { "" } else { "" })
+    response.on_hover_cursor(CursorIcon::PointingHand)
 }
 
 // ---------------------------------------------------------------------------
@@ -1598,11 +1596,7 @@ pub fn switch(ui: &mut Ui, theme: &Theme, on: bool, id_salt: impl std::hash::Has
         8.0,
         Color32::from_black_alpha(if theme.dark { 60 } else { 16 }),
     );
-    let knob = if t > 0.5 {
-        theme.surface
-    } else {
-        theme.surface
-    };
+    let knob = theme.surface;
     ui.painter()
         .circle_filled(Pos2::new(knob_x, rect.center().y), 8.0, knob);
     if on {

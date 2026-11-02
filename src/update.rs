@@ -27,28 +27,46 @@ pub struct UpdateInfo {
     pub assets: Vec<UpdateAsset>,
 }
 
-/// Pick the release asset for this platform. Windows prefers the interactive
-/// NSIS setup; Linux/macOS use the archives produced by the release workflow.
+/// Pick the exact release asset for this platform/build. There is deliberately
+/// no `contains("setup.exe")` fallback: that could silently turn a Full build
+/// into Lean when release asset ordering changes.
 pub fn asset_for_current_platform(info: &UpdateInfo) -> Option<&UpdateAsset> {
     #[cfg(target_os = "windows")]
-    let preferred: &[&str] = &[
-        "inno-setup.exe",
-        "setup.exe",
-        "windows-x86_64.msi",
-        "windows-x86_64.zip",
-    ];
+    let suffix = if cfg!(feature = "scripting") {
+        "windows-x86_64-setup.exe"
+    } else {
+        "windows-x86_64-lean-installer.exe"
+    };
     #[cfg(target_os = "linux")]
-    let preferred: &[&str] = &["linux-x86_64.tar.gz"];
+    let suffix = if cfg!(feature = "scripting") {
+        "linux-x86_64.tar.gz"
+    } else {
+        "linux-x86_64-lean.tar.gz"
+    };
     #[cfg(target_os = "macos")]
-    let preferred: &[&str] = &["macos", ".app.zip", ".zip"];
+    let suffix = "macos-x86_64.tar.gz";
     #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
-    let preferred: &[&str] = &["tar.gz", "zip"];
-    for suffix in preferred {
-        if let Some(asset) = info.assets.iter().find(|asset| asset.name.contains(suffix)) {
-            return Some(asset);
-        }
+    let suffix = "tar.gz";
+    info.assets
+        .iter()
+        .find(|asset| asset.name.ends_with(suffix))
+}
+
+/// Only accept actual GitHub HTTPS URLs (not `https://github.com.evil/...`).
+pub fn trusted_github_url(url: &str) -> bool {
+    if url.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return false;
     }
-    None
+    let Ok(parsed) = url::Url::parse(url) else {
+        return false;
+    };
+    parsed.scheme() == "https"
+        && parsed.host_str().is_some_and(|host| {
+            host.eq_ignore_ascii_case("github.com")
+                || host.eq_ignore_ascii_case("objects.githubusercontent.com")
+        })
+        && parsed.username().is_empty()
+        && parsed.password().is_none()
 }
 
 /// The `.sha256` sibling asset for a downloaded asset, if published.
@@ -266,5 +284,46 @@ mod tests {
         assert!(!safe_release_url("javascript:alert(1)"));
         assert_eq!(sanitized_latest("v0.2.0"), Some("0.2.0".to_owned()));
         assert!(sanitized_latest("bad version").is_none());
+        assert!(trusted_github_url(
+            "https://github.com/Nilotoo/EchoPort/releases/download/v1/a.tar.gz"
+        ));
+        assert!(!trusted_github_url("https://github.com.evil/a.tar.gz"));
+        assert!(!trusted_github_url("http://github.com/a.tar.gz"));
+    }
+
+    #[test]
+    fn update_picks_exact_variant_and_checksum() {
+        let info = UpdateInfo {
+            current: "0.3.1".to_owned(),
+            latest: "0.3.2".to_owned(),
+            title: "t".to_owned(),
+            url: "https://github.com/Nilotoo/EchoPort/releases".to_owned(),
+            notes: String::new(),
+            published_at: None,
+            assets: vec![
+                UpdateAsset {
+                    name: "echoport-0.3.2-linux-x86_64-lean.tar.gz".to_owned(),
+                    url: String::new(),
+                },
+                UpdateAsset {
+                    name: "echoport-0.3.2-linux-x86_64.tar.gz".to_owned(),
+                    url: String::new(),
+                },
+                UpdateAsset {
+                    name: "echoport-0.3.2-linux-x86_64.tar.gz.sha256".to_owned(),
+                    url: String::new(),
+                },
+            ],
+        };
+        #[cfg(target_os = "linux")]
+        {
+            let picked = asset_for_current_platform(&info).expect("asset");
+            if cfg!(feature = "scripting") {
+                assert_eq!(picked.name, "echoport-0.3.2-linux-x86_64.tar.gz");
+            } else {
+                assert_eq!(picked.name, "echoport-0.3.2-linux-x86_64-lean.tar.gz");
+            }
+            assert!(checksum_asset(&info, picked).is_some());
+        }
     }
 }

@@ -945,8 +945,8 @@ fn queue_panel(
                             {
                                 pending.push(Command::ToggleQueuePanel);
                             }
-                            if !app.state.queue.is_empty() {
-                                if style::icon_button(
+                            if !app.state.queue.is_empty()
+                                && style::icon_button(
                                     ui,
                                     theme,
                                     Icon::Trash,
@@ -955,9 +955,8 @@ fn queue_panel(
                                     app.state.tr(Key::ClearQueue),
                                 )
                                 .clicked()
-                                {
-                                    pending.push(Command::ClearQueue);
-                                }
+                            {
+                                pending.push(Command::ClearQueue);
                             }
                         });
                     });
@@ -1118,8 +1117,6 @@ fn toasts(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, player_heig
                         };
                         let icon = if toast.kind == ToastKind::Success {
                             Icon::Check
-                        } else if toast.kind == ToastKind::Error {
-                            Icon::Info
                         } else {
                             Icon::Info
                         };
@@ -1213,7 +1210,7 @@ fn dialogs(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, pending: &
                     app.state.tr(Key::Delete),
                     true,
                 ),
-                Dialog::Download { tracks: _, .. } => (
+                Dialog::Download { .. } => (
                     app.state.tr(Key::DownloadOptions),
                     "",
                     app.state.tr(Key::Download),
@@ -1300,18 +1297,17 @@ fn dialogs(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, pending: &
                                 *clear_cover = false;
                             }
                         }
-                        if existing_cover.is_some() || new_cover.is_some() {
-                            if style::button(
+                        if (existing_cover.is_some() || new_cover.is_some())
+                            && style::button(
                                 ui,
                                 theme,
                                 app.state.tr(Key::RemoveCover),
                                 style::Variant::Ghost,
                             )
                             .clicked()
-                            {
-                                *new_cover = None;
-                                *clear_cover = true;
-                            }
+                        {
+                            *new_cover = None;
+                            *clear_cover = true;
                         }
                     });
                     if let Some(path) = new_cover.as_ref() {

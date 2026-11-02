@@ -21,6 +21,10 @@ const MIN_IMAGE_BYTES: u64 = 512;
 const MIN_IMAGE_EDGE: u32 = 32;
 /// Hard cap for a remote cover; abort instead of buffering something absurd.
 const MAX_IMAGE_BYTES: usize = 24 * 1024 * 1024;
+/// Keep the on-disk cover cache bounded; covers are reproducible.
+const MAX_COVER_CACHE_BYTES: u64 = 256 * 1024 * 1024;
+/// Prune down to this watermark instead of waiting for the hard cap again.
+const COVER_CACHE_WATERMARK: u64 = 192 * 1024 * 1024;
 
 /// Extensions that may hold a cached cover, most likely first.
 const KNOWN_EXTENSIONS: [&str; 7] = ["jpg", "png", "webp", "gif", "bmp", "tif", "img"];
@@ -88,7 +92,7 @@ impl ArtCache {
             candidates.push(format!("https://{rest}"));
         }
         for candidate in candidates {
-            if let Ok(bytes) = http.get_bytes(&candidate, &[]) {
+            if let Ok(bytes) = http.get_bytes_limited(&candidate, &[], MAX_IMAGE_BYTES) {
                 if let Some(path) = self.store(url, &bytes) {
                     return Some(path);
                 }
@@ -124,7 +128,7 @@ impl ArtCache {
             candidates.push(format!("https://{rest}"));
         }
         for candidate in candidates {
-            if let Ok(bytes) = http.get_bytes(&candidate, &[]) {
+            if let Ok(bytes) = http.get_bytes_limited(&candidate, &[], MAX_IMAGE_BYTES) {
                 if let Some(path) = self.store(url, &bytes) {
                     return Some(path);
                 }
@@ -159,7 +163,7 @@ impl ArtCache {
             candidates.push(format!("https://{rest}"));
         }
         for url in candidates {
-            match http.get_bytes(&url, &[]) {
+            match http.get_bytes_limited(&url, &[], MAX_IMAGE_BYTES) {
                 Ok(bytes) => {
                     if let Some(path) = self.store(art_url, &bytes) {
                         return Some(path);
@@ -192,7 +196,44 @@ impl ArtCache {
             let _ = std::fs::remove_file(&temp);
             return None;
         }
+        self.prune_cache();
         Some(target)
+    }
+
+    /// Remove the oldest cover files when the cache exceeds its cap. Best
+    /// effort: a concurrent fetch may win the race, which is harmless.
+    fn prune_cache(&self) {
+        let Ok(entries) = std::fs::read_dir(&self.dir) else {
+            return;
+        };
+        let mut files: Vec<(std::time::SystemTime, u64, PathBuf)> = entries
+            .flatten()
+            .filter_map(|entry| {
+                let path = entry.path();
+                let meta = entry.metadata().ok()?;
+                if !meta.is_file() {
+                    return None;
+                }
+                let extension = path.extension().and_then(|value| value.to_str())?;
+                if !KNOWN_EXTENSIONS.contains(&extension) {
+                    return None;
+                }
+                Some((meta.modified().ok()?, meta.len(), path))
+            })
+            .collect();
+        let mut total = files.iter().map(|(_, size, _)| *size).sum::<u64>();
+        if total <= MAX_COVER_CACHE_BYTES {
+            return;
+        }
+        files.sort_by_key(|(modified, _, _)| *modified);
+        for (_, size, path) in files {
+            if total <= COVER_CACHE_WATERMARK {
+                break;
+            }
+            if std::fs::remove_file(path).is_ok() {
+                total = total.saturating_sub(size);
+            }
+        }
     }
 
     /// Extension-less path used by older callers; new code uses `resolve`.

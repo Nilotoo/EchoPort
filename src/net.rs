@@ -10,6 +10,11 @@ use std::time::Duration;
 
 use serde::de::DeserializeOwned;
 
+/// Hard caps for API/image responses. Streaming update downloads are not capped
+/// here; they are verified by the release checksum.
+const MAX_TEXT_BODY: usize = 8 * 1024 * 1024;
+const MAX_BODY_BYTES: usize = 32 * 1024 * 1024;
+
 const USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 \
     (KHTML, like Gecko) Chrome/126.0 Safari/537.36 EchoPort/0.1";
 
@@ -73,15 +78,8 @@ impl Http {
     }
 
     pub fn get_text(&self, url: &str, headers: &[(&str, &str)]) -> Result<String, NetError> {
-        let mut response = self.request(url, headers)?;
-        Self::ensure_success(&response)?;
-        let mut body = String::new();
-        response
-            .body_mut()
-            .as_reader()
-            .read_to_string(&mut body)
-            .map_err(|err| NetError::Transport(err.to_string()))?;
-        Ok(body)
+        let bytes = self.get_bytes_limited(url, headers, MAX_TEXT_BODY)?;
+        String::from_utf8(bytes).map_err(|err| NetError::Transport(err.to_string()))
     }
 
     pub fn get_json<T: DeserializeOwned>(
@@ -94,14 +92,38 @@ impl Http {
     }
 
     pub fn get_bytes(&self, url: &str, headers: &[(&str, &str)]) -> Result<Vec<u8>, NetError> {
+        self.get_bytes_limited(url, headers, MAX_BODY_BYTES)
+    }
+
+    /// Read a response body with a hard cap, so a malicious server cannot make
+    /// the app allocate unbounded memory.
+    pub fn get_bytes_limited(
+        &self,
+        url: &str,
+        headers: &[(&str, &str)],
+        limit: usize,
+    ) -> Result<Vec<u8>, NetError> {
         let mut response = self.request(url, headers)?;
         Self::ensure_success(&response)?;
+        if let Some(length) = response.body().content_length() {
+            if length > limit as u64 {
+                return Err(NetError::Transport(format!(
+                    "response body {length} exceeds limit {limit}"
+                )));
+            }
+        }
         let mut bytes = Vec::new();
         response
             .body_mut()
             .as_reader()
+            .take(limit.saturating_add(1) as u64)
             .read_to_end(&mut bytes)
             .map_err(|err| NetError::Transport(err.to_string()))?;
+        if bytes.len() > limit {
+            return Err(NetError::Transport(format!(
+                "response body exceeds limit {limit}"
+            )));
+        }
         Ok(bytes)
     }
 

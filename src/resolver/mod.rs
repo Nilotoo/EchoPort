@@ -310,13 +310,7 @@ impl ProcessOutput {
 
     /// Human readable one-line tail of stderr (for error messages/UI toasts).
     pub(crate) fn error_tail(&self) -> String {
-        if let Some(line) = self
-            .stderr
-            .lines()
-            .map(str::trim)
-            .filter(|l| !l.is_empty())
-            .last()
-        {
+        if let Some(line) = self.stderr.lines().map(str::trim).rfind(|l| !l.is_empty()) {
             return truncate(line, 280);
         }
         if self.timed_out {
@@ -630,7 +624,7 @@ pub fn prune_cache(dir: &Path, max_bytes: u64) -> u64 {
             (modified < cutoff).then_some((modified, size, path))
         })
         .collect();
-    candidates.sort_by(|left, right| left.0.cmp(&right.0));
+    candidates.sort_by_key(|left| left.0);
 
     let mut freed = 0u64;
     for (_, size, path) in candidates {
@@ -743,10 +737,45 @@ impl Source {
     }
 }
 
+/// Imported playlist JSON can contain arbitrary `page_url` values. Only pass
+/// known platform hosts to yt-dlp, with a plain http(s) URL.
+fn safe_page_url(platform: Platform, url: &str) -> bool {
+    if url.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return false;
+    }
+    let Ok(parsed) = url::Url::parse(url) else {
+        return false;
+    };
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return false;
+    }
+    let Some(host) = parsed.host_str().map(|host| host.to_ascii_lowercase()) else {
+        return false;
+    };
+    let allowed = |domains: &[&str]| {
+        domains
+            .iter()
+            .any(|domain| host == *domain || host.ends_with(&format!(".{domain}")))
+    };
+    match platform {
+        Platform::YouTube => allowed(&["youtube.com", "youtu.be", "youtube-nocookie.com"]),
+        Platform::SoundCloud => allowed(&["soundcloud.com", "snd.sc", "on.soundcloud.com"]),
+        Platform::Bilibili => allowed(&["bilibili.com", "b23.tv"]),
+        Platform::Netease => allowed(&["music.163.com", "163cn.tv"]),
+        Platform::InternetArchive => allowed(&["archive.org"]),
+        Platform::Spotify => allowed(&["spotify.com", "spotify.link", "spotify.app.link"]),
+        Platform::AppleMusic => allowed(&["music.apple.com", "itunes.apple.com"]),
+        Platform::Local => false,
+    }
+}
+
 /// Ordered list of yt-dlp sources to try for `track` (first successful wins).
 pub(crate) fn sources_for(track: &Track) -> Vec<Source> {
     let search_query = |prefix: &str| Source::Search(format!("{prefix}:{}", track.search_text()));
-    let page_url = track.page_url.as_deref().filter(|url| !url.is_empty());
+    let page_url = track
+        .page_url
+        .as_deref()
+        .filter(|url| !url.is_empty() && safe_page_url(track.platform, url));
     match track.platform {
         Platform::Local => Vec::new(),
         Platform::YouTube => match page_url {
@@ -1064,6 +1093,8 @@ fn download_source(
         "-o",
     ]);
     command.arg(&output_template);
+    // `--` stops yt-dlp from interpreting a URL/query as an option.
+    command.arg("--");
     command.arg(source.argument());
 
     let output = run_process(command, RESOLVE_TIMEOUT)?;
@@ -1342,8 +1373,7 @@ impl FlatEntry {
                 thumbnails
                     .iter()
                     .filter_map(|thumb| thumb.url.as_deref())
-                    .filter(|url| !url.is_empty())
-                    .last()
+                    .rfind(|url| !url.is_empty())
             })
             .map(|url| url.to_owned())
     }
@@ -1366,7 +1396,7 @@ impl FlatEntry {
             .id
             .as_deref()
             .filter(|id| !id.is_empty())
-            .or_else(|| self.url.as_deref())
+            .or(self.url.as_deref())
             .unwrap_or("unknown");
         format!("{} video {identifier}", platform.label())
     }
@@ -1393,7 +1423,7 @@ fn run_search(
 
     let _slot = YtdlpSlot::acquire();
     let mut command = process::quiet(ytdlp);
-    command.args(["-J", "--flat-playlist", "--no-warnings", &expression]);
+    command.args(["-J", "--flat-playlist", "--no-warnings", "--", &expression]);
     let output = run_process(command, SEARCH_TIMEOUT)?;
     if !output.success() {
         return Err(classify_failure(&output));

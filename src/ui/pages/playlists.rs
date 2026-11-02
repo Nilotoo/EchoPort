@@ -143,22 +143,21 @@ fn list_panel(
         if playlists.is_empty() {
             ui.add_space(20.0);
             ui.vertical_centered(|ui| {
-                style::empty_state(
+                if let Some(response) = style::empty_state(
                     ui,
                     theme,
                     Icon::Playlist,
                     app.state.tr(Key::EmptyPlaylists),
                     app.state.tr(Key::NoPlaylistsHint),
                     Some(app.state.tr(Key::CreatePlaylist)),
-                )
-                .map(|response| {
+                ) {
                     if response.clicked() {
                         app.ui.dialog = Some(Dialog::NewPlaylist {
                             seed: Vec::new(),
                             name: String::new(),
                         });
                     }
-                });
+                }
             });
             return;
         }

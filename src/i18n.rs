@@ -7,15 +7,11 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum Language {
+    #[default]
     En,
     Zh,
-}
-
-impl Default for Language {
-    fn default() -> Self {
-        Self::En
-    }
 }
 
 impl Language {
@@ -279,6 +275,7 @@ pub enum Key {
     UpdateDownloading,
     UpdateInstalling,
     UpdateFailed,
+    ProfileSaveFailed,
     // v0.1.3 UI round
     DoubleClickPlay,
     DoubleClickOpen,
@@ -694,6 +691,10 @@ impl Key {
             UpdateFailed => (
                 "Automatic update failed. Opening the release page instead.",
                 "自动更新失败，已改为打开发布页手动下载。",
+            ),
+            ProfileSaveFailed => (
+                "Could not save the profile. Check disk space/permissions; a backup was kept.",
+                "资料保存失败。请检查磁盘空间/权限；旧备份已保留。",
             ),
             DoubleClickPlay => ("Double-click to play", "双击播放"),
             DoubleClickOpen => ("Double-click to open", "双击打开"),

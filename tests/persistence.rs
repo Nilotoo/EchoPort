@@ -72,15 +72,17 @@ fn profile_roundtrip_keeps_every_field() {
     let dir = tempfile::tempdir().expect("tempdir");
     let store = store_in(&dir);
 
-    let mut settings = Settings::default();
-    settings.language = Language::Zh;
-    settings.theme_mode = ThemeMode::Ink;
-    settings.follow_cover_accent = false;
-    settings.download_format = DownloadFormat::Flac;
-    settings.download_dir = PathBuf::from("/tmp/echoport-downloads");
-    settings.music_dirs = vec![PathBuf::from("/music/a"), PathBuf::from("/music/b")];
-    settings.volume = 0.33;
-    settings.results_per_platform = 7;
+    let settings = Settings {
+        language: Language::Zh,
+        theme_mode: ThemeMode::Ink,
+        follow_cover_accent: false,
+        download_format: DownloadFormat::Flac,
+        download_dir: PathBuf::from("/tmp/echoport-downloads"),
+        music_dirs: vec![PathBuf::from("/music/a"), PathBuf::from("/music/b")],
+        volume: 0.33,
+        results_per_platform: 7,
+        ..Settings::default()
+    };
 
     let mut profile = Profile::new("Round Trip", settings);
     let local = {

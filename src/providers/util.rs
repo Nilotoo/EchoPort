@@ -82,12 +82,10 @@ pub fn https_url(raw: &str) -> Option<String> {
     }
     if trimmed.starts_with("https://") {
         Some(trimmed.to_owned())
-    } else if let Some(rest) = trimmed.strip_prefix("http://") {
-        // Cover/CDN hosts in the catalogues we use all speak TLS; the `art`
-        // cache retries the plain-HTTP variant if the upgrade is rejected.
-        Some(format!("https://{rest}"))
     } else {
-        None
+        trimmed
+            .strip_prefix("http://")
+            .map(|rest| format!("https://{rest}"))
     }
 }
 
@@ -149,7 +147,7 @@ fn valid_calendar_date(year: u16, month: u8, day: u8) -> bool {
     if !(1000..=2200).contains(&year) || !(1..=12).contains(&month) || day == 0 {
         return false;
     }
-    let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    let leap = (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400);
     let max_day = match month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         4 | 6 | 9 | 11 => 30,

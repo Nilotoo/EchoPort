@@ -22,12 +22,12 @@ pub struct IconAssets {
 
 impl IconAssets {
     fn texture(&mut self, ctx: &Context, id: u8) -> Option<&TextureHandle> {
-        if !self.textures.contains_key(&id) {
+        if let std::collections::hash_map::Entry::Vacant(e) = self.textures.entry(id) {
             let bytes = asset_bytes(id)?;
             let image = decode_png(bytes)?;
             let texture =
                 ctx.load_texture(format!("echoport-icon-{id}"), image, TextureOptions::LINEAR);
-            self.textures.insert(id, texture);
+            e.insert(texture);
         }
         self.textures.get(&id)
     }
