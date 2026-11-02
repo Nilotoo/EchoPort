@@ -998,7 +998,7 @@ mod tests {
             tracks.push(Track::new(
                 Platform::Netease,
                 &format!("{index}"),
-                &format!("Song {index}"),
+                format!("Song {index}"),
                 "Porter Robinson",
             ));
         }

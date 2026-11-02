@@ -938,18 +938,13 @@ fn more_menu(
         style::menu_separator(ui, theme);
         style::menu_heading(ui, theme, app.state.tr(Key::AddToPlaylist));
         let playlists = app.state.profile.playlists.clone();
-        let mut shown = 0;
-        for playlist in &playlists {
-            if shown >= 5 {
-                break;
-            }
+        for playlist in playlists.iter().take(5) {
             if style::menu_item(ui, theme, Icon::Playlist, &playlist.name, false).clicked() {
                 pending.push(Command::AddToPlaylist {
                     playlist_id: playlist.id.clone(),
                     tracks: vec![track.clone()],
                 });
             }
-            shown += 1;
         }
         if style::menu_item(ui, theme, Icon::Plus, app.state.tr(Key::NewPlaylist), false).clicked()
         {

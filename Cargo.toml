@@ -1,6 +1,6 @@
 [package]
 name = "echoport"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 repository = "https://github.com/Nilotoo/EchoPort"
 homepage = "https://github.com/Nilotoo/EchoPort"
@@ -55,7 +55,7 @@ opt-level = 3
 lto = "fat"
 codegen-units = 1
 strip = true
-panic = "abort"
+panic = "unwind"
 
 [profile.lean]
 inherits = "release"

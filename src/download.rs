@@ -197,6 +197,7 @@ fn run_download(
         options.embed_metadata,
         &output_template,
     ));
+    command.arg("--");
     command.arg(source);
     command
         .stdin(Stdio::null())
@@ -328,7 +329,7 @@ fn run_download(
 fn parse_progress_line(line: &str) -> Option<f32> {
     let rest = line.trim_start().strip_prefix("[download]")?;
     let percent_index = rest.find('%')?;
-    let number = rest[..percent_index].trim().split_whitespace().last()?;
+    let number = rest[..percent_index].split_whitespace().last()?;
     let value: f32 = number.parse().ok()?;
     if !value.is_finite() {
         return None;
@@ -345,9 +346,9 @@ fn stage_for_line(line: &str) -> Option<&'static str> {
         Some("tagging")
     } else if line.starts_with("[EmbedThumbnail]") {
         Some("embedding cover")
-    } else if line.starts_with("[download] Destination:") {
-        Some("downloading")
-    } else if line.starts_with("[download]") && line.contains('%') {
+    } else if line.starts_with("[download]")
+        && (line.starts_with("[download] Destination:") || line.contains('%'))
+    {
         Some("downloading")
     } else {
         None

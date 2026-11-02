@@ -9,6 +9,7 @@
 //! * [`providers`] / [`art`] / [`background`] — online catalogues and covers
 //! * [`ui`] / [`theme`] / [`i18n`] — the egui interface
 //! * [`store`] — JSON profiles under the platform data directory
+#![allow(clippy::too_many_arguments)]
 
 pub mod app;
 pub mod art;

@@ -24,21 +24,17 @@ use crate::model::Platform;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum ThemeMode {
     /// Porcelain white + vivid blue + fluorescent lime.
     #[serde(alias = "blue_white", alias = "album", alias = "porcelain")]
+    #[default]
     Pulse,
     /// Light aqua + teal + navy.
     Tide,
     /// Low saturation dark slate.
     #[serde(alias = "midnight")]
     Ink,
-}
-
-impl Default for ThemeMode {
-    fn default() -> Self {
-        Self::Pulse
-    }
 }
 
 impl ThemeMode {
@@ -730,11 +726,7 @@ fn vivid_version(color: Color32) -> Color32 {
 
 fn brighten_for_dark(color: Color32) -> Color32 {
     let (h, s, l) = to_hsl(color);
-    from_hsl(
-        h,
-        (s * 0.85 + 0.05).clamp(0.25, 0.75),
-        l.max(0.62).min(0.78),
-    )
+    from_hsl(h, (s * 0.85 + 0.05).clamp(0.25, 0.75), l.clamp(0.62, 0.78))
 }
 
 fn hue_distance(a: f32, b: f32) -> f32 {

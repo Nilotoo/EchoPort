@@ -12,6 +12,7 @@ fn main() -> eframe::Result {
         .filter_level(log::LevelFilter::Info)
         .parse_default_env()
         .init();
+    install_crash_log();
 
     let mut viewport = egui::ViewportBuilder::default()
         .with_inner_size([1360.0, 860.0])
@@ -36,6 +37,40 @@ fn main() -> eframe::Result {
             Ok(Box::new(EchoPortApp::new(cc)))
         }),
     )
+}
+
+/// Write a local crash log before the default panic hook runs. This keeps a
+/// `panic=unwind` failure inspectable even when the GUI disappears instantly.
+fn install_crash_log() {
+    std::panic::set_hook(Box::new(|info| {
+        use std::io::Write;
+        let paths = echoport::store::AppPaths::resolve();
+        let _ = std::fs::create_dir_all(&paths.data_dir);
+        let log_path = paths.data_dir.join("crash.log");
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+        {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|duration| duration.as_secs())
+                .unwrap_or(0);
+            let payload = info
+                .payload()
+                .downcast_ref::<&str>()
+                .copied()
+                .or_else(|| info.payload().downcast_ref::<String>().map(String::as_str))
+                .unwrap_or("unknown panic");
+            let _ = writeln!(
+                file,
+                "time={now} location={:?} message={payload}\n{}",
+                info.location(),
+                std::backtrace::Backtrace::force_capture()
+            );
+        }
+        eprintln!("EchoPort panicked: {info}");
+    }));
 }
 
 /// App icon: the same artwork as `assets/icon.png` (soft blue→pink sphere on a

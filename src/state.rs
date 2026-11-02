@@ -308,8 +308,10 @@ impl AppState {
         let volume = profile.settings.volume;
         let follow_cover_accent = profile.settings.follow_cover_accent;
         let ui_scale = profile.settings.ui_scale;
-        let mut playback = PlaybackStatus::default();
-        playback.volume = volume;
+        let playback = PlaybackStatus {
+            volume,
+            ..PlaybackStatus::default()
+        };
         let theme = Theme::for_mode(theme_mode, None);
         Self {
             lang: profile.settings.language,

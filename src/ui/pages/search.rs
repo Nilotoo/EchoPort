@@ -434,7 +434,7 @@ fn ranked_artists(
         .filter(|group| !group.artists.is_empty())
         .map(|group| {
             let mut names: Vec<Artist> = group.artists.clone();
-            names.sort_by(|a, b| score_artist(query, &b.name).cmp(&score_artist(query, &a.name)));
+            names.sort_by_key(|artist| std::cmp::Reverse(score_artist(query, &artist.name)));
             let best = names
                 .first()
                 .map(|artist| score_artist(query, &artist.name))

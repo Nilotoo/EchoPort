@@ -1107,6 +1107,9 @@ pub fn ellipsize(text: &str, max_chars: usize) -> String {
     out
 }
 
+// Re-exported here so callers that only import `model` can still build settings.
+pub type TrackId = String;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1242,6 +1245,3 @@ mod tests {
         assert!(!parsed.is_favorite_album(&album.id));
     }
 }
-
-// Re-exported here so callers that only import `model` can still build settings.
-pub type TrackId = String;

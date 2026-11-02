@@ -21,19 +21,18 @@ pub fn draw(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec
     header(ui, app, theme, pending);
     ui.add_space(8.0);
     let Some(track) = app.state.now_playing.clone() else {
-        style::empty_state(
+        if let Some(response) = style::empty_state(
             ui,
             theme,
             Icon::Music,
             app.state.tr(Key::EmptyStateHint),
             app.state.tr(Key::SearchTryHint),
             Some(app.state.tr(Key::SearchNav)),
-        )
-        .map(|response| {
+        ) {
             if response.clicked() {
                 app.set_page(Page::Search);
             }
-        });
+        }
         return;
     };
     match app.state.now_playing_tab {

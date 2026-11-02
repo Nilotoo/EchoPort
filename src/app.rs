@@ -102,7 +102,9 @@ impl EchoPortApp {
             log::warn!("could not create data directories: {err}");
         }
         let store = ProfileStore::new(paths.clone());
-        let mut profile = store.load_or_create(None);
+        let preferred = store.last_profile();
+        let mut profile = store.load_or_create(preferred.as_deref());
+        let _ = store.remember_last_profile(&profile.name);
         let profiles = store.list();
 
         // Demo mode powers screenshots/UI work. `ECHOPORT_LIVE=1` forces the
@@ -605,8 +607,10 @@ impl EchoPortApp {
                 if name.is_empty() {
                     return;
                 }
-                let mut settings = Settings::default();
-                settings.language = self.state.lang;
+                let settings = Settings {
+                    language: self.state.lang,
+                    ..Settings::default()
+                };
                 let profile = Profile::new(name, settings);
                 if let Err(err) = self.store.save(&profile) {
                     log::warn!("could not save new profile: {err}");
@@ -702,12 +706,7 @@ impl EchoPortApp {
             Command::InstallUpdate => self.start_update_download(),
             Command::OpenUpdatePage => {
                 if let Some(info) = self.state.updates.available.as_ref() {
-                    if info.url.starts_with("https://github.com/")
-                        && !info
-                            .url
-                            .chars()
-                            .any(|c| c.is_whitespace() || c.is_control())
-                    {
+                    if crate::update::trusted_github_url(&info.url) {
                         if let Err(err) = open::that(&info.url) {
                             log::warn!("could not open update page {}: {err}", info.url);
                         }
@@ -1993,17 +1992,15 @@ impl EchoPortApp {
                     }
                 }
                 for playlist in self.state.profile.playlists.iter().take(10) {
-                    for track in self.state.profile.playlist_tracks(&playlist.id) {
-                        push(&track);
-                        break;
+                    if let Some(track) = self.state.profile.playlist_tracks(&playlist.id).first() {
+                        push(track);
                     }
                 }
             }
             Page::Playlists => {
                 for playlist in self.state.profile.playlists.iter().take(10) {
-                    for track in self.state.profile.playlist_tracks(&playlist.id) {
-                        push(&track);
-                        break;
+                    if let Some(track) = self.state.profile.playlist_tracks(&playlist.id).first() {
+                        push(track);
                     }
                 }
             }
@@ -2316,6 +2313,7 @@ impl EchoPortApp {
     fn switch_profile(&mut self, name: &str) {
         self.save_now();
         if let Some(profile) = self.store.load(name) {
+            let _ = self.store.remember_last_profile(&profile.name);
             self.state.lang = profile.settings.language;
             self.state.profile = profile;
             self.state.profiles = self.store.list();
@@ -2364,16 +2362,21 @@ impl EchoPortApp {
             let _ = open::that(&info.url);
             return;
         };
-        if !asset.url.starts_with("https://github.com/")
-            || asset
-                .url
-                .chars()
-                .any(|c| c.is_whitespace() || c.is_control())
-        {
+        if !crate::update::trusted_github_url(&asset.url) {
             self.toast(ToastKind::Error, Key::UpdateFailed);
             return;
         }
-        let checksum_url = crate::update::checksum_asset(&info, &asset).map(|a| a.url.clone());
+        let Some(checksum_asset) = crate::update::checksum_asset(&info, &asset) else {
+            self.toast(ToastKind::Error, Key::UpdateFailed);
+            log::warn!("refusing update without a published .sha256");
+            let _ = open::that(&info.url);
+            return;
+        };
+        if !crate::update::trusted_github_url(&checksum_asset.url) {
+            self.toast(ToastKind::Error, Key::UpdateFailed);
+            return;
+        }
+        let checksum_url = Some(checksum_asset.url.clone());
         let dir = self.paths.cache_dir.join("updates");
         let dest = dir.join(&asset.name);
         self.state.updates.downloading = true;
@@ -2425,6 +2428,8 @@ impl EchoPortApp {
                         let _ = std::fs::remove_file(&dest);
                         return Err("download checksum mismatch".to_owned());
                     }
+                } else {
+                    return Err("update checksum asset is missing".to_owned());
                 }
                 Ok(())
             })();
@@ -2454,14 +2459,24 @@ impl EchoPortApp {
 param([int]$AppPid, [string]$Installer, [string]$InstallDir)
 Start-Sleep -Milliseconds 400
 try { Wait-Process -Id $AppPid -Timeout 90 -ErrorAction SilentlyContinue } catch {}
-if ($Installer.ToLower().EndsWith('.msi')) {
-    Start-Process -FilePath 'msiexec.exe' -ArgumentList '/i', ('"' + $Installer + '"'), '/qn' -Wait
-} elseif ($Installer.ToLower().Contains('inno-setup')) {
-    Start-Process -FilePath $Installer -ArgumentList ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="' + $InstallDir + '"') -Wait
-} else {
-    Start-Process -FilePath $Installer -ArgumentList ('/S /D="' + $InstallDir + '"') -Wait
+$exe = Join-Path $InstallDir 'echoport.exe'
+$backup = Join-Path $InstallDir 'echoport.bak'
+Copy-Item -LiteralPath $exe -Destination $backup -Force -ErrorAction SilentlyContinue
+try {
+    if ($Installer.ToLower().EndsWith('.msi')) {
+        Start-Process -FilePath 'msiexec.exe' -ArgumentList '/i', ('"' + $Installer + '"'), '/qn' -Wait
+    } elseif ($Installer.ToLower().Contains('inno-setup')) {
+        Start-Process -FilePath $Installer -ArgumentList ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="' + $InstallDir + '"') -Wait
+    } else {
+        Start-Process -FilePath $Installer -ArgumentList ('/S /D="' + $InstallDir + '"') -Wait
+    }
+} catch {
+    if (Test-Path -LiteralPath $backup) { Copy-Item -LiteralPath $backup -Destination $exe -Force }
 }
-Start-Process -FilePath (Join-Path $InstallDir 'echoport.exe')
+if (-not (Test-Path -LiteralPath $exe)) {
+    if (Test-Path -LiteralPath $backup) { Copy-Item -LiteralPath $backup -Destination $exe -Force }
+}
+Start-Process -FilePath $exe
 Remove-Item -LiteralPath $Installer -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
 "#;
@@ -2538,6 +2553,11 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
             let _ = open::that(&path);
             return;
         };
+        let backup = current.with_extension("bak");
+        if std::fs::copy(&current, &backup).is_err() {
+            let _ = open::that(&path);
+            return;
+        }
         let tmp = current.with_extension("update-new");
         if std::fs::copy(&new_bin, &tmp).is_err() {
             let _ = open::that(&path);
@@ -2553,10 +2573,17 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
             let _ = open::that(&path);
             return;
         }
-        let _ = std::process::Command::new(&current)
+        let launched = std::process::Command::new(&current)
             .env_remove("ECHOPORT_AUTO_UPDATE")
             .env_remove("ECHOPORT_CURRENT_VERSION")
-            .spawn();
+            .spawn()
+            .is_ok();
+        if !launched {
+            // Atomic rollback to the backup we made before replacing the binary.
+            let _ = std::fs::copy(&backup, &current);
+            self.toast(ToastKind::Error, Key::UpdateFailed);
+            return;
+        }
         self.quitting = true;
         self.save_now();
         self.ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -2928,12 +2955,13 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
         self.state.profile.settings.theme_mode = self.state.theme_mode;
         if let Err(err) = self.store.save(&self.state.profile) {
             log::warn!("failed to save profile: {err}");
+            self.toast(ToastKind::Error, Key::ProfileSaveFailed);
         }
     }
 
     fn toast(&mut self, kind: ToastKind, text: impl IntoToast) {
         let text = text.into_text(&self.state);
-        let now = self.ctx.input(|input| input.time as f64);
+        let now = self.ctx.input(|input| input.time);
         self.state.toast(kind, text, now);
         self.ctx.request_repaint();
     }
@@ -2986,7 +3014,6 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
 
 /// Default cap for the streamed-audio cache. Downloads are user files and are
 /// never touched by this; prefetch lives in the same cache directory.
-
 fn audio_cache_limit_bytes(settings: &Settings) -> u64 {
     // Environment override is handy for QA/CI; the GUI setting wins otherwise.
     if let Ok(value) = std::env::var("ECHOPORT_CACHE_LIMIT_MB") {
@@ -3443,11 +3470,10 @@ fn demo_covers(paths: &AppPaths) -> Vec<PathBuf> {
             }
         }
         let path = paths.covers_dir.join(format!("demo-cover-{index}.png"));
-        if image.save(&path).is_ok() {
-            out.push(path);
-        } else {
-            out.push(path);
+        if image.save(&path).is_err() {
+            log::warn!("could not save demo cover {path:?}");
         }
+        out.push(path);
     }
     out
 }

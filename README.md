@@ -56,7 +56,7 @@ Rust + egui 原生应用，Linux / Windows（macOS 构建暂缓），GPL-3.0。
 从 [Releases](https://github.com/Nilotoo/EchoPort/releases) 下载：
 
 - **Windows**：`echoport-<ver>-windows-x86_64-setup.exe`（完整版）
-  / `echoport-<ver>-windows-x86_64-lean-setup.exe`（Lean，无 Lua/插件）
+  / `echoport-<ver>-windows-x86_64-lean-installer.exe`（Lean，无 Lua/插件）
 - **Linux**：`echoport-<ver>-linux-x86_64.tar.gz`
   / `echoport-<ver>-linux-x86_64-lean.tar.gz`
 - 源码：GitHub 自动生成的 Source code (tar.gz/zip)

@@ -129,7 +129,25 @@ impl ProfileStore {
 
     pub fn load(&self, name: &str) -> Option<Profile> {
         let path = self.paths.profile_file(name);
-        let text = std::fs::read_to_string(&path).ok()?;
+        if let Some(profile) = Self::load_file(&path) {
+            return Some(profile);
+        }
+        // A torn write can leave the primary JSON invalid. The previous good
+        // copy is kept as `<name>.json.bak`; recover instead of silently
+        // replacing it with defaults.
+        let backup = path.with_extension("json.bak");
+        if backup.is_file() {
+            if let Some(profile) = Self::load_file(&backup) {
+                log::warn!("recovered profile {name} from backup {backup:?}");
+                let _ = std::fs::copy(&backup, &path);
+                return Some(profile);
+            }
+        }
+        None
+    }
+
+    fn load_file(path: &Path) -> Option<Profile> {
+        let text = std::fs::read_to_string(path).ok()?;
         match serde_json::from_str::<Profile>(&text) {
             Ok(profile) => Some(profile),
             Err(err) => {
@@ -145,8 +163,46 @@ impl ProfileStore {
         let json = serde_json::to_string_pretty(profile)
             .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
         let tmp = path.with_extension(format!("json.tmp-{}", std::process::id()));
-        std::fs::write(&tmp, json)?;
+        {
+            use std::io::Write;
+            let mut file = std::fs::File::create(&tmp)?;
+            file.write_all(json.as_bytes())?;
+            // Make the rename durable; otherwise a crash can leave the new
+            // filename visible with zero/partial content.
+            file.sync_all()?;
+        }
+        if path.is_file() {
+            let backup = path.with_extension("json.bak");
+            let _ = std::fs::copy(&path, &backup);
+        }
         std::fs::rename(&tmp, &path)?;
+        if let Some(parent) = path.parent() {
+            if let Ok(dir) = std::fs::File::open(parent) {
+                let _ = dir.sync_all();
+            }
+        }
+        Ok(())
+    }
+
+    /// Last explicitly selected profile, so startup does not fall back to the
+    /// alphabetically first profile after a crash.
+    pub fn last_profile(&self) -> Option<String> {
+        let name = std::fs::read_to_string(self.paths.data_dir.join("last-profile")).ok()?;
+        let name = sanitize_name(name.trim());
+        if self.paths.profile_file(&name).is_file() {
+            Some(name)
+        } else {
+            None
+        }
+    }
+
+    pub fn remember_last_profile(&self, name: &str) -> std::io::Result<()> {
+        self.paths.ensure()?;
+        let name = sanitize_name(name);
+        let target = self.paths.data_dir.join("last-profile");
+        let tmp = target.with_extension(format!("tmp-{}", std::process::id()));
+        std::fs::write(&tmp, format!("{name}\n"))?;
+        std::fs::rename(&tmp, &target)?;
         Ok(())
     }
 
@@ -164,6 +220,15 @@ impl ProfileStore {
         if let Some(name) = preferred.map(sanitize_name) {
             if let Some(profile) = self.load(&name) {
                 return profile;
+            }
+            let path = self.paths.profile_file(&name);
+            if path.is_file() {
+                let stamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|duration| duration.as_secs())
+                    .unwrap_or(0);
+                let _ =
+                    std::fs::rename(&path, path.with_extension(format!("json.corrupt-{stamp}")));
             }
             let profile = Profile::new(name, Settings::default());
             if let Err(err) = self.save(&profile) {
@@ -244,6 +309,23 @@ mod tests {
         assert_eq!(store.list(), vec!["Tester".to_owned()]);
         assert!(store.delete("Tester"));
         assert!(!store.paths.profile_file("Tester").exists());
+    }
+
+    #[test]
+    fn corrupt_primary_recovers_backup() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = ProfileStore::new(AppPaths::portable(dir.path()));
+        let mut profile = Profile::new("Tester", Settings::default());
+        profile.create_playlist("First");
+        store.save(&profile).expect("first save");
+        profile.create_playlist("Second");
+        store.save(&profile).expect("second save");
+
+        let primary = store.paths.profile_file("Tester");
+        std::fs::write(&primary, b"{ not json").expect("corrupt primary");
+        let recovered = store.load("Tester").expect("backup recovery");
+        assert_eq!(recovered.playlists.len(), 1);
+        assert_eq!(recovered.playlists[0].name, "First");
     }
 
     #[test]

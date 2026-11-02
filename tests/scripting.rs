@@ -779,17 +779,15 @@ fn script_paths_and_version_are_exposed() {
     let config_path = paths.config_file.to_string_lossy().into_owned();
     write(
         &paths.config_file,
-        &format!(
-            r#"
-echoport.actions.add({{
+        r#"
+echoport.actions.add({
   id = "meta",
   title = "meta",
   run = function()
     echoport.notify(echoport.version .. "|" .. echoport.paths.config_file)
   end,
-}})
-"#
-        ),
+})
+"#,
     );
     let (mut scripts, rx, tx) = load(&paths);
     assert!(scripts.run_action("meta", &tx));

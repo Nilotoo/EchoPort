@@ -33,11 +33,12 @@ PY
 )"
 if [ "$VARIANT" = "lean" ]; then
     NAME="echoport-$VERSION-windows-x86_64-lean"
+    OUT="${OUT:-$ROOT/dist/$NAME-installer.exe}"
 else
     NAME="echoport-$VERSION-windows-x86_64"
+    OUT="${OUT:-$ROOT/dist/$NAME-setup.exe}"
 fi
 STAGE="$ROOT/dist/_nsis/$NAME"
-OUT="${OUT:-$ROOT/dist/$NAME-setup.exe}"
 rm -rf "$STAGE"
 mkdir -p "$STAGE/docs" "$STAGE/examples"
 
