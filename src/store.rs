@@ -24,6 +24,24 @@ pub struct AppPaths {
 
 impl AppPaths {
     pub fn resolve() -> Self {
+        #[cfg(target_os = "android")]
+        if let Some(root) = std::env::var_os("ECHOPORT_ANDROID_DATA") {
+            let root = PathBuf::from(root);
+            let cache = std::env::var_os("ECHOPORT_ANDROID_CACHE")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| root.join("cache"));
+            let config = root.join("config");
+            return Self {
+                data_dir: root.clone(),
+                cache_dir: cache.clone(),
+                profiles_dir: root.join("profiles"),
+                covers_dir: cache.join("covers"),
+                audio_cache_dir: cache.join("audio"),
+                config_dir: config.clone(),
+                config_file: config.join("config.lua"),
+                plugins_dir: config.join("plugins"),
+            };
+        }
         let data_root = dirs::data_dir().unwrap_or_else(|| {
             dirs::home_dir()
                 .unwrap_or_else(|| PathBuf::from("."))

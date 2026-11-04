@@ -242,6 +242,7 @@ impl EchoPortApp {
             cover_prefetch_page: None,
         };
 
+        app.ensure_android_music_dir();
         app.merge_local_files_into_library();
         if std::env::var("ECHOPORT_PROFILE_EDIT").is_ok() {
             app.ui.profile_editing = true;
@@ -631,18 +632,19 @@ impl EchoPortApp {
             }
             Command::ScanLibrary => self.spawn_library_scan(),
             Command::PickMusicFolder => {
-                if let Some(dir) = rfd::FileDialog::new()
-                    .set_title(self.state.tr(Key::AddMusicFolder))
-                    .pick_folder()
+                #[cfg(target_os = "android")]
+                {
+                    self.pick_audio_file();
+                }
+                #[cfg(not(target_os = "android"))]
+                if let Some(dir) = crate::platform::pick_folder(self.state.tr(Key::AddMusicFolder))
                 {
                     self.dispatch(Command::AddMusicDir(dir));
                 }
             }
+            Command::ImportAudioFile => self.pick_audio_file(),
             Command::PickDownloadFolder => {
-                if let Some(dir) = rfd::FileDialog::new()
-                    .set_title(self.state.tr(Key::ChooseFolder))
-                    .pick_folder()
-                {
+                if let Some(dir) = crate::platform::pick_folder(self.state.tr(Key::ChooseFolder)) {
                     self.dispatch(Command::SetDownloadDir(dir));
                 }
             }
@@ -1305,6 +1307,16 @@ impl EchoPortApp {
                     self.prefetch_page_covers();
                     self.prefetch_album_covers();
                     self.mark_dirty();
+                }
+            }
+            AppEvent::AudioImported { path, error } => {
+                if let Some(error) = error {
+                    log::warn!("audio import failed: {error}");
+                    self.toast(ToastKind::Error, Key::ImportMusicFailed);
+                } else if let Some(path) = path {
+                    log::info!("imported music file: {}", path.display());
+                    self.toast(ToastKind::Success, Key::ImportMusicDone);
+                    self.spawn_library_scan();
                 }
             }
             AppEvent::LyricsReady {
@@ -2169,6 +2181,126 @@ impl EchoPortApp {
         });
     }
 
+    fn ensure_android_music_dir(&mut self) {
+        #[cfg(target_os = "android")]
+        {
+            let dir = self.paths.data_dir.join("Music");
+            let _ = std::fs::create_dir_all(&dir);
+            if !self.state.profile.settings.music_dirs.contains(&dir) {
+                self.state.profile.settings.music_dirs.insert(0, dir);
+                self.mark_dirty();
+            }
+        }
+    }
+
+    fn pick_audio_file(&mut self) {
+        #[cfg(target_os = "android")]
+        {
+            let dir = self.paths.data_dir.join("Music");
+            let _ = std::fs::create_dir_all(&dir);
+            let tx = self.tx.clone();
+            let result = robius_file_picker::FileDialog::new()
+                .set_title(self.state.tr(Key::ImportMusic))
+                .add_filter(
+                    "Audio",
+                    &["mp3", "flac", "m4a", "aac", "ogg", "opus", "wav", "aiff"],
+                )
+                .pick_file(move |result| {
+                    let outcome = (|| -> Result<Option<std::path::PathBuf>, String> {
+                        let Some(picked) = result.map_err(|err| err.to_string())? else {
+                            return Ok(None);
+                        };
+                        let local = picked.into_local_file().map_err(|err| err.to_string())?;
+                        let name = local
+                            .display_name()
+                            .map(str::to_owned)
+                            .or_else(|| {
+                                local
+                                    .path()
+                                    .file_name()
+                                    .map(|name| name.to_string_lossy().into_owned())
+                            })
+                            .unwrap_or_else(|| "imported-audio".to_owned());
+                        let safe: String = name
+                            .chars()
+                            .map(|ch| {
+                                if ch.is_control()
+                                    || matches!(
+                                        ch,
+                                        '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
+                                    )
+                                {
+                                    '_'
+                                } else {
+                                    ch
+                                }
+                            })
+                            .collect();
+                        let mut destination = dir.join(safe.trim());
+                        let stem = destination
+                            .file_stem()
+                            .map(|stem| stem.to_string_lossy().into_owned())
+                            .unwrap_or_else(|| "imported-audio".to_owned());
+                        let extension = destination
+                            .extension()
+                            .map(|ext| ext.to_string_lossy().into_owned())
+                            .unwrap_or_default();
+                        let mut counter = 2;
+                        while destination.exists() {
+                            let file = if extension.is_empty() {
+                                format!("{stem} ({counter})")
+                            } else {
+                                format!("{stem} ({counter}).{extension}")
+                            };
+                            destination = dir.join(file);
+                            counter += 1;
+                        }
+                        std::fs::copy(local.path(), &destination).map_err(|err| err.to_string())?;
+                        Ok(Some(destination))
+                    })();
+                    let (path, error) = match outcome {
+                        Ok(path) => (path, None),
+                        Err(error) => (None, Some(error)),
+                    };
+                    let _ = tx.send(AppEvent::AudioImported { path, error });
+                });
+            if let Err(err) = result {
+                log::warn!("could not open Android file picker: {err}");
+                self.toast(ToastKind::Error, Key::ImportMusicFailed);
+            }
+        }
+        #[cfg(not(target_os = "android"))]
+        if let Some(path) = crate::platform::pick_file(
+            self.state.tr(Key::ImportMusic),
+            &[(
+                "Audio",
+                &["mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"],
+            )],
+        ) {
+            let dir = self.paths.data_dir.join("Music");
+            let _ = std::fs::create_dir_all(&dir);
+            let name = path
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "imported-audio".to_owned());
+            let destination = dir.join(name);
+            match std::fs::copy(&path, &destination) {
+                Ok(_) => {
+                    let _ = self.tx.send(AppEvent::AudioImported {
+                        path: Some(destination),
+                        error: None,
+                    });
+                }
+                Err(err) => {
+                    let _ = self.tx.send(AppEvent::AudioImported {
+                        path: None,
+                        error: Some(err.to_string()),
+                    });
+                }
+            }
+        }
+    }
+
     fn spawn_lyrics(&mut self, track: &Track) {
         if !self.state.profile.settings.lyrics_enabled {
             self.state.lyrics = crate::state::LyricsView::default();
@@ -2719,11 +2851,10 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
     // -----------------------------------------------------------------------
 
     fn set_profile_avatar(&mut self) {
-        let Some(path) = rfd::FileDialog::new()
-            .set_title(self.state.tr(Key::ChooseAvatar))
-            .add_filter("Image", &["png", "jpg", "jpeg", "webp"])
-            .pick_file()
-        else {
+        let Some(path) = crate::platform::pick_file(
+            self.state.tr(Key::ChooseAvatar),
+            &[("Image", &["png", "jpg", "jpeg", "webp"])],
+        ) else {
             return;
         };
         match encode_avatar_data_url(&path) {
@@ -2754,12 +2885,11 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
                 }
             })
             .collect();
-        let Some(path) = rfd::FileDialog::new()
-            .set_title(self.state.tr(Key::ExportProfile))
-            .add_filter("EchoPort profile", &["json"])
-            .set_file_name(format!("{}.echoport-profile.json", safe_name.trim()))
-            .save_file()
-        else {
+        let Some(path) = crate::platform::save_file(
+            self.state.tr(Key::ExportProfile),
+            &format!("{}.echoport-profile.json", safe_name.trim()),
+            &[("EchoPort profile", &["json"])],
+        ) else {
             return;
         };
         let result = serde_json::to_string_pretty(&share)
@@ -2775,11 +2905,10 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
     }
 
     fn import_profile(&mut self) {
-        let Some(path) = rfd::FileDialog::new()
-            .set_title(self.state.tr(Key::ImportProfile))
-            .add_filter("EchoPort profile", &["json"])
-            .pick_file()
-        else {
+        let Some(path) = crate::platform::pick_file(
+            self.state.tr(Key::ImportProfile),
+            &[("EchoPort profile", &["json"])],
+        ) else {
             return;
         };
         let too_large = std::fs::metadata(&path)
@@ -2861,12 +2990,11 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
                 }
             })
             .collect();
-        let Some(path) = rfd::FileDialog::new()
-            .set_title(self.state.tr(Key::ExportPlaylist))
-            .add_filter("EchoPort playlist", &["json"])
-            .set_file_name(format!("{} .echoport.json", safe_name.trim()))
-            .save_file()
-        else {
+        let Some(path) = crate::platform::save_file(
+            self.state.tr(Key::ExportPlaylist),
+            &format!("{} .echoport.json", safe_name.trim()),
+            &[("EchoPort playlist", &["json"])],
+        ) else {
             return;
         };
         let result = serde_json::to_string_pretty(&share)
@@ -2882,11 +3010,10 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
     }
 
     fn import_playlist(&mut self) {
-        let Some(path) = rfd::FileDialog::new()
-            .set_title(self.state.tr(Key::ImportPlaylist))
-            .add_filter("EchoPort playlist", &["json"])
-            .pick_file()
-        else {
+        let Some(path) = crate::platform::pick_file(
+            self.state.tr(Key::ImportPlaylist),
+            &[("EchoPort playlist", &["json"])],
+        ) else {
             return;
         };
         let too_large = std::fs::metadata(&path)

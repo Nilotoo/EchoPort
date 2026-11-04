@@ -11,11 +11,21 @@ use crate::ui::widgets::{self, TrackRow};
 
 pub fn draw(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec<Command>) {
     widgets::page_scroll(ui, |ui| {
-        header(ui, app, theme, pending);
-        ui.add_space(12.0);
+        let mobile = ui.available_width() < 600.0;
+        header(ui, app, theme, pending, mobile);
+        ui.add_space(10.0);
         stats(ui, app, theme);
-        ui.add_space(14.0);
+        ui.add_space(12.0);
         let available = ui.available_width();
+        if mobile {
+            let tracks = app.state.library.tracks.clone();
+            let height = (70.0 + tracks.len() as f32 * 56.0).max(300.0);
+            tracks_panel(ui, app, theme, pending, &tracks, available, height);
+            ui.add_space(12.0);
+            folders_panel(ui, app, theme, pending, available, 220.0);
+            ui.add_space(12.0);
+            return;
+        }
         let left_w = (available * 0.61).max(360.0);
         let right_w = (available - left_w - 16.0).max(220.0);
         let tracks = app.state.library.tracks.clone();
@@ -49,7 +59,51 @@ pub fn draw(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec
     });
 }
 
-fn header(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec<Command>) {
+fn header(
+    ui: &mut Ui,
+    app: &mut EchoPortApp,
+    theme: &Theme,
+    pending: &mut Vec<Command>,
+    mobile: bool,
+) {
+    if mobile {
+        ui.label(
+            RichText::new(app.state.tr(Key::LocalMusic))
+                .size(24.0)
+                .color(theme.text),
+        );
+        ui.add(
+            egui::Label::new(
+                RichText::new(app.state.tr(Key::LocalOnlyNote))
+                    .size(11.0)
+                    .color(theme.text_weak),
+            )
+            .wrap(),
+        );
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            let scanning = app.state.library.scanning;
+            let label = if scanning {
+                app.state.tr(Key::Scanning)
+            } else {
+                app.state.tr(Key::ScanLibrary)
+            };
+            if style::button_icon(ui, theme, Icon::Refresh, label, Variant::Secondary).clicked()
+                && !scanning
+            {
+                pending.push(Command::ScanLibrary);
+            }
+            let import = if cfg!(target_os = "android") {
+                app.state.tr(Key::ImportMusic)
+            } else {
+                app.state.tr(Key::AddMusicFolder)
+            };
+            if style::button_icon(ui, theme, Icon::Plus, import, Variant::Primary).clicked() {
+                pending.push(Command::PickMusicFolder);
+            }
+        });
+        return;
+    }
     ui.horizontal(|ui| {
         ui.vertical(|ui| {
             ui.label(
@@ -99,7 +153,7 @@ fn stats(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme) {
     let total_secs: f64 = tracks.iter().filter_map(|track| track.duration_secs).sum();
     let folders = app.state.profile.settings.music_dirs.len();
     let gap = 12.0;
-    let width = ((ui.available_width() - gap * 2.0) / 3.0).max(150.0);
+    let width = ((ui.available_width() - gap * 2.0) / 3.0).max(90.0);
     let cards = [
         (
             Icon::Music,
@@ -179,15 +233,12 @@ fn tracks_panel(
                     app.state.tr(Key::LibraryEmptyHint),
                     None,
                 );
-                if style::button_icon(
-                    ui,
-                    theme,
-                    Icon::Folder,
-                    app.state.tr(Key::AddMusicFolder),
-                    Variant::Primary,
-                )
-                .clicked()
-                {
+                let import = if cfg!(target_os = "android") {
+                    app.state.tr(Key::ImportMusic)
+                } else {
+                    app.state.tr(Key::AddMusicFolder)
+                };
+                if style::button_icon(ui, theme, Icon::Plus, import, Variant::Primary).clicked() {
                     action = Some(Command::PickMusicFolder);
                 }
             });

@@ -817,6 +817,7 @@ pub fn track_row(
         52.0,
     );
 
+    let touch_ui = cfg!(target_os = "android") || ui.ctx().screen_rect().width() < 700.0;
     // --- title / artist (clickable) ---------------------------------------
     let text_left = left;
     let text_right = duration_right - 56.0;
@@ -876,8 +877,15 @@ pub fn track_row(
         if text_response.clicked() {
             app.ui.selected_track = Some(track.id.clone());
             app.ui.selected_playlist = None;
+            if touch_ui {
+                if is_current {
+                    pending.push(Command::TogglePlayPause);
+                } else {
+                    pending.push(play_from(row.list, row.index));
+                }
+            }
         }
-        if text_response.double_clicked() {
+        if text_response.double_clicked() && !touch_ui {
             if is_current {
                 pending.push(Command::TogglePlayPause);
             } else {
@@ -892,8 +900,15 @@ pub fn track_row(
     if body.clicked() {
         app.ui.selected_track = Some(track.id.clone());
         app.ui.selected_playlist = None;
+        if touch_ui {
+            if is_current {
+                pending.push(Command::TogglePlayPause);
+            } else {
+                pending.push(play_from(row.list, row.index));
+            }
+        }
     }
-    if body.double_clicked() {
+    if body.double_clicked() && !touch_ui {
         if is_current {
             pending.push(Command::TogglePlayPause);
         } else {
@@ -1110,11 +1125,19 @@ pub fn media_card(
     let response = response
         .on_hover_cursor(CursorIcon::PointingHand)
         .on_hover_text(app.state.tr(Key::DoubleClickPlay));
+    let touch_ui = cfg!(target_os = "android") || ui.ctx().screen_rect().width() < 700.0;
     if response.clicked() {
         app.ui.selected_track = Some(track.id.clone());
         app.ui.selected_playlist = None;
+        if touch_ui {
+            if is_current {
+                pending.push(Command::TogglePlayPause);
+            } else {
+                pending.push(play_from(list, index));
+            }
+        }
     }
-    if response.double_clicked() {
+    if response.double_clicked() && !touch_ui {
         if is_current {
             pending.push(Command::TogglePlayPause);
         } else {

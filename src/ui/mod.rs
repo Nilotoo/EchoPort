@@ -143,6 +143,19 @@ pub fn layout(ctx: &egui::Context, app: &mut EchoPortApp) {
     let theme = app.state.theme;
     let mut pending: Vec<Command> = Vec::new();
 
+    // Phone/tablet shell: no permanent sidebar; bottom navigation + compact
+    // two-row player. `ECHOPORT_MOBILE=1` gives a desktop preview for QA.
+    let mobile = cfg!(target_os = "android")
+        || std::env::var("ECHOPORT_MOBILE").is_ok()
+        || ctx.screen_rect().width() < 700.0;
+    if mobile {
+        mobile_layout(ctx, app, &theme, &mut pending);
+        for command in pending {
+            app.dispatch(command);
+        }
+        return;
+    }
+
     // Page cross-fade (very short, so navigation feels instant).
     let dt = ctx.input(|input| input.stable_dt).min(0.05);
     if app.ui.page != app.state.page {
@@ -245,6 +258,306 @@ pub fn layout(ctx: &egui::Context, app: &mut EchoPortApp) {
     for command in pending {
         app.dispatch(command);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Mobile shell
+// ---------------------------------------------------------------------------
+
+fn mobile_layout(
+    ctx: &egui::Context,
+    app: &mut EchoPortApp,
+    theme: &Theme,
+    pending: &mut Vec<Command>,
+) {
+    let dt = ctx.input(|input| input.stable_dt).min(0.05);
+    if app.ui.page != app.state.page {
+        app.ui.page = app.state.page;
+        app.ui.page_fade = 0.0;
+        app.ui.scrub_preview = None;
+    }
+    if app.ui.page_fade < 1.0 {
+        app.ui.page_fade = (app.ui.page_fade + dt / 0.16).min(1.0);
+        ctx.request_repaint_after(Duration::from_millis(16));
+    }
+    let track_key = app.state.now_playing.as_ref().map(|track| track.id.clone());
+    if track_key != app.ui.current_track {
+        app.ui.current_track = track_key;
+        app.ui.scrub_preview = None;
+    }
+    if (app.state.playback.state == PlaybackState::Playing
+        || app.state.playback.state == PlaybackState::Loading)
+        && !app.state.ui_backgrounded
+    {
+        ctx.request_repaint_after(Duration::from_millis(50));
+    }
+
+    let page_fade = app.ui.page_fade;
+    let player_height = 118.0;
+    let nav_height = 58.0;
+    let status_inset = if cfg!(target_os = "android") {
+        28.0
+    } else {
+        14.0
+    };
+
+    // Player sits directly above the bottom navigation.
+    egui::TopBottomPanel::bottom("echoport-mobile-player")
+        .exact_height(player_height)
+        .resizable(false)
+        .show_separator_line(false)
+        .frame(Frame::new().fill(theme.panel))
+        .show(ctx, |ui| {
+            mobile_player(ui, app, theme, player_height, pending);
+        });
+    egui::TopBottomPanel::bottom("echoport-mobile-nav")
+        .exact_height(nav_height)
+        .resizable(false)
+        .show_separator_line(false)
+        .frame(Frame::new().fill(theme.panel))
+        .show(ctx, |ui| {
+            mobile_nav(ui, app, theme);
+        });
+
+    egui::CentralPanel::default()
+        .frame(Frame::new().fill(theme.bg).inner_margin(Margin {
+            left: 12,
+            right: 12,
+            top: status_inset as i8,
+            bottom: 6,
+        }))
+        .show(ctx, |ui| {
+            ui.multiply_opacity(page_fade);
+            pages::draw(ui, app, theme, pending);
+        });
+
+    if app.state.queue_panel_open {
+        queue_panel(ctx, app, theme, player_height + nav_height, pending);
+    }
+    toasts(ctx, app, theme, player_height + nav_height);
+    drop_prompt(ctx, app, theme, player_height + nav_height, pending);
+    dialogs(ctx, app, theme, pending);
+    handle_escape(ctx, app);
+    splash::draw(ctx, app, pending);
+}
+
+fn mobile_nav(ui: &mut egui::Ui, app: &mut EchoPortApp, theme: &Theme) {
+    let nav: [(Page, Key, Icon); 5] = [
+        (Page::Home, Key::Home, Icon::Home),
+        (Page::Search, Key::SearchNav, Icon::Search),
+        (Page::Library, Key::Library, Icon::Library),
+        (Page::Playlists, Key::Playlists, Icon::Playlist),
+        (Page::Settings, Key::Settings, Icon::Settings),
+    ];
+    let width = ui.available_width() / nav.len() as f32;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        for (page, key, icon) in nav {
+            let selected = app.state.page == page
+                || (matches!(page, Page::Home) && app.state.page == Page::NowPlaying);
+            let (rect, response) =
+                ui.allocate_exact_size(Vec2::new(width, ui.available_height()), Sense::click());
+            if selected {
+                ui.painter().rect_filled(
+                    Rect::from_center_size(
+                        Pos2::new(rect.center().x, rect.top() + 3.0),
+                        Vec2::new(24.0, 3.0),
+                    ),
+                    CornerRadius::same(2),
+                    theme.accent,
+                );
+            }
+            let color = if selected {
+                theme.accent
+            } else {
+                theme.text_weak
+            };
+            style::paint_icon(
+                ui.painter(),
+                icon,
+                Rect::from_center_size(
+                    Pos2::new(rect.center().x, rect.center().y - 7.0),
+                    Vec2::splat(19.0),
+                ),
+                color,
+            );
+            ui.painter().text(
+                Pos2::new(rect.center().x, rect.center().y + 14.0),
+                Align2::CENTER_CENTER,
+                app.state.tr(key),
+                style::font(9.5),
+                color,
+            );
+            if response.clicked() {
+                app.set_page(page);
+            }
+        }
+    });
+}
+
+fn mobile_player(
+    ui: &mut egui::Ui,
+    app: &mut EchoPortApp,
+    theme: &Theme,
+    height: f32,
+    pending: &mut Vec<Command>,
+) {
+    let full = ui.max_rect();
+    let cover = 44.0;
+    let cover_rect = Rect::from_min_size(
+        Pos2::new(full.left() + 12.0, full.top() + 10.0),
+        Vec2::splat(cover),
+    );
+    let track = app.state.now_playing.clone();
+    match track.as_ref() {
+        Some(track) => widgets::paint_track_cover(ui, app, theme, track, cover_rect, style::R_MD),
+        None => {
+            ui.painter().rect_filled(
+                cover_rect,
+                CornerRadius::same(style::R_MD),
+                style::wash(theme),
+            );
+            style::paint_icon(
+                ui.painter(),
+                Icon::Music,
+                cover_rect.shrink(12.0),
+                theme.text_weak,
+            );
+        }
+    }
+    let cover_response = ui.interact(
+        cover_rect,
+        ui.id().with("mobile-player-cover"),
+        Sense::click(),
+    );
+    if cover_response.clicked() && track.is_some() {
+        app.set_page(Page::NowPlaying);
+    }
+    let text_left = cover_rect.right() + 10.0;
+    let controls_w = 92.0;
+    let text_right = (full.right() - controls_w - 10.0).max(text_left + 40.0);
+    let text_rect = Rect::from_min_max(
+        Pos2::new(text_left, full.top() + 8.0),
+        Pos2::new(text_right, full.top() + 58.0),
+    );
+    style::absolute(ui, text_rect, |ui| {
+        if let Some(track) = &track {
+            if ui
+                .add(
+                    egui::Label::new(
+                        RichText::new(&track.title)
+                            .size(14.0)
+                            .strong()
+                            .color(theme.text),
+                    )
+                    .truncate(),
+                )
+                .clicked()
+            {
+                app.set_page(Page::NowPlaying);
+            }
+            ui.add(
+                egui::Label::new(
+                    RichText::new(track.display_artist())
+                        .size(11.0)
+                        .color(theme.text_weak),
+                )
+                .truncate(),
+            );
+        } else {
+            ui.label(
+                RichText::new(app.state.tr(Key::EmptyStateHint))
+                    .size(12.0)
+                    .color(theme.text_weak),
+            );
+        }
+    });
+    let play_center = Pos2::new(full.right() - 66.0, full.top() + 34.0);
+    let play_rect = Rect::from_center_size(play_center, Vec2::splat(42.0));
+    if ui
+        .interact(play_rect, ui.id().with("mobile-play"), Sense::click())
+        .clicked()
+    {
+        pending.push(Command::TogglePlayPause);
+    }
+    ui.painter().circle_filled(
+        play_center,
+        21.0,
+        if app.state.playback.state.is_playing() {
+            theme.accent
+        } else {
+            theme.accent_soft
+        },
+    );
+    style::paint_icon(
+        ui.painter(),
+        if app.state.playback.state.is_playing() {
+            Icon::Pause
+        } else {
+            Icon::Play
+        },
+        play_rect.shrink(12.0),
+        if app.state.playback.state.is_playing() {
+            theme.on_accent
+        } else {
+            theme.accent
+        },
+    );
+    let next_center = Pos2::new(full.right() - 22.0, full.top() + 34.0);
+    let next_rect = Rect::from_center_size(next_center, Vec2::splat(30.0));
+    if ui
+        .interact(next_rect, ui.id().with("mobile-next"), Sense::click())
+        .clicked()
+    {
+        pending.push(Command::Next);
+    }
+    style::paint_icon(ui.painter(), Icon::Next, next_rect.shrink(8.0), theme.text);
+
+    let duration = app.state.playback.duration_secs.unwrap_or(0.0);
+    let position = app
+        .ui
+        .scrub_preview
+        .unwrap_or(app.state.playback.position_secs);
+    let scrub_rect = Rect::from_min_max(
+        Pos2::new(full.left() + 12.0, full.bottom() - 34.0),
+        Pos2::new(full.right() - 12.0, full.bottom() - 18.0),
+    );
+    let mut scrub_ui = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(scrub_rect)
+            .layout(Layout::left_to_right(Align::Center)),
+    );
+    let (response, new_position) =
+        style::scrubber(&mut scrub_ui, theme, position, duration, "mobile-scrub");
+    if response.dragged() {
+        app.ui.scrub_preview = new_position;
+    } else if app.ui.scrub_preview.is_some() && !ui.input(|input| input.pointer.primary_down()) {
+        if let Some(seconds) = new_position.or(app.ui.scrub_preview) {
+            pending.push(Command::Seek(seconds));
+        }
+        app.ui.scrub_preview = None;
+    } else if response.clicked() {
+        if let Some(seconds) = new_position {
+            pending.push(Command::Seek(seconds));
+        }
+    }
+    let time = if duration > 0.0 {
+        format!(
+            "{} / {}",
+            format_duration(position),
+            format_duration(duration)
+        )
+    } else {
+        String::new()
+    };
+    ui.painter().text(
+        Pos2::new(full.left() + 12.0, full.bottom() - 8.0),
+        Align2::LEFT_CENTER,
+        time,
+        style::font(9.5),
+        theme.text_weak,
+    );
+    let _ = height;
 }
 
 // ---------------------------------------------------------------------------
@@ -1289,10 +1602,10 @@ fn dialogs(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, pending: &
                         )
                         .clicked()
                         {
-                            if let Some(path) = rfd::FileDialog::new()
-                                .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])
-                                .pick_file()
-                            {
+                            if let Some(path) = crate::platform::pick_file(
+                                "Cover",
+                                &[("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])],
+                            ) {
                                 *new_cover = Some(path);
                                 *clear_cover = false;
                             }

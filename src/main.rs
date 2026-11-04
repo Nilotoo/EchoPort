@@ -14,9 +14,21 @@ fn main() -> eframe::Result {
         .init();
     install_crash_log();
 
+    let mut size = [1360.0, 860.0];
+    let mut min_size = [1040.0, 660.0];
+    if let Ok(value) = std::env::var("ECHOPORT_WINDOW") {
+        let parts: Vec<f32> = value
+            .split('x')
+            .filter_map(|part| part.trim().parse::<f32>().ok())
+            .collect();
+        if parts.len() == 2 && parts[0] >= 320.0 && parts[1] >= 480.0 {
+            size = [parts[0], parts[1]];
+            min_size = [parts[0].min(980.0), parts[1].min(620.0)];
+        }
+    }
     let mut viewport = egui::ViewportBuilder::default()
-        .with_inner_size([1360.0, 860.0])
-        .with_min_inner_size([1040.0, 660.0])
+        .with_inner_size(size)
+        .with_min_inner_size(min_size)
         .with_title("EchoPort")
         .with_app_id("echoport");
     if let Some(icon) = build_icon() {

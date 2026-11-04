@@ -11,6 +11,8 @@
 //! * [`store`] — JSON profiles under the platform data directory
 #![allow(clippy::too_many_arguments)]
 
+#[cfg(target_os = "android")]
+mod android;
 pub mod app;
 pub mod art;
 pub mod audio;
@@ -22,6 +24,7 @@ pub mod library;
 pub mod lyrics;
 pub mod model;
 pub mod net;
+pub mod platform;
 pub mod process;
 pub mod providers;
 pub mod resolver;
