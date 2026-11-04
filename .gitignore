@@ -22,3 +22,11 @@ screenshots/_*
 !examples/config.en.lua
 !examples/plugins/
 !examples/plugins/**
+
+# Android local build/signing artifacts (never publish keystores)
+/.android/
+/AndroidManifest.xml
+/META-INF/
+/lib/
+/res/
+/resources.arsc

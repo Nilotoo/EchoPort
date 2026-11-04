@@ -7,11 +7,12 @@ homepage = "https://github.com/Nilotoo/EchoPort"
 description = "EchoPort - a lightweight, privacy-first cross-platform music player"
 license = "GPL-3.0-only"
 
+[lib]
+crate-type = ["cdylib", "lib"]
+
 [dependencies]
 # GUI: glow (OpenGL) backend keeps it light; no wgpu/webview.
-eframe = { version = "0.32", default-features = false, features = [
-    "glow", "default_fonts", "wayland", "x11",
-] }
+
 egui = "0.32"
 
 # audio engine
@@ -28,7 +29,6 @@ crossbeam-channel = "0.5"
 dirs = "7"
 url = "2"
 sha2 = "0.11"
-rfd = "0.17"
 open = "5"
 log = "0.4"
 env_logger = "0.11"
@@ -40,6 +40,22 @@ ringbuf = "0.5.3"
 walkdir = "2.5.0"
 mlua = { version = "0.12.2", features = ["lua54", "vendored"], optional = true }
 base64 = "0.23.1"
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+rfd = "0.17"
+eframe = { version = "0.32", default-features = false, features = [
+    "glow", "default_fonts", "wayland", "x11",
+] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+eframe = { version = "0.32", default-features = false, features = [
+    "glow", "default_fonts", "android-native-activity",
+] }
+winit = { version = "0.30", default-features = false, features = [
+    "android-native-activity",
+] }
+android_logger = "0.15"
+robius-file-picker = "0.3"
 
 [features]
 default = ["scripting", "image-gif-bmp"]
@@ -66,3 +82,27 @@ opt-level = 1
 
 [profile.dev.package."*"]
 opt-level = 2
+
+[package.metadata.android]
+package = "com.nilotoo.echoport"
+apk_name = "echoport"
+build_targets = ["aarch64-linux-android"]
+resources = "packaging/android/res"
+
+[package.metadata.android.sdk]
+min_sdk_version = 26
+target_sdk_version = 35
+
+[package.metadata.android.application]
+label = "EchoPort"
+theme = "@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen"
+icon = "@mipmap/ic_launcher"
+extract_native_libs = true
+
+[package.metadata.android.application.activity]
+orientation = "portrait"
+config_changes = "orientation|keyboardHidden|screenSize"
+exported = true
+
+[[package.metadata.android.uses_permission]]
+name = "android.permission.INTERNET"

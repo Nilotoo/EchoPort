@@ -16,6 +16,35 @@ pub fn draw(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec
         header(ui, app, theme, pending);
         ui.add_space(14.0);
         let available = ui.available_width();
+        let mobile = available < 600.0;
+        if mobile {
+            let playlists = app.state.profile.playlists.clone();
+            let selected = app.state.selected_playlist().cloned();
+            let tracks = selected
+                .as_ref()
+                .map(|playlist| app.state.profile.playlist_tracks(&playlist.id))
+                .unwrap_or_default();
+            let list_height = (58.0 + playlists.len() as f32 * 64.0).max(240.0);
+            list_panel(ui, app, theme, &playlists, available, list_height);
+            ui.add_space(12.0);
+            let detail_height = if selected.is_some() {
+                (238.0 + tracks.len() as f32 * 52.0).max(300.0)
+            } else {
+                280.0
+            };
+            detail_panel(
+                ui,
+                app,
+                theme,
+                pending,
+                selected.as_ref(),
+                &tracks,
+                available,
+                detail_height,
+            );
+            ui.add_space(12.0);
+            return;
+        }
         let list_width = if available < 860.0 { 260.0 } else { 316.0 };
         let detail_width = (available - list_width - 16.0).max(260.0);
         let playlists = app.state.profile.playlists.clone();
@@ -67,6 +96,50 @@ pub fn draw(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec
 }
 
 fn header(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec<Command>) {
+    if ui.available_width() < 600.0 {
+        ui.label(
+            RichText::new(app.state.tr(Key::Playlists))
+                .size(24.0)
+                .color(theme.text),
+        );
+        ui.add(
+            egui::Label::new(
+                RichText::new(app.state.tr(Key::NoPlaylistsHint))
+                    .size(11.0)
+                    .color(theme.text_weak),
+            )
+            .wrap(),
+        );
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            if style::button_icon(
+                ui,
+                theme,
+                Icon::Plus,
+                app.state.tr(Key::NewPlaylist),
+                Variant::Primary,
+            )
+            .clicked()
+            {
+                app.ui.dialog = Some(Dialog::NewPlaylist {
+                    seed: Vec::new(),
+                    name: String::new(),
+                });
+            }
+            if style::button_icon(
+                ui,
+                theme,
+                Icon::Download,
+                app.state.tr(Key::ImportPlaylist),
+                Variant::Secondary,
+            )
+            .clicked()
+            {
+                pending.push(Command::ImportPlaylist);
+            }
+        });
+        return;
+    }
     ui.horizontal(|ui| {
         ui.vertical(|ui| {
             ui.label(
@@ -285,7 +358,7 @@ fn detail_panel(
         });
         ui.add_space(12.0);
         // Actions.
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             let play_all = style::button_icon(
                 ui,
                 theme,
@@ -313,33 +386,28 @@ fn detail_panel(
                 }
                 pending.push(Command::PlayTracks(shuffled));
             }
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if style::button(ui, theme, app.state.tr(Key::Delete), Variant::Ghost).clicked() {
-                    app.ui.dialog = Some(Dialog::DeletePlaylist {
-                        id: playlist.id.clone(),
-                        name: playlist.name.clone(),
-                    });
-                }
-                ui.add_space(2.0);
-                if style::button(ui, theme, app.state.tr(Key::EditPlaylist), Variant::Ghost)
+            if style::button(ui, theme, app.state.tr(Key::Delete), Variant::Ghost).clicked() {
+                app.ui.dialog = Some(Dialog::DeletePlaylist {
+                    id: playlist.id.clone(),
+                    name: playlist.name.clone(),
+                });
+            }
+            if style::button(ui, theme, app.state.tr(Key::EditPlaylist), Variant::Ghost).clicked() {
+                app.ui.dialog = Some(Dialog::RenamePlaylist {
+                    id: playlist.id.clone(),
+                    name: playlist.name.clone(),
+                    description: playlist.description.clone(),
+                    existing_cover: playlist.cover_path.clone(),
+                    new_cover: None,
+                    clear_cover: false,
+                });
+            }
+            if !cfg!(target_os = "android")
+                && style::button(ui, theme, app.state.tr(Key::ExportPlaylist), Variant::Ghost)
                     .clicked()
-                {
-                    app.ui.dialog = Some(Dialog::RenamePlaylist {
-                        id: playlist.id.clone(),
-                        name: playlist.name.clone(),
-                        description: playlist.description.clone(),
-                        existing_cover: playlist.cover_path.clone(),
-                        new_cover: None,
-                        clear_cover: false,
-                    });
-                }
-                ui.add_space(2.0);
-                if style::button(ui, theme, app.state.tr(Key::ExportPlaylist), Variant::Ghost)
-                    .clicked()
-                {
-                    pending.push(Command::ExportPlaylist(playlist.id.clone()));
-                }
-            });
+            {
+                pending.push(Command::ExportPlaylist(playlist.id.clone()));
+            }
         });
         ui.add_space(4.0);
         style::hint_line(ui, theme, app.state.tr(Key::PlaylistShareHint));

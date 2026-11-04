@@ -37,7 +37,8 @@ pub fn draw(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec
     };
     match app.state.now_playing_tab {
         NowPlayingTab::Track => {
-            if ui.available_height() < 520.0 {
+            let mobile = ui.available_width() < 600.0;
+            if mobile || ui.available_height() < 520.0 {
                 // Very small / zoomed windows: keep the page scrollable so the
                 // note and info block never run under the player bar.
                 egui::ScrollArea::vertical()
@@ -145,6 +146,9 @@ fn track_view(
     pending: &mut Vec<Command>,
     track: &Track,
 ) {
+    if ui.available_width() < 600.0 {
+        return track_view_mobile(ui, app, theme, pending, track);
+    }
     let size = cover_size(ui);
     let available_height = ui.available_height();
     let available_width = ui.available_width();
@@ -213,6 +217,31 @@ fn track_view(
             });
         }
     });
+}
+
+fn track_view_mobile(
+    ui: &mut Ui,
+    app: &mut EchoPortApp,
+    theme: &Theme,
+    pending: &mut Vec<Command>,
+    track: &Track,
+) {
+    let width = ui.available_width();
+    let cover = (width - 36.0).clamp(160.0, 300.0);
+    ui.add_space(2.0);
+    ui.horizontal(|ui| {
+        ui.add_space((width - cover).max(0.0) * 0.5);
+        ui.vertical(|ui| {
+            cover_column(ui, app, theme, track, cover);
+        });
+    });
+    ui.add_space(12.0);
+    track_details(ui, app, theme, pending, track, 0.92, None);
+    if app.state.profile.settings.lyrics_enabled {
+        ui.add_space(16.0);
+        lyrics_panel(ui, app, theme, pending, track, width, 330.0, 0.95);
+    }
+    ui.add_space(12.0);
 }
 
 fn lyrics_panel(

@@ -60,7 +60,24 @@ fn cjk_candidates() -> Vec<(PathBuf, u32)> {
             (PathBuf::from("/Library/Fonts/Arial Unicode.ttf"), 0),
         ]
     }
-    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+    #[cfg(target_os = "android")]
+    {
+        vec![
+            (PathBuf::from("/system/fonts/NotoSansCJK-Regular.ttc"), 2),
+            (PathBuf::from("/system/fonts/NotoSansCJK-Regular.otf"), 0),
+            (PathBuf::from("/system/fonts/NotoSansSC-Regular.otf"), 0),
+            (PathBuf::from("/system/fonts/NotoSansSC-Regular.ttf"), 0),
+            (PathBuf::from("/system/fonts/DroidSansFallback.ttf"), 0),
+            (PathBuf::from("/system/fonts/DroidSansChinese.ttf"), 0),
+            (PathBuf::from("/system/fonts/NotoSansCJKjp-Regular.otf"), 0),
+        ]
+    }
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "windows",
+        target_os = "macos",
+        target_os = "android"
+    )))]
     {
         Vec::new()
     }

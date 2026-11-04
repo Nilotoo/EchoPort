@@ -556,6 +556,7 @@ pub enum Command {
     AddMusicDir(PathBuf),
     RemoveMusicDir(PathBuf),
     PickMusicFolder,
+    ImportAudioFile,
     PickDownloadFolder,
     SetLanguage(Language),
     SetThemeMode(ThemeMode),
@@ -618,6 +619,10 @@ pub enum AppEvent {
     /// Album page data (metadata + ordered tracks + same-artist albums).
     AlbumDetailReady(Box<crate::model::AlbumDetail>),
     /// Lyrics fetched for a track (stale results are ignored by track id).
+    AudioImported {
+        path: Option<std::path::PathBuf>,
+        error: Option<String>,
+    },
     LyricsReady {
         track_id: String,
         data: Option<crate::lyrics::LyricsData>,

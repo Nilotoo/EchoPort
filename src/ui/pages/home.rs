@@ -17,18 +17,50 @@ pub fn draw(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec
     widgets::page_scroll(ui, |ui| {
         let screen_h = ui.ctx().screen_rect().height();
         ui.add_space(((screen_h - 900.0) * 0.22).clamp(0.0, 120.0));
-        header(ui, app, theme);
-        ui.add_space(12.0);
-        hero(ui, app, theme, pending);
-        ui.add_space(14.0);
-        recently_played(ui, app, theme, pending);
-        ui.add_space(12.0);
-        bottom_row(ui, app, theme, pending);
+        let mobile = ui.available_width() < 600.0;
+        header(ui, app, theme, mobile);
+        ui.add_space(if mobile { 8.0 } else { 12.0 });
+        if mobile {
+            hero_mobile(ui, app, theme, pending);
+        } else {
+            hero(ui, app, theme, pending);
+        }
+        ui.add_space(if mobile { 16.0 } else { 14.0 });
+        recently_played(ui, app, theme, pending, mobile);
+        ui.add_space(if mobile { 14.0 } else { 12.0 });
+        bottom_row(ui, app, theme, pending, mobile);
         ui.add_space(8.0);
     });
 }
 
-fn header(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme) {
+fn header(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, mobile: bool) {
+    if mobile {
+        let name = app.state.profile.name.clone();
+        let base = app.state.tr(Key::WelcomeBack);
+        ui.label(
+            RichText::new(style::greeting(app.state.lang, base, &name))
+                .size(23.0)
+                .color(theme.text),
+        );
+        ui.add(
+            egui::Label::new(
+                RichText::new(app.state.tr(Key::SourcesHint))
+                    .size(11.0)
+                    .color(theme.text_weak),
+            )
+            .wrap(),
+        );
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            if style::button(ui, theme, app.state.tr(Key::SearchNav), Variant::Primary).clicked() {
+                app.set_page(Page::Search);
+            }
+            if style::button(ui, theme, app.state.tr(Key::NowPlaying), Variant::Ghost).clicked() {
+                app.set_page(Page::NowPlaying);
+            }
+        });
+        return;
+    }
     ui.horizontal(|ui| {
         let name = app.state.profile.name.clone();
         let base = app.state.tr(Key::WelcomeBack);
@@ -292,12 +324,126 @@ fn hero(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec<Com
 }
 
 // ---------------------------------------------------------------------------
+// Continue listening — phone layout
+// ---------------------------------------------------------------------------
+
+fn hero_mobile(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec<Command>) {
+    let width = ui.available_width();
+    let height = 86.0;
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(width, height), Sense::hover());
+    ui.painter()
+        .rect_filled(rect, CornerRadius::same(style::R_LG), theme.surface);
+    ui.painter().rect_stroke(
+        rect,
+        CornerRadius::same(style::R_LG),
+        Stroke::new(1.0_f32, theme.border),
+        StrokeKind::Inside,
+    );
+    let mut open_now = false;
+    if let Some(track) = app.state.now_playing.clone() {
+        let cover_rect = Rect::from_center_size(
+            Pos2::new(rect.left() + 44.0, rect.center().y),
+            Vec2::splat(60.0),
+        );
+        widgets::paint_track_cover(ui, app, theme, &track, cover_rect, style::R_MD);
+        let text_left = cover_rect.right() + 10.0;
+        let text_right = rect.right() - 54.0;
+        style::paint_elided(
+            ui.painter(),
+            Pos2::new(text_left, rect.center().y - 20.0),
+            app.state.tr(Key::ContinueListening),
+            style::font(9.0),
+            theme.text_weak,
+            text_right - text_left,
+        );
+        style::paint_elided(
+            ui.painter(),
+            Pos2::new(text_left, rect.center().y - 2.0),
+            &track.title,
+            style::font(15.0),
+            theme.text,
+            text_right - text_left,
+        );
+        style::paint_elided(
+            ui.painter(),
+            Pos2::new(text_left, rect.center().y + 17.0),
+            track.display_artist(),
+            style::font(10.0),
+            theme.text_weak,
+            text_right - text_left,
+        );
+        let play_center = Pos2::new(rect.right() - 30.0, rect.center().y);
+        let play_rect = Rect::from_center_size(play_center, Vec2::splat(38.0));
+        if ui
+            .interact(play_rect, ui.id().with("mobile-home-play"), Sense::click())
+            .clicked()
+        {
+            pending.push(Command::TogglePlayPause);
+        }
+        ui.painter().circle_filled(play_center, 19.0, theme.accent);
+        style::paint_icon(
+            ui.painter(),
+            if app.state.playback.state.is_playing() {
+                Icon::Pause
+            } else {
+                Icon::Play
+            },
+            play_rect.shrink(11.0),
+            theme.on_accent,
+        );
+    } else {
+        style::paint_icon(
+            ui.painter(),
+            Icon::Music,
+            Rect::from_center_size(
+                Pos2::new(rect.left() + 44.0, rect.center().y),
+                Vec2::splat(32.0),
+            ),
+            theme.text_weak,
+        );
+        style::paint_elided(
+            ui.painter(),
+            Pos2::new(rect.left() + 74.0, rect.center().y - 8.0),
+            app.state.tr(Key::ContinueListening),
+            style::font(13.0),
+            theme.text,
+            rect.width() - 100.0,
+        );
+        style::paint_elided(
+            ui.painter(),
+            Pos2::new(rect.left() + 74.0, rect.center().y + 10.0),
+            app.state.tr(Key::EmptyStateHint),
+            style::font(10.0),
+            theme.text_weak,
+            rect.width() - 100.0,
+        );
+    }
+    let cover = Rect::from_min_size(rect.min, Vec2::splat(60.0));
+    if ui
+        .interact(cover, ui.id().with("mobile-home-cover"), Sense::click())
+        .clicked()
+        && app.state.now_playing.is_some()
+    {
+        open_now = true;
+    }
+    if open_now {
+        app.set_page(Page::NowPlaying);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Recently played
 // ---------------------------------------------------------------------------
 
-fn recently_played(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec<Command>) {
+fn recently_played(
+    ui: &mut Ui,
+    app: &mut EchoPortApp,
+    theme: &Theme,
+    pending: &mut Vec<Command>,
+    mobile: bool,
+) {
     style::section_header(ui, theme, app.state.tr(Key::RecentlyPlayed), None);
-    let tracks = app.state.recent_tracks(6);
+    let tracks = app.state.recent_tracks(if mobile { 4 } else { 6 });
     if tracks.is_empty() {
         widgets::callout(
             ui,
@@ -309,6 +455,29 @@ fn recently_played(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &
         return;
     }
     let available = ui.available_width();
+    if mobile {
+        let gap = 12.0;
+        let card_width = ((available - gap) / 2.0 - 4.0).max(120.0);
+        for row in tracks.chunks(2) {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 0.0;
+                for (index, track) in row.iter().enumerate() {
+                    let global = tracks
+                        .iter()
+                        .position(|item| item.id == track.id)
+                        .unwrap_or(index);
+                    widgets::media_card(
+                        ui, app, theme, pending, track, &tracks, global, card_width,
+                    );
+                    if index == 0 {
+                        ui.add_space(gap);
+                    }
+                }
+            });
+            ui.add_space(10.0);
+        }
+        return;
+    }
     let gap = 14.0;
     let count = tracks.len() as f32;
     let card_width = ((available - gap * (count - 1.0)) / count).max(96.0);
@@ -327,7 +496,21 @@ fn recently_played(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &
 // Bottom row: favourites, playlists, sources
 // ---------------------------------------------------------------------------
 
-fn bottom_row(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec<Command>) {
+fn bottom_row(
+    ui: &mut Ui,
+    app: &mut EchoPortApp,
+    theme: &Theme,
+    pending: &mut Vec<Command>,
+    mobile: bool,
+) {
+    if mobile {
+        card_shell(ui, theme, |ui| favourites(ui, app, theme, pending));
+        ui.add_space(10.0);
+        card_shell(ui, theme, |ui| playlists(ui, app, theme));
+        ui.add_space(10.0);
+        card_shell(ui, theme, |ui| sources(ui, app, theme));
+        return;
+    }
     ui.columns(3, |cols| {
         card_shell(&mut cols[0], theme, |ui| {
             favourites(ui, app, theme, pending)

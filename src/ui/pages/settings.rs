@@ -46,16 +46,20 @@ pub fn draw(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec
         };
         let gap = 16.0;
         if available < 840.0 {
-            scripting(ui, app, theme, pending, available);
-            ui.add_space(14.0);
+            if !cfg!(target_os = "android") {
+                scripting(ui, app, theme, pending, available);
+                ui.add_space(14.0);
+            }
             appearance(ui, app, theme, pending, available, palette.as_ref());
             ui.add_space(14.0);
             playback(ui, app, theme, pending, available);
             ui.add_space(14.0);
-            downloads(ui, app, theme, pending, available);
-            ui.add_space(14.0);
-            tooling(ui, app, theme, pending, available);
-            ui.add_space(14.0);
+            if !cfg!(target_os = "android") {
+                downloads(ui, app, theme, pending, available);
+                ui.add_space(14.0);
+                tooling(ui, app, theme, pending, available);
+                ui.add_space(14.0);
+            }
             storage(ui, app, theme, pending, available);
             ui.add_space(14.0);
             about(ui, app, theme, pending, available);
