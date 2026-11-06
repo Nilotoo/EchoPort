@@ -1,0 +1,284 @@
+import { Theme } from "theme.slint";
+import { Cover, Equalizer, PlayPulse, SoftButton, AlbumCard, GlassCard, RoundButton } from "components.slint";
+
+export component HomePage inherits Rectangle {
+    in property <int> tick: 0;
+    in property <float> progress: 0.38;
+    in property <bool> playing: true;
+    callback open-now;
+    callback toggle-play;
+    callback go-library;
+
+    background: transparent;
+
+    // Slowly floating hero artwork.
+    property <bool> float-up: false;
+    property <length> hero-lift: root.float-up ? -8px : 4px;
+    animate hero-lift { duration: 3200ms; easing: ease-in-out; }
+    Timer {
+        interval: 3200ms;
+        running: true;
+        triggered => { root.float-up = !root.float-up; }
+    }
+
+    VerticalLayout {
+        width: 100%;
+        height: 100%;
+        alignment: start;
+        padding-left: 36px;
+        padding-right: 36px;
+        padding-top: 20px;
+        spacing: 14px;
+
+        // ---------------------------------------------------------------
+        // Greeting / quick actions
+        // ---------------------------------------------------------------
+        HorizontalLayout {
+            width: 100%;
+            height: 72px;
+            VerticalLayout {
+                spacing: 3px;
+                alignment: start;
+                Text {
+                    text: "Welcome back, Nilotoo";
+                    color: Theme.text;
+                    font-size: 28px;
+                    font-weight: 300;
+                }
+                Text {
+                    text: "A quiet port for music · local first · no tracking";
+                    color: Theme.text-weak;
+                    font-size: 12px;
+                }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            SoftButton {
+                label: "⌕  Search";
+                width: 108px;
+                clicked => { root.go-library(); }
+            }
+            SoftButton {
+                label: root.playing ? "❚❚  Pause" : "▶  Play";
+                primary: true;
+                width: 104px;
+                clicked => { root.toggle-play(); }
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // Continue listening hero
+        // ---------------------------------------------------------------
+        GlassCard {
+            height: 218px;
+            clip: true;
+            background: @linear-gradient(120deg, #ffffff 0%, #f3f7ff 56%, #eef8dc 100%);
+
+            // decorative blobs
+            Rectangle {
+                x: parent.width - 300px;
+                y: -120px;
+                width: 360px;
+                height: 360px;
+                border-radius: 180px;
+                background: #d9ff5740;
+            }
+            Rectangle {
+                x: parent.width - 230px;
+                y: 52px;
+                width: 160px;
+                height: 160px;
+                border-radius: 80px;
+                background: #1463ff16;
+                border-width: 1px;
+                border-color: #1463ff28;
+            }
+
+            Rectangle {
+                x: 24px;
+                y: root.hero-lift;
+                width: 172px;
+                height: 172px;
+                animate y { duration: 3200ms; easing: ease-in-out; }
+                Cover {
+                    width: 100%;
+                    height: 100%;
+                    color-a: #1f54d8;
+                    color-b: #c7f06b;
+                    glyph: "◌";
+                    glyph-size: 96px;
+                    radius: 22px;
+                    glow: true;
+                }
+            }
+            VerticalLayout {
+                x: 224px;
+                y: 32px;
+                width: parent.width - 430px;
+                height: 136px;
+                alignment: start;
+                spacing: 4px;
+                Text {
+                    text: "CONTINUE LISTENING";
+                    color: Theme.text-faint;
+                    font-size: 10px;
+                    font-weight: 600;
+                    letter-spacing: 1.5px;
+                }
+                Text {
+                    text: "Saltwater Room";
+                    color: Theme.text;
+                    font-size: 30px;
+                    font-weight: 500;
+                    overflow: elide;
+                }
+                Text {
+                    text: "Aurora Lune  ·  Tidal Glass  ·  2021";
+                    color: Theme.text-weak;
+                    font-size: 13px;
+                    overflow: elide;
+                }
+                Rectangle { height: 12px; }
+                HorizontalLayout {
+                    height: 16px;
+                    spacing: 10px;
+                    Equalizer { tick: root.tick; color: Theme.accent; }
+                    Text {
+                        text: "01:38 / 04:12";
+                        color: Theme.text-weak;
+                        font-size: 10px;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+            // progress
+            Rectangle {
+                x: 224px;
+                y: 184px;
+                width: parent.width - 330px;
+                height: 4px;
+                border-radius: 2px;
+                background: #dbe4f1;
+                Rectangle {
+                    width: parent.width * root.progress;
+                    height: 100%;
+                    border-radius: 2px;
+                    background: @linear-gradient(90deg, Theme.accent 0%, #50a8ff 70%, Theme.lime 100%);
+                    animate width { duration: 180ms; easing: linear; }
+                }
+                Rectangle {
+                    x: parent.width * root.progress - 5px;
+                    y: -3px;
+                    width: 10px;
+                    height: 10px;
+                    border-radius: 5px;
+                    background: Theme.accent;
+                    border-width: 2px;
+                    border-color: #ffffff;
+                    animate x { duration: 180ms; easing: linear; }
+                }
+            }
+            PlayPulse {
+                x: parent.width - 104px;
+                y: 82px;
+                playing: root.playing;
+                tick: root.tick;
+                clicked => { root.toggle-play(); }
+            }
+            TouchArea {
+                clicked => { root.open-now(); }
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // Recently played
+        // ---------------------------------------------------------------
+        Text {
+            text: "Recently played";
+            color: Theme.text;
+            font-size: 18px;
+            font-weight: 500;
+            height: 24px;
+        }
+        HorizontalLayout {
+            width: 100%;
+            height: 252px;
+            spacing: 16px;
+            AlbumCard {
+                width: 24%;
+                tick: root.tick;
+                color-a: #2247bc; color-b: #b8f16d; glyph: "S";
+                title: "Saltwater Room"; artist: "Aurora Lune";
+                current: true;
+                clicked => { root.open-now(); }
+            }
+            AlbumCard {
+                width: 24%;
+                tick: root.tick;
+                color-a: #0d2d6b; color-b: #5eb8ff; glyph: "玻";
+                title: "玻璃海"; artist: "陈一";
+                clicked => { root.open-now(); }
+            }
+            AlbumCard {
+                width: 24%;
+                tick: root.tick;
+                color-a: #1b55b8; color-b: #a4dcef; glyph: "M";
+                title: "Midnight Postcard"; artist: "The Quiet Hours";
+                clicked => { root.open-now(); }
+            }
+            AlbumCard {
+                width: 24%;
+                tick: root.tick;
+                color-a: #7b61e8; color-b: #99e8d0; glyph: "雨";
+                title: "雨停之后"; artist: "林间";
+                clicked => { root.open-now(); }
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // Small summary row
+        // ---------------------------------------------------------------
+        HorizontalLayout {
+            width: 100%;
+            height: 106px;
+            spacing: 14px;
+            GlassCard {
+                width: 34%;
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 4px;
+                    Text { text: "Favorites"; color: Theme.text; font-size: 15px; font-weight: 600; }
+                    Text { text: "3 tracks · 12 min"; color: Theme.text-weak; font-size: 11px; }
+                    Rectangle { height: 8px; }
+                    HorizontalLayout {
+                        spacing: 6px;
+                        Rectangle { width: 24px; height: 24px; border-radius: 7px; background: #dbe6ff; }
+                        Rectangle { width: 24px; height: 24px; border-radius: 7px; background: #dff7c4; }
+                        Rectangle { width: 24px; height: 24px; border-radius: 7px; background: #ffe5df; }
+                    }
+                }
+            }
+            GlassCard {
+                width: 33%;
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 4px;
+                    Text { text: "Your playlists"; color: Theme.text; font-size: 15px; font-weight: 600; }
+                    Text { text: "3 collections · 10 tracks"; color: Theme.text-weak; font-size: 11px; }
+                    Rectangle { height: 8px; }
+                    Text { text: "Macaron Mix  ·  Blue Hour  ·  Night Writing"; color: Theme.accent; font-size: 11px; overflow: elide; }
+                }
+            }
+            GlassCard {
+                width: 31%;
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 4px;
+                    Text { text: "One library, many sources"; color: Theme.text; font-size: 15px; font-weight: 600; }
+                    Text { text: "8 providers · legal public audio only"; color: Theme.text-weak; font-size: 11px; }
+                    Rectangle { height: 8px; }
+                    Text { text: "YouTube  ·  Netease  ·  SoundCloud  ·  Archive"; color: Theme.accent; font-size: 11px; overflow: elide; }
+                }
+            }
+        }
+    }
+}

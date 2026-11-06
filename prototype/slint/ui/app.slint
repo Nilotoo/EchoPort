@@ -1,0 +1,278 @@
+import { Theme } from "theme.slint";
+import { NavItem, Cover, Equalizer, PlayPulse, RoundButton, GlassCard } from "components.slint";
+import { HomePage } from "home.slint";
+import { NowPlayingPage } from "now_playing.slint";
+import { LibraryPage } from "library.slint";
+
+export component AppWindow inherits Window {
+    title: "EchoPort · Slint Lab";
+    width: 1440px;
+    height: 900px;
+    background: Theme.bg;
+
+    in-out property <int> page: 0; // 0 home, 1 now playing, 2 library
+    property <int> tick: 0;
+    property <float> progress: 0.38;
+    property <bool> playing: true;
+    property <bool> drift: false;
+
+    // A slow shared clock powers the equalizer, progress and breathing rings.
+    Timer {
+        interval: 80ms;
+        running: true;
+        triggered => {
+            root.tick = Math.mod(root.tick + 1, 100000);
+            root.progress = root.playing
+                ? Math.mod(root.progress + 0.00045, 1.0)
+                : root.progress;
+        }
+    }
+    Timer {
+        interval: 4200ms;
+        running: true;
+        triggered => { root.drift = !root.drift; }
+    }
+
+    content := Rectangle {
+        width: 100%;
+        height: 100%;
+
+    // ---------------------------------------------------------------
+    // Expressive, slow-moving ambient background.
+    // ---------------------------------------------------------------
+    Rectangle {
+        x: root.drift ? -60px : 30px;
+        y: root.drift ? 40px : 80px;
+        width: 520px;
+        height: 520px;
+        border-radius: 260px;
+        background: #1463ff10;
+        animate x, y { duration: 4200ms; easing: ease-in-out; }
+    }
+    Rectangle {
+        x: root.width - 460px + (root.drift ? -40px : 50px);
+        y: root.height - 560px + (root.drift ? 60px : -20px);
+        width: 440px;
+        height: 440px;
+        border-radius: 220px;
+        background: #d9ff5718;
+        animate x, y { duration: 4200ms; easing: ease-in-out; }
+    }
+    Rectangle {
+        x: root.width * 0.48;
+        y: root.drift ? -80px : -20px;
+        width: 280px;
+        height: 280px;
+        border-radius: 140px;
+        background: #f2b8ff0d;
+        animate y { duration: 4200ms; easing: ease-in-out; }
+    }
+
+    // ---------------------------------------------------------------
+    // Sidebar
+    // ---------------------------------------------------------------
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: Theme.sidebar-width;
+        height: root.height - Theme.player-height;
+        background: #ffffffa8;
+        border-width: 1px;
+        border-color: Theme.border;
+
+        VerticalLayout {
+            width: 100%;
+            height: 100%;
+            padding: 24px;
+            spacing: 4px;
+            Text {
+                text: "EchoPort";
+                color: Theme.text;
+                font-size: 25px;
+                font-weight: 500;
+                height: 34px;
+            }
+            Text {
+                text: "a quiet port for music";
+                color: Theme.text-weak;
+                font-size: 10px;
+                height: 22px;
+            }
+            Rectangle { height: 22px; }
+            NavItem {
+                label: "Home";
+                glyph: "⌂";
+                selected: root.page == 0;
+                clicked => { root.page = 0; }
+            }
+            NavItem {
+                label: "Now Playing";
+                glyph: "◉";
+                selected: root.page == 1;
+                clicked => { root.page = 1; }
+            }
+            NavItem {
+                label: "Library";
+                glyph: "▦";
+                selected: root.page == 2;
+                clicked => { root.page = 2; }
+            }
+            NavItem {
+                label: "Search";
+                glyph: "⌕";
+                clicked => { root.page = 2; }
+            }
+            NavItem {
+                label: "Playlists";
+                glyph: "≡";
+                clicked => { root.page = 2; }
+            }
+            Rectangle { vertical-stretch: 1; }
+            Rectangle {
+                height: 1px;
+                background: Theme.border;
+            }
+            Rectangle { height: 12px; }
+            Text {
+                text: "SLINT PROTOTYPE  ·  0.3.2";
+                color: Theme.text-faint;
+                font-size: 9px;
+                font-weight: 600;
+                letter-spacing: 0.8px;
+            }
+            Text {
+                text: "Motion study, not the shipping UI yet.";
+                color: Theme.text-faint;
+                font-size: 9px;
+                wrap: word-wrap;
+                height: 30px;
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Page strip (slide between pages)
+    // ---------------------------------------------------------------
+    page-width := Rectangle {
+        x: Theme.sidebar-width;
+        y: 0px;
+        width: root.width - Theme.sidebar-width;
+        height: root.height - Theme.player-height;
+
+        clip: true;
+        strip := Rectangle {
+            width: parent.width * 3;
+            height: 100%;
+            x: -root.page * parent.width;
+            animate x { duration: 480ms; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+
+            HomePage {
+                x: 0px;
+                width: root.width - Theme.sidebar-width;
+                height: parent.height;
+                tick: root.tick;
+                progress: root.progress;
+                playing: root.playing;
+                open-now => { root.page = 1; }
+                toggle-play => { root.playing = !root.playing; }
+                go-library => { root.page = 2; }
+            }
+            NowPlayingPage {
+                x: root.width - Theme.sidebar-width;
+                width: root.width - Theme.sidebar-width;
+                height: parent.height;
+                tick: root.tick;
+                progress: root.progress;
+                playing: root.playing;
+                toggle-play => { root.playing = !root.playing; }
+                go-back => { root.page = 0; }
+            }
+            LibraryPage {
+                x: (root.width - Theme.sidebar-width) * 2;
+                width: root.width - Theme.sidebar-width;
+                height: parent.height;
+                tick: root.tick;
+                open-now => { root.page = 1; }
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Persistent player bar
+    // ---------------------------------------------------------------
+    Rectangle {
+        x: 0px;
+        y: root.height - Theme.player-height;
+        width: root.width;
+        height: Theme.player-height;
+        background: #ffffffd9;
+        border-width: 1px;
+        border-color: Theme.border;
+        drop-shadow-color: #0b122012;
+        drop-shadow-blur: 20px;
+        drop-shadow-offset-y: -6px;
+
+        HorizontalLayout {
+            width: 100%;
+            height: 100%;
+            padding-left: 22px;
+            padding-right: 22px;
+            spacing: 16px;
+            Cover {
+                width: 62px;
+                height: 62px;
+                y: 20px;
+                color-a: #1f54d8;
+                color-b: #c7f06b;
+                glyph: "S";
+                glyph-size: 28px;
+                radius: 14px;
+            }
+            VerticalLayout {
+                y: 20px;
+                width: 260px;
+                spacing: 2px;
+                Text { text: "Saltwater Room"; color: Theme.text; font-size: 14px; font-weight: 600; overflow: elide; }
+                Text { text: "Aurora Lune · Tidal Glass"; color: Theme.text-weak; font-size: 10px; overflow: elide; }
+            }
+            PlayPulse {
+                width: 42px;
+                height: 42px;
+                y: 30px;
+                playing: root.playing;
+                tick: root.tick;
+                clicked => { root.playing = !root.playing; }
+            }
+            RoundButton { glyph: "‹"; y: 32px; width: 34px; height: 34px; }
+            RoundButton { glyph: "›"; y: 32px; width: 34px; height: 34px; }
+            Equalizer { tick: root.tick; color: Theme.accent; y: 34px; }
+            Rectangle { horizontal-stretch: 1; }
+            Text {
+                text: root.playing ? "PLAYING" : "PAUSED";
+                color: root.playing ? Theme.accent : Theme.text-weak;
+                font-size: 9px;
+                font-weight: 700;
+                letter-spacing: 1.2px;
+                y: 38px;
+            }
+            RoundButton { glyph: "♡"; y: 32px; width: 34px; height: 34px; }
+            RoundButton { glyph: "≡"; y: 32px; width: 34px; height: 34px; }
+        }
+    }
+
+    // A tiny page progress indicator at the bottom-left of the content area.
+    Rectangle {
+        x: Theme.sidebar-width + 36px;
+        y: root.height - Theme.player-height - 10px;
+        width: 120px;
+        height: 2px;
+        background: #ffffffaa;
+        Rectangle {
+            width: (parent.width / 3) * root.page + parent.width / 3;
+            height: 100%;
+            background: Theme.accent;
+            animate width { duration: 480ms; easing: ease-out; }
+        }
+    }
+    }
+}
