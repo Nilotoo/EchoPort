@@ -678,6 +678,16 @@ impl EchoPortApp {
                 self.state.set_follow_cover_accent(follow);
                 self.mark_dirty();
             }
+            Command::SetThemeImage(path) => self.set_theme_image(path),
+            Command::ClearThemeImage => {
+                if let Some(path) = self.state.profile.settings.theme_image.take() {
+                    let _ = std::fs::remove_file(path);
+                }
+                self.state.theme_image_palette = None;
+                self.ui.invalidate_theme_image();
+                self.mark_dirty();
+                self.toast(ToastKind::Info, Key::ThemeImageRemoved);
+            }
             Command::SetLyricsEnabled(enabled) => {
                 self.state.profile.settings.lyrics_enabled = enabled;
                 if enabled {
@@ -2181,6 +2191,38 @@ impl EchoPortApp {
         });
     }
 
+    fn set_theme_image(&mut self, source: std::path::PathBuf) {
+        const MAX_THEME_IMAGE: u64 = 32 * 1024 * 1024;
+        let too_large = std::fs::metadata(&source)
+            .map(|meta| meta.len() > MAX_THEME_IMAGE)
+            .unwrap_or(true);
+        if too_large {
+            self.toast(ToastKind::Error, Key::ThemeImageFailed);
+            return;
+        }
+        let Ok(bytes) = std::fs::read(&source) else {
+            self.toast(ToastKind::Error, Key::ThemeImageFailed);
+            return;
+        };
+        let Some(palette) = crate::theme::extract_palette_bytes(&bytes) else {
+            self.toast(ToastKind::Error, Key::ThemeImageFailed);
+            return;
+        };
+        let target = self.paths.data_dir.join("theme-image.img");
+        let tmp = self.paths.data_dir.join("theme-image.img.tmp");
+        let _ = std::fs::remove_file(&target);
+        if std::fs::write(&tmp, &bytes).is_err() || std::fs::rename(&tmp, &target).is_err() {
+            self.toast(ToastKind::Error, Key::ThemeImageFailed);
+            return;
+        }
+        self.state.profile.settings.theme_image = Some(target);
+        self.state.theme_image_palette = Some(palette);
+        self.ui.invalidate_theme_image();
+        self.mark_dirty();
+        self.toast(ToastKind::Success, Key::ThemeImageApplied);
+        self.ctx.request_repaint();
+    }
+
     fn ensure_android_music_dir(&mut self) {
         #[cfg(target_os = "android")]
         {
@@ -2454,6 +2496,7 @@ impl EchoPortApp {
                 ..Default::default()
             };
             self.state.theme_mode = self.state.profile.settings.theme_mode;
+            self.state.refresh_theme_image_palette();
             self.state.now_playing = None;
             self.state.queue.clear();
             self.state.queue_pos = 0;

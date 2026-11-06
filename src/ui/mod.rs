@@ -106,9 +106,46 @@ pub struct UiState {
     /// position (in line units).
     pub lyrics_track: Option<String>,
     pub lyrics_scroll_pos: f32,
+    /// Decoded optional theme image shown behind the sidebar.
+    theme_image: Option<(String, egui::TextureHandle)>,
 }
 
 impl UiState {
+    /// Lazily decode and upload the custom theme image. The cache is keyed by
+    /// canonical path so replacing the image immediately refreshes the sidebar.
+    /// Drop a decoded theme image after it was replaced or removed.
+    pub fn invalidate_theme_image(&mut self) {
+        self.theme_image = None;
+    }
+
+    pub fn theme_image_texture(
+        &mut self,
+        ctx: &egui::Context,
+        path: &std::path::Path,
+    ) -> Option<egui::TextureHandle> {
+        let key = path.to_string_lossy().into_owned();
+        if self.theme_image.as_ref().map(|(key, _)| key) != Some(&key) {
+            let bytes = std::fs::read(path).ok()?;
+            let image = image::load_from_memory(&bytes).ok()?;
+            if image.width() > 8_000
+                || image.height() > 8_000
+                || u64::from(image.width()) * u64::from(image.height()) > 24_000_000
+            {
+                return None;
+            }
+            let rgba = image.to_rgba8();
+            let color_image = egui::ColorImage::from_rgba_unmultiplied(
+                [rgba.width() as usize, rgba.height() as usize],
+                rgba.as_raw(),
+            );
+            let texture = ctx.load_texture(&key, color_image, egui::TextureOptions::LINEAR);
+            self.theme_image = Some((key.clone(), texture));
+        }
+        self.theme_image
+            .as_ref()
+            .map(|(_, texture)| texture.clone())
+    }
+
     pub fn new(_cc: &CreationContext<'_>, _state: &crate::state::AppState) -> Self {
         let icon_assets = icons::install(&_cc.egui_ctx);
         Self {
@@ -131,6 +168,7 @@ impl UiState {
             profile_editing: false,
             lyrics_track: None,
             lyrics_scroll_pos: 0.0,
+            theme_image: None,
         }
     }
 }
@@ -560,11 +598,52 @@ fn mobile_player(
     let _ = height;
 }
 
+/// Paint the user's theme image behind the sidebar. The central panel is left
+/// untouched; the image is softly veiled so navigation keeps its contrast.
+fn paint_sidebar_theme_image(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme) {
+    let Some(path) = app.state.theme_image_path() else {
+        return;
+    };
+    let Some(texture) = app.ui.theme_image_texture(ui.ctx(), &path) else {
+        return;
+    };
+    let rect = ui.max_rect();
+    if rect.width() <= 1.0 || rect.height() <= 1.0 {
+        return;
+    }
+    let image_size = texture.size_vec2();
+    if image_size.x <= 0.0 || image_size.y <= 0.0 {
+        return;
+    }
+    // Cover-crop the image instead of stretching it.
+    let image_aspect = image_size.x / image_size.y;
+    let rect_aspect = rect.width() / rect.height();
+    let mut uv = egui::Rect::from_min_max(egui::Pos2::ZERO, egui::Pos2::new(1.0, 1.0));
+    if image_aspect > rect_aspect {
+        let visible = rect_aspect / image_aspect;
+        uv.min.x = (1.0 - visible) * 0.5;
+        uv.max.x = 1.0 - uv.min.x;
+    } else if image_aspect < rect_aspect {
+        let visible = image_aspect / rect_aspect;
+        uv.min.y = (1.0 - visible) * 0.5;
+        uv.max.y = 1.0 - uv.min.y;
+    }
+    ui.painter()
+        .image(texture.id(), rect, uv, egui::Color32::WHITE);
+    let scrim = if theme.dark {
+        egui::Color32::from_black_alpha(96)
+    } else {
+        egui::Color32::from_white_alpha(152)
+    };
+    ui.painter().rect_filled(rect, 0.0, scrim);
+}
+
 // ---------------------------------------------------------------------------
 // Sidebar
 // ---------------------------------------------------------------------------
 
 fn sidebar(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec<Command>) {
+    paint_sidebar_theme_image(ui, app, theme);
     let screen_h = ui.ctx().screen_rect().height();
     let short = screen_h < 620.0;
     ui.spacing_mut().item_spacing = Vec2::new(4.0, if short { 1.0 } else { 3.0 });
