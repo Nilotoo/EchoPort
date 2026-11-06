@@ -1,0 +1,265 @@
+import { Theme } from "theme.slint";
+import { Cover, Equalizer, PlayPulse, RoundButton, SoftButton } from "components.slint";
+
+export component NowPlayingPage inherits Rectangle {
+    in property <int> tick: 0;
+    in property <float> progress: 0.38;
+    in property <bool> playing: true;
+    callback toggle-play;
+    callback go-back;
+
+    background: transparent;
+
+    property <int> lyric-line: 0;
+    property <[string]> lyric-lines: [
+        "There's too much I want to say, so",
+        "Do-re-mi-fa-so-la-ti-do",
+        "All I want is said and done, oh",
+        "Let the water carry me home",
+        "And the room turns tidal glass"
+    ];
+    property <bool> float-up: false;
+    property <length> cover-lift: root.float-up ? -10px : 6px;
+    animate cover-lift { duration: 4200ms; easing: ease-in-out; }
+    Timer {
+        interval: 4200ms;
+        running: true;
+        triggered => { root.float-up = !root.float-up; }
+    }
+
+    // Immersive radial wash.
+    Rectangle {
+        x: parent.width * 0.18;
+        y: -parent.height * 0.18;
+        width: parent.width * 0.72;
+        height: parent.height * 0.72;
+        border-radius: self.width / 2;
+        background: #1463ff0b;
+    }
+    Rectangle {
+        x: parent.width * 0.58;
+        y: parent.height * 0.52;
+        width: parent.width * 0.44;
+        height: parent.height * 0.44;
+        border-radius: self.width / 2;
+        background: #d9ff5714;
+    }
+
+    // Back / section label.
+    HorizontalLayout {
+        x: 36px;
+        y: 26px;
+        width: parent.width - 72px;
+        height: 40px;
+        spacing: 12px;
+        RoundButton {
+            glyph: "‹";
+            width: 36px;
+            height: 36px;
+            clicked => { root.go-back(); }
+        }
+        Text {
+            text: "NOW PLAYING";
+            color: Theme.text-faint;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            vertical-alignment: center;
+        }
+        Rectangle { horizontal-stretch: 1; }
+        Text {
+            text: "Hi-Res  ·  44.1 kHz  ·  lossless";
+            color: Theme.text-weak;
+            font-size: 10px;
+            vertical-alignment: center;
+        }
+    }
+
+    // Cover.
+    Rectangle {
+        x: 54px;
+        y: 104px + root.cover-lift;
+        width: 350px;
+        height: 350px;
+        animate y { duration: 4200ms; easing: ease-in-out; }
+        drop-shadow-color: #0b122022;
+        drop-shadow-blur: 34px;
+        drop-shadow-offset-y: 18px;
+        Cover {
+            width: 100%;
+            height: 100%;
+            color-a: #1f54d8;
+            color-b: #c7f06b;
+            glyph: "◌";
+            glyph-size: 120px;
+            radius: 28px;
+            glow: true;
+        }
+        Rectangle {
+            x: 18px;
+            y: 18px;
+            width: 62px;
+            height: 24px;
+            border-radius: 12px;
+            background: #ffffffcc;
+            Text {
+                text: "PLAYING";
+                color: Theme.accent;
+                font-size: 8px;
+                font-weight: 700;
+                letter-spacing: 1px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                width: 100%;
+                height: 100%;
+            }
+        }
+    }
+
+    // Track details.
+    VerticalLayout {
+        x: 448px;
+        y: 128px;
+        width: 360px;
+        height: 420px;
+        alignment: start;
+        spacing: 4px;
+        Text {
+            text: "Tidal Glass · 2021";
+            color: Theme.text-weak;
+            font-size: 11px;
+        }
+        Text {
+            text: "Saltwater Room";
+            color: Theme.text;
+            font-size: 38px;
+            font-weight: 300;
+            wrap: word-wrap;
+            width: 100%;
+        }
+        Text {
+            text: "Aurora Lune";
+            color: Theme.text-weak;
+            font-size: 15px;
+        }
+        Rectangle { height: 26px; }
+        HorizontalLayout {
+            height: 54px;
+            spacing: 12px;
+            PlayPulse {
+                width: 54px;
+                height: 54px;
+                playing: root.playing;
+                tick: root.tick;
+                clicked => { root.toggle-play(); }
+            }
+            RoundButton { glyph: "‹"; width: 38px; height: 38px; y: 8px; }
+            RoundButton { glyph: "›"; width: 38px; height: 38px; y: 8px; }
+            RoundButton { glyph: "♡"; width: 38px; height: 38px; y: 8px; }
+        }
+        Rectangle { height: 14px; }
+        Equalizer { tick: root.tick; color: Theme.accent; height: 18px; }
+        Rectangle { height: 6px; }
+        Rectangle {
+            height: 4px;
+            width: 100%;
+            border-radius: 2px;
+            background: #dbe4f1;
+            Rectangle {
+                width: parent.width * root.progress;
+                height: 100%;
+                border-radius: 2px;
+                background: @linear-gradient(90deg, Theme.accent 0%, #50a8ff 70%, Theme.lime 100%);
+                animate width { duration: 180ms; easing: linear; }
+            }
+        }
+        HorizontalLayout {
+            height: 16px;
+            Text { text: "01:38"; color: Theme.text-weak; font-size: 10px; }
+            Rectangle { horizontal-stretch: 1; }
+            Text { text: "04:12"; color: Theme.text-weak; font-size: 10px; }
+        }
+        Rectangle { height: 8px; }
+        Text {
+            text: "A slow, sunlit song about drifting somewhere warmer.";
+            color: Theme.text-faint;
+            font-size: 11px;
+            wrap: word-wrap;
+            width: 100%;
+        }
+    }
+
+    // Lyrics panel, five lines with a large active centre line.
+    VerticalLayout {
+        x: parent.width - 390px;
+        y: 112px;
+        width: 330px;
+        height: 500px;
+        alignment: start;
+        spacing: 0px;
+
+        Timer {
+            interval: 3000ms;
+            running: true;
+            triggered => {
+                root.lyric-line = Math.mod(root.lyric-line + 1, 5);
+            }
+        }
+        Text {
+            text: "LYRICS";
+            color: Theme.text-faint;
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 1.6px;
+            height: 24px;
+        }
+        Rectangle { height: 14px; }
+        for i in 5: Text {
+            text: root.lyric-lines[Math.mod(root.lyric-line + i - 2 + 5, 5)];
+            color: i == 2 ? Theme.accent : Theme.text-weak;
+            font-size: i == 2 ? 23px : (i == 1 || i == 3 ? 16px : 12px);
+            opacity: i == 2 ? 1.0 : (i == 1 || i == 3 ? 0.58 : 0.24);
+            font-weight: i == 2 ? 500 : 400;
+            horizontal-alignment: center;
+            width: 100%;
+            height: i == 2 ? 72px : 58px;
+            vertical-alignment: center;
+            wrap: word-wrap;
+            animate color, opacity, font-size { duration: 420ms; easing: ease-out; }
+        }
+        Rectangle { height: 12px; }
+        Text {
+            text: "LRCLIB · SYNCED";
+            color: Theme.text-faint;
+            font-size: 9px;
+            horizontal-alignment: center;
+            width: 100%;
+        }
+    }
+
+    // Control strip along the bottom of the page.
+    HorizontalLayout {
+        x: 54px;
+        y: parent.height - 72px;
+        width: parent.width - 108px;
+        height: 44px;
+        spacing: 10px;
+        SoftButton {
+            label: "♡  Favorite";
+            width: 104px;
+            clicked => {}
+        }
+        SoftButton {
+            label: "≡  Queue";
+            width: 96px;
+            clicked => {}
+        }
+        Rectangle { horizontal-stretch: 1; }
+        SoftButton {
+            label: "Lyrics  ·  ON";
+            primary: true;
+            width: 112px;
+            clicked => {}
+        }
+    }
+}

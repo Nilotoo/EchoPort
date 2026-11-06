@@ -1,0 +1,177 @@
+import { Theme } from "theme.slint";
+import { Cover, SoftButton, GlassCard, RoundButton } from "components.slint";
+
+export component TrackRow inherits Rectangle {
+    in property <string> index;
+    in property <color> color-a;
+    in property <color> color-b;
+    in property <string> glyph;
+    in property <string> title;
+    in property <string> meta;
+    in property <string> duration;
+    in property <bool> current: false;
+    property <bool> hovered: touch.has-hover;
+    callback clicked;
+
+    height: 66px;
+    border-radius: 14px;
+    background: root.current ? #1463ff10 : (root.hovered ? #f5f8fe : transparent);
+    animate background { duration: 120ms; }
+    x: root.hovered ? 4px : 0px;
+    animate x { duration: 140ms; easing: ease-out; }
+
+    Text {
+        x: 10px;
+        text: root.index;
+        color: root.current ? Theme.accent : Theme.text-faint;
+        font-size: 10px;
+        vertical-alignment: center;
+        height: 100%;
+    }
+    Cover {
+        x: 34px;
+        y: 10px;
+        width: 46px;
+        height: 46px;
+        color-a: root.color-a;
+        color-b: root.color-b;
+        glyph: root.glyph;
+        radius: 11px;
+    }
+    VerticalLayout {
+        x: 94px;
+        y: 12px;
+        width: parent.width - 240px;
+        spacing: 2px;
+        Text {
+            text: root.title;
+            color: root.current ? Theme.accent : Theme.text;
+            font-size: 13px;
+            font-weight: 500;
+            overflow: elide;
+        }
+        Text {
+            text: root.meta;
+            color: Theme.text-weak;
+            font-size: 10px;
+            overflow: elide;
+        }
+    }
+    Text {
+        x: parent.width - 150px;
+        text: root.duration;
+        color: Theme.text-weak;
+        font-size: 10px;
+        vertical-alignment: center;
+        height: 100%;
+    }
+    RoundButton {
+        x: parent.width - 52px;
+        y: 13px;
+        width: 34px;
+        height: 34px;
+        glyph: "⋯";
+        clicked => { root.clicked(); }
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component LibraryPage inherits Rectangle {
+    in property <int> tick: 0;
+    callback open-now;
+    background: transparent;
+
+    VerticalLayout {
+        width: 100%;
+        height: 100%;
+        alignment: start;
+        padding-left: 36px;
+        padding-right: 36px;
+        padding-top: 28px;
+        spacing: 16px;
+
+        HorizontalLayout {
+            height: 66px;
+            VerticalLayout {
+                spacing: 2px;
+                Text { text: "Local music"; color: Theme.text; font-size: 28px; font-weight: 300; }
+                Text { text: "Files stay on this device. No cloud, no account."; color: Theme.text-weak; font-size: 12px; }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            SoftButton { label: "⟳  Scan library"; width: 128px; clicked => {} }
+            SoftButton { label: "+  Import music"; primary: true; width: 138px; clicked => {} }
+        }
+
+        HorizontalLayout {
+            height: 84px;
+            spacing: 12px;
+            GlassCard {
+                width: 33%;
+                VerticalLayout {
+                    padding: 14px;
+                    spacing: 2px;
+                    Text { text: "3"; color: Theme.text; font-size: 25px; font-weight: 300; }
+                    Text { text: "tracks in this demo"; color: Theme.text-weak; font-size: 10px; }
+                }
+            }
+            GlassCard {
+                width: 33%;
+                VerticalLayout {
+                    padding: 14px;
+                    spacing: 2px;
+                    Text { text: "11 min"; color: Theme.text; font-size: 25px; font-weight: 300; }
+                    Text { text: "total play time"; color: Theme.text-weak; font-size: 10px; }
+                }
+            }
+            GlassCard {
+                width: 33%;
+                VerticalLayout {
+                    padding: 14px;
+                    spacing: 2px;
+                    Text { text: "1"; color: Theme.text; font-size: 25px; font-weight: 300; }
+                    Text { text: "imported folder"; color: Theme.text-weak; font-size: 10px; }
+                }
+            }
+        }
+
+        GlassCard {
+            height: 470px;
+            VerticalLayout {
+                padding: 18px;
+                spacing: 2px;
+                HorizontalLayout {
+                    height: 28px;
+                    Text { text: "Tracks"; color: Theme.text; font-size: 15px; font-weight: 600; }
+                    Rectangle { horizontal-stretch: 1; }
+                    Text { text: "3"; color: Theme.text-weak; font-size: 10px; }
+                }
+                Rectangle { height: 8px; }
+                TrackRow {
+                    index: "1"; title: "Saltwater Room"; meta: "Aurora Lune · Tidal Glass · YouTube"; duration: "4:12";
+                    color-a: #1f54d8; color-b: #c7f06b; glyph: "S"; current: true;
+                    clicked => { root.open-now(); }
+                }
+                TrackRow {
+                    index: "2"; title: "玻璃海"; meta: "陈一 · 玻璃海 · Netease"; duration: "3:48";
+                    color-a: #0d2d6b; color-b: #5eb8ff; glyph: "玻";
+                    clicked => { root.open-now(); }
+                }
+                TrackRow {
+                    index: "3"; title: "Midnight Postcard"; meta: "The Quiet Hours · Postcards"; duration: "3:16";
+                    color-a: #1b55b8; color-b: #a4dcef; glyph: "M";
+                    clicked => { root.open-now(); }
+                }
+            }
+        }
+
+        Rectangle { height: 2px; }
+        Text {
+            text: "Tip  ·  Tap a row to play. Animations are intentionally part of this Slint prototype.";
+            color: Theme.text-faint;
+            font-size: 10px;
+        }
+    }
+}
