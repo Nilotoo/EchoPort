@@ -63,6 +63,8 @@ pub fn draw(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec
             storage(ui, app, theme, pending, available);
             ui.add_space(14.0);
             about(ui, app, theme, pending, available);
+            ui.add_space(14.0);
+            changelog(ui, app, theme, available);
         } else {
             let column_w = (available - gap) / 2.0;
             ui.horizontal_top(|ui| {
@@ -85,6 +87,8 @@ pub fn draw(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec
                     Layout::top_down(Align::Min),
                     |ui| {
                         ui.set_min_width(column_w);
+                        changelog(ui, app, theme, column_w);
+                        ui.add_space(14.0);
                         scripting(ui, app, theme, pending, column_w);
                         ui.add_space(14.0);
                         tooling(ui, app, theme, pending, column_w);
@@ -244,6 +248,86 @@ fn appearance(
                 }
             });
         });
+        if !cfg!(target_os = "android") {
+            ui.add_space(14.0);
+            style::divider(ui, theme);
+            ui.add_space(10.0);
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.label(
+                        RichText::new(app.state.tr(Key::ThemeImage))
+                            .size(12.0)
+                            .color(theme.text),
+                    );
+                    ui.add_space(2.0);
+                    ui.add(
+                        egui::Label::new(
+                            RichText::new(app.state.tr(Key::ThemeImageHint))
+                                .size(10.0)
+                                .color(theme.text_weak),
+                        )
+                        .wrap(),
+                    );
+                });
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if style::button(
+                        ui,
+                        theme,
+                        app.state.tr(Key::ChooseThemeImage),
+                        Variant::Secondary,
+                    )
+                    .clicked()
+                    {
+                        if let Some(path) = crate::platform::pick_file(
+                            app.state.tr(Key::ThemeImage),
+                            &[("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])],
+                        ) {
+                            pending.push(Command::SetThemeImage(path));
+                        }
+                    }
+                });
+            });
+            let current = app.state.theme_image_path();
+            if let Some(path) = current {
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if let Some(texture) = app.ui.theme_image_texture(ui.ctx(), &path) {
+                        let (preview, _) =
+                            ui.allocate_exact_size(Vec2::new(104.0, 68.0), Sense::hover());
+                        paint_theme_preview(ui, theme, &texture, preview);
+                    }
+                    ui.vertical(|ui| {
+                        ui.add_space(8.0);
+                        if style::button(
+                            ui,
+                            theme,
+                            app.state.tr(Key::RemoveThemeImage),
+                            Variant::Ghost,
+                        )
+                        .clicked()
+                        {
+                            pending.push(Command::ClearThemeImage);
+                        }
+                        if let Some(palette) = app.state.theme_image_palette {
+                            ui.add_space(8.0);
+                            ui.horizontal(|ui| {
+                                for color in [
+                                    palette.vivid,
+                                    palette.secondary,
+                                    palette.macarons[0],
+                                    palette.macarons[2],
+                                    palette.macarons[4],
+                                ] {
+                                    let (dot, _) =
+                                        ui.allocate_exact_size(Vec2::splat(14.0), Sense::hover());
+                                    ui.painter().circle_filled(dot.center(), 6.0, color);
+                                }
+                            });
+                        }
+                    });
+                });
+            }
+        }
         ui.add_space(14.0);
         style::divider(ui, theme);
         ui.add_space(10.0);
@@ -290,6 +374,86 @@ fn appearance(
                 .size(10.0)
                 .color(theme.text_weak),
         );
+    });
+}
+
+fn paint_theme_preview(ui: &Ui, theme: &Theme, texture: &egui::TextureHandle, rect: Rect) {
+    let image_size = texture.size_vec2();
+    let mut uv = Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0));
+    if image_size.x > 0.0 && image_size.y > 0.0 {
+        let image_aspect = image_size.x / image_size.y;
+        let rect_aspect = rect.width() / rect.height().max(1.0);
+        if image_aspect > rect_aspect {
+            let visible = rect_aspect / image_aspect;
+            uv.min.x = (1.0 - visible) * 0.5;
+            uv.max.x = 1.0 - uv.min.x;
+        } else {
+            let visible = image_aspect / rect_aspect;
+            uv.min.y = (1.0 - visible) * 0.5;
+            uv.max.y = 1.0 - uv.min.y;
+        }
+    }
+    ui.painter().rect_filled(
+        rect,
+        CornerRadius::same(style::R_MD),
+        theme::Theme::default().surface,
+    );
+    ui.painter()
+        .image(texture.id(), rect, uv, egui::Color32::WHITE);
+    ui.painter().rect_stroke(
+        rect,
+        CornerRadius::same(style::R_MD),
+        Stroke::new(1.0_f32, theme.border),
+        StrokeKind::Inside,
+    );
+}
+
+fn changelog(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, width: f32) {
+    let _ = width;
+    section_card(ui, theme, Icon::Clock, app.state.tr(Key::Changelog), |ui| {
+        style::hint_line(ui, theme, app.state.tr(Key::ChangelogHint));
+        ui.add_space(8.0);
+        for (index, release) in crate::changelog::RELEASES.iter().enumerate() {
+            if index > 0 {
+                ui.add_space(10.0);
+            }
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(format!("v{}", release.version))
+                        .size(12.5)
+                        .strong()
+                        .color(if release.version == app.version() {
+                            theme.accent
+                        } else {
+                            theme.text
+                        }),
+                );
+                ui.add_space(4.0);
+                ui.label(
+                    RichText::new(release.title(app.state.lang))
+                        .size(11.0)
+                        .color(theme.text_weak),
+                );
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.label(RichText::new(release.date).size(9.5).color(theme.text_weak));
+                    if release.version == app.version() {
+                        ui.add_space(8.0);
+                        ui.label(
+                            RichText::new(app.state.tr(Key::ChangelogCurrent))
+                                .size(9.0)
+                                .color(theme.accent),
+                        );
+                    }
+                });
+            });
+            for item in release.items(app.state.lang) {
+                ui.label(
+                    RichText::new(format!("· {item}"))
+                        .size(10.5)
+                        .color(theme.text_weak),
+                );
+            }
+        }
     });
 }
 

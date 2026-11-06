@@ -17,6 +17,7 @@ pub mod app;
 pub mod art;
 pub mod audio;
 pub mod background;
+pub mod changelog;
 pub mod download;
 pub mod fonts;
 pub mod i18n;

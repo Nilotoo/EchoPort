@@ -273,6 +273,8 @@ pub struct AppState {
     pub tooling: ToolingStatus,
     pub script: ScriptStatus,
 
+    /// Colours extracted from the optional custom theme image.
+    pub theme_image_palette: Option<Palette>,
     /// Accent colours currently follow cover art (user toggle).
     pub follow_cover_accent: bool,
     /// Keyboard step sizes (overridable from Lua config later).
@@ -313,6 +315,12 @@ impl AppState {
             ..PlaybackStatus::default()
         };
         let theme = Theme::for_mode(theme_mode, None);
+        let theme_image_palette = std::env::var_os("ECHOPORT_THEME_IMAGE")
+            .map(std::path::PathBuf::from)
+            .filter(|path| path.is_file())
+            .or_else(|| profile.settings.theme_image.clone())
+            .as_deref()
+            .and_then(crate::theme::extract_palette_file);
         Self {
             lang: profile.settings.language,
             page: Page::Home,
@@ -335,6 +343,7 @@ impl AppState {
             cover: CoverView::default(),
             tooling: ToolingStatus::default(),
             script: ScriptStatus::default(),
+            theme_image_palette,
             follow_cover_accent,
             seek_step: 5.0,
             volume_step: 0.05,
@@ -357,6 +366,31 @@ impl AppState {
 
     pub fn tr(&self, key: Key) -> &'static str {
         t(self.lang, key)
+    }
+
+    /// Re-read the palette from the persisted theme image.
+    pub fn refresh_theme_image_palette(&mut self) {
+        self.theme_image_palette = self
+            .profile
+            .settings
+            .theme_image
+            .as_deref()
+            .and_then(crate::theme::extract_palette_file);
+    }
+
+    pub fn theme_image_path(&self) -> Option<std::path::PathBuf> {
+        if let Some(path) = std::env::var_os("ECHOPORT_THEME_IMAGE") {
+            let path = std::path::PathBuf::from(path);
+            if path.is_file() {
+                return Some(path);
+            }
+        }
+        self.profile
+            .settings
+            .theme_image
+            .as_ref()
+            .filter(|path| path.is_file())
+            .cloned()
     }
 
     pub fn set_language(&mut self, lang: Language) {
@@ -564,6 +598,8 @@ pub enum Command {
     SetUiScale(f32),
     SetFollowCoverAccent(bool),
     SetLyricsEnabled(bool),
+    SetThemeImage(std::path::PathBuf),
+    ClearThemeImage,
     /// Streamed-audio cache cap in MiB; `0` = delete played tracks immediately.
     SetCacheLimit(u32),
     /// Export a playlist as a metadata-only share file.
