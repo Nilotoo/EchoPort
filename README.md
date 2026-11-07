@@ -28,7 +28,8 @@ Rust + egui 原生应用，Linux / Windows（macOS 构建暂缓），GPL-3.0。
 - **专辑 / 艺人**：封面、发行日期、曲目、收藏、同艺人其它专辑；背景来自 Wikipedia / MusicBrainz。
 - **歌单**：本地与在线曲目混排，自定义封面/简介，可导出/导入离线分享文件。
 - **下载**：每次下载前可选 MP3 / M4A / Opus / FLAC；专辑可整张下载；Windows 安装包内置 `yt-dlp.exe` + `ffmpeg.exe`。
-- **本地优先**：资料、歌单、历史只存在本机；更新检查只读公开 GitHub Release。
+- **本地优先**：资料、歌单、历史只存在本机；更新检查只读公开 Release。
+- **更新源**：中国大陆（按系统时区/区域自动判断）优先使用 Gitee 镜像 `nilotoo_art/echo-port`，其他地区使用 GitHub；GitHub 不可用时自动回退 Gitee。可用 `ECHOPORT_UPDATE_SOURCE=gitee|github` 强制指定。
 - **错误与恢复**：错误弹窗提供“查看并复制日志”；异常退出后下次启动可查看日志；退出时保存当前歌曲、队列、进度、音量、设置和页面，下次启动恢复为暂停状态。
 - **轻量**：release 二进制约 15 MB，无 Electron，无后台常驻。
 
@@ -58,7 +59,7 @@ Rust + egui 原生应用，Linux / Windows（macOS 构建暂缓），GPL-3.0。
 
 ## 安装
 
-从 [Releases](https://github.com/Nilotoo/EchoPort/releases) 下载：
+从 GitHub [Releases](https://github.com/Nilotoo/EchoPort/releases) 或 Gitee [发行版](https://gitee.com/nilotoo_art/echo-port/releases) 下载：
 
 - **Windows**：`echoport-<ver>-windows-x86_64-setup.exe`（完整版）
   / `echoport-<ver>-windows-x86_64-lean-installer.exe`（Lean，无 Lua/插件）
@@ -89,7 +90,7 @@ Linux 中文输入法：X11 使用系统 XIM（fcitx/ibus，需配置 `XMODIFIER
 ## 安全与边界
 
 - 不破解 DRM；Spotify / Apple Music 仅使用公开搜索/元数据，播放匹配公开音频。
-- 更新检查只访问 GitHub 公开 Release，支持关闭；安装包更新会校验发布页 SHA256。
+- 更新检查只读取公开 Release：中国大陆优先 Gitee，其他地区 GitHub；支持关闭，安装包更新会校验发布页 SHA256。
 - Windows 安装器未签名，首次运行会有 SmartScreen 提示。
 - 评论、社交、云同步、热度推荐流不在项目范围内。
 - 歌词来自本地 `.lrc` 或 LRCLIB；不抓取付费/会员歌词。

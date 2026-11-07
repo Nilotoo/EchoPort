@@ -850,7 +850,7 @@ impl EchoPortApp {
             Command::InstallUpdate => self.start_update_download(),
             Command::OpenUpdatePage => {
                 if let Some(info) = self.state.updates.available.as_ref() {
-                    if crate::update::trusted_github_url(&info.url) {
+                    if crate::update::trusted_update_url(&info.url) {
                         if let Err(err) = open::that(&info.url) {
                             log::warn!("could not open update page {}: {err}", info.url);
                         }
@@ -2926,7 +2926,7 @@ impl EchoPortApp {
             let _ = open::that(&info.url);
             return;
         };
-        if !crate::update::trusted_github_url(&asset.url) {
+        if !crate::update::trusted_update_url(&asset.url) {
             self.toast(ToastKind::Error, Key::UpdateFailed);
             return;
         }
@@ -2936,7 +2936,7 @@ impl EchoPortApp {
             let _ = open::that(&info.url);
             return;
         };
-        if !crate::update::trusted_github_url(&checksum_asset.url) {
+        if !crate::update::trusted_update_url(&checksum_asset.url) {
             self.toast(ToastKind::Error, Key::UpdateFailed);
             return;
         }
