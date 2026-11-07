@@ -472,6 +472,28 @@ impl Settings {
 pub const FAVORITES_PLAYLIST_ID: &str = "pl-favourite-tracks-auto";
 pub const FAVORITES_PLAYLIST_NAME: &str = "Favourite Tracks";
 
+/// Snapshot of the last listening session. Restored on startup so a closed
+/// window does not lose the current song, queue, seek position or play mode.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct SessionState {
+    #[serde(default)]
+    pub now_playing: Option<Track>,
+    #[serde(default)]
+    pub queue: Vec<Track>,
+    #[serde(default)]
+    pub queue_pos: usize,
+    #[serde(default)]
+    pub position_secs: f64,
+    #[serde(default)]
+    pub repeat: RepeatMode,
+    #[serde(default)]
+    pub shuffle: bool,
+    /// Last main page, stored as a stable key so the UI can restore it without
+    /// making the `Page` enum part of the on-disk profile format.
+    #[serde(default)]
+    pub page: Option<String>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Profile {
     pub schema: u32,
@@ -499,6 +521,10 @@ pub struct Profile {
     pub local_files: Vec<PathBuf>,
     #[serde(default)]
     pub history: Vec<HistoryEntry>,
+    /// Last playback/navigation snapshot. Optional for profiles created before
+    /// this field existed.
+    #[serde(default)]
+    pub session: SessionState,
 }
 
 pub const PROFILE_SCHEMA: u32 = 1;
@@ -518,6 +544,7 @@ impl Profile {
             favorite_albums: Vec::new(),
             local_files: Vec::new(),
             history: Vec::new(),
+            session: SessionState::default(),
         }
     }
 
@@ -788,7 +815,8 @@ impl Default for PlaybackStatus {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum RepeatMode {
     #[default]
     Off,

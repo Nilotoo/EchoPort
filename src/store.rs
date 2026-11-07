@@ -94,7 +94,19 @@ impl AppPaths {
         std::fs::create_dir_all(&self.audio_cache_dir)?;
         std::fs::create_dir_all(&self.config_dir)?;
         std::fs::create_dir_all(&self.plugins_dir)?;
+        let _ = std::fs::create_dir_all(self.log_file().parent().unwrap_or(&self.data_dir));
         Ok(())
+    }
+
+    /// Human-readable log file shown by the "view/copy logs" actions.
+    pub fn log_file(&self) -> PathBuf {
+        self.data_dir.join("logs").join("echoport.log")
+    }
+
+    /// Present only when the previous process crashed or was killed before a
+    /// clean shutdown. Removed by `eframe::App::on_exit`.
+    pub fn crash_marker(&self) -> PathBuf {
+        self.data_dir.join("crash.marker")
     }
 
     pub fn profile_file(&self, name: &str) -> PathBuf {
@@ -305,7 +317,7 @@ pub fn dir_size(path: &Path) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Playlist, Track};
+    use crate::model::{Playlist, RepeatMode, SessionState, Track};
 
     #[test]
     fn profile_roundtrip() {
@@ -317,6 +329,15 @@ mod tests {
         let track = Track::new(crate::model::Platform::Spotify, "abc", "Song", "Artist");
         assert!(profile.add_to_playlist(&id, &track));
         profile.toggle_favorite(&track);
+        profile.session = SessionState {
+            now_playing: Some(track.clone()),
+            queue: vec![track.clone()],
+            queue_pos: 0,
+            position_secs: 42.5,
+            repeat: RepeatMode::All,
+            shuffle: true,
+            page: Some("now_playing".to_owned()),
+        };
         store.save(&profile).expect("save");
 
         let loaded = store.load("Tester").expect("load");
@@ -327,6 +348,17 @@ mod tests {
             .iter()
             .any(|playlist| playlist.name == "Road trip"));
         assert!(loaded.is_favorite(&track.id));
+        assert_eq!(loaded.session.position_secs, 42.5);
+        assert_eq!(loaded.session.repeat, RepeatMode::All);
+        assert!(loaded.session.shuffle);
+        assert_eq!(
+            loaded
+                .session
+                .now_playing
+                .as_ref()
+                .map(|track| track.id.as_str()),
+            Some(track.id.as_str())
+        );
 
         assert_eq!(store.list(), vec!["Tester".to_owned()]);
         assert!(store.delete("Tester"));

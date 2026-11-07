@@ -3,15 +3,13 @@
 // Keep the GUI clean on Windows: no console window is allocated for the app.
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
+use std::io::Write;
 use std::sync::Arc;
 
 use echoport::{app::EchoPortApp, theme::Theme};
 
 fn main() -> eframe::Result {
-    env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
-        .parse_default_env()
-        .init();
+    init_logging();
     install_crash_log();
 
     let mut size = [1360.0, 860.0];
@@ -51,13 +49,75 @@ fn main() -> eframe::Result {
     )
 }
 
-/// Write a local crash log before the default panic hook runs. This keeps a
-/// `panic=unwind` failure inspectable even when the GUI disappears instantly.
+/// Mirror `env_logger` output to both stderr and a rotating file. The UI uses
+/// this file for "view / copy logs" and crash diagnostics.
+struct TeeWriter {
+    file: std::sync::Mutex<std::fs::File>,
+}
+
+impl Write for TeeWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let _ = std::io::stderr().write_all(buf);
+        if let Ok(mut file) = self.file.lock() {
+            let _ = file.write_all(buf);
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        let _ = std::io::stderr().flush();
+        if let Ok(mut file) = self.file.lock() {
+            let _ = file.flush();
+        }
+        Ok(())
+    }
+}
+
+fn init_logging() {
+    let paths = echoport::store::AppPaths::resolve();
+    let log_path = paths.log_file();
+    if let Some(parent) = log_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    // Keep the on-disk log bounded. The previous file is still available for a
+    // post-crash inspection as `.1`.
+    if std::fs::metadata(&log_path)
+        .map(|meta| meta.len() > 4 * 1024 * 1024)
+        .unwrap_or(false)
+    {
+        let rotated = log_path.with_extension("log.1");
+        let _ = std::fs::remove_file(&rotated);
+        let _ = std::fs::rename(&log_path, &rotated);
+    }
+    if let Ok(file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+    {
+        let writer = TeeWriter {
+            file: std::sync::Mutex::new(file),
+        };
+        env_logger::builder()
+            .filter_level(log::LevelFilter::Info)
+            .parse_default_env()
+            .target(env_logger::Target::Pipe(Box::new(writer)))
+            .init();
+    } else {
+        env_logger::builder()
+            .filter_level(log::LevelFilter::Info)
+            .parse_default_env()
+            .init();
+    }
+}
+
+/// Write a local crash log and marker before the process disappears. The marker
+/// makes the next launch show a crash-recovery prompt.
 fn install_crash_log() {
     std::panic::set_hook(Box::new(|info| {
         use std::io::Write;
         let paths = echoport::store::AppPaths::resolve();
         let _ = std::fs::create_dir_all(&paths.data_dir);
+        let _ = std::fs::write(paths.crash_marker(), b"crashed\n");
         let log_path = paths.data_dir.join("crash.log");
         if let Ok(mut file) = std::fs::OpenOptions::new()
             .create(true)
