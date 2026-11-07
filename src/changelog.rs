@@ -31,6 +31,26 @@ impl ReleaseNote {
 /// Newest first. Add a new entry for every public release.
 pub const RELEASES: &[ReleaseNote] = &[
     ReleaseNote {
+        version: "0.4.0",
+        date: "2026-11-07",
+        title_en: "Theme images, photo theme and polish",
+        title_zh: "主题图片、照片主题与细节完善",
+        items_en: &[
+            "Theme image: pick a sidebar-shaped crop with drag, zoom and arrow-key fine tuning; the cropped palette now colors the entire UI.",
+            "Photo is now a fourth theme preset beside Pulse/Tide/Ink, with automatic light/dark selection and contrast-checked text, icons and accents.",
+            "Large photos are prepared on a worker thread and bounded to 4096 px, so selecting camera originals no longer blocks the UI.",
+            "Settings controls stay on the title row with wrapping hints; the offline changelog is available in Settings.",
+            "Sidebar image fills both edges, empty-player artwork uses the new note asset, and photo-theme previews are properly rounded.",
+        ],
+        items_zh: &[
+            "主题图片：按左侧栏比例裁剪，支持拖动、缩放与方向键微调；裁剪区域的颜色会生成整套界面主题。",
+            "照片成为脉冲蓝/潮汐/墨蓝之外的第四个主题预设，自动选择亮/暗，并对文字、图标和强调色做对比度校正。",
+            "大尺寸照片在后台线程预处理并限制到 4096px，选相机原图不再阻塞界面。",
+            "设置项控件固定在标题行、提示文字自动换行；设置内提供离线更新日志。",
+            "侧栏图片铺满左右边缘，播放器空态使用新音符素材，照片主题预览卡片改为正确圆角。",
+        ],
+    },
+    ReleaseNote {
         version: "0.3.2",
         date: "2026-11-02",
         title_en: "Security and reliability",
@@ -101,6 +121,6 @@ mod tests {
             assert!(!release.items(Language::En).is_empty());
             assert!(!release.items(Language::Zh).is_empty());
         }
-        assert!(RELEASES.iter().any(|release| release.version == "0.3.2"));
+        assert!(RELEASES.iter().any(|release| release.version == "0.4.0"));
     }
 }
