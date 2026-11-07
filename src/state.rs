@@ -294,6 +294,8 @@ pub struct AppState {
     pub shuffle: bool,
     /// Most recent random batch, shown on the home/background cards.
     pub random_picks: Vec<Track>,
+    /// True while an online multi-source shuffle search is in flight.
+    pub random_loading: bool,
 
     pub selected_playlist: Option<String>,
     pub now_playing_tab: NowPlayingTab,
@@ -306,9 +308,34 @@ pub struct AppState {
     pub demo: bool,
 }
 
+/// Built-in style seeds used by the online multi-source shuffle. They are not a
+/// recommendation model; one seed is chosen randomly and searched verbatim.
+pub const RANDOM_GENRE_SEEDS: &[&str] = &[
+    "electronic",
+    "ambient",
+    "J-pop",
+    "electro pop",
+    "progressive house",
+    "midwest emo",
+    "lo-fi",
+    "indie rock",
+    "hip hop",
+    "jazz",
+    "classical",
+    "techno",
+    "synthwave",
+    "drum and bass",
+    "R&B",
+    "folk",
+    "metal",
+    "city pop",
+    "shoegaze",
+    "post-rock",
+];
+
 /// Imported browsing artifacts such as “Bilibili video 123…” are not songs and
 /// should not show up in a random listening queue.
-fn shuffleable_track(track: &Track) -> bool {
+pub(crate) fn shuffleable_track(track: &Track) -> bool {
     let title = track.title.trim().to_lowercase();
     if title.is_empty() {
         return false;
@@ -395,6 +422,7 @@ impl AppState {
             repeat: RepeatMode::Off,
             shuffle: false,
             random_picks: Vec::new(),
+            random_loading: false,
             selected_playlist: None,
             now_playing_tab: NowPlayingTab::Track,
             queue_panel_open: false,
@@ -470,46 +498,6 @@ impl AppState {
     }
 
     /// Recompute the target theme after a new cover palette arrives.
-    /// All known tracks that can be used by the shuffle picker.
-    pub fn random_candidates(&self, genre: Option<&str>) -> Vec<Track> {
-        let wanted = genre.map(|genre| genre.trim().to_lowercase());
-        // A remembered track may predate local genre scanning. Merge by id and
-        // prefer the copy that actually carries a genre.
-        let mut merged: std::collections::BTreeMap<String, Track> =
-            std::collections::BTreeMap::new();
-        for track in self
-            .profile
-            .tracks
-            .values()
-            .chain(self.library.tracks.iter())
-        {
-            match merged.entry(track.id.clone()) {
-                std::collections::btree_map::Entry::Vacant(slot) => {
-                    slot.insert(track.clone());
-                }
-                std::collections::btree_map::Entry::Occupied(mut slot) => {
-                    if self.profile.effective_genre(slot.get()).is_none()
-                        && self.profile.effective_genre(track).is_some()
-                    {
-                        slot.insert(track.clone());
-                    }
-                }
-            }
-        }
-        merged
-            .into_values()
-            .filter(shuffleable_track)
-            .filter(|track| {
-                wanted.as_deref().is_none_or(|wanted| {
-                    self.profile
-                        .effective_genre(track)
-                        .map(|genre| genre.trim().to_lowercase() == wanted)
-                        .unwrap_or(false)
-                })
-            })
-            .collect()
-    }
-
     /// Genres currently known from embedded tags or manual corrections,
     /// sorted case-insensitively. Empty when nothing has a genre yet.
     pub fn known_genres(&self) -> Vec<String> {
@@ -535,6 +523,18 @@ impl AppState {
             }
         }
         genres.sort_by_key(|genre| genre.to_lowercase());
+        genres
+    }
+
+    /// Genres for the shuffle picker: known local/provider tags first, then the
+    /// built-in style seeds so online-only use still has useful choices.
+    pub fn shuffle_genres(&self) -> Vec<String> {
+        let mut genres = self.known_genres();
+        for seed in RANDOM_GENRE_SEEDS {
+            if !genres.iter().any(|genre| genre.eq_ignore_ascii_case(seed)) {
+                genres.push((*seed).to_owned());
+            }
+        }
         genres
     }
 
@@ -819,6 +819,11 @@ pub enum AppEvent {
     AlbumDetailReady(Box<crate::model::AlbumDetail>),
     /// Lyrics fetched for a track (stale results are ignored by track id).
     ThemeImagePicked(Option<std::path::PathBuf>),
+    RandomTracksReady {
+        tracks: Vec<Track>,
+        error: Option<String>,
+        seed: Option<String>,
+    },
     ThemeImagePrepared {
         source: Option<std::path::PathBuf>,
         error: Option<String>,

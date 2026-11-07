@@ -249,9 +249,11 @@ impl EchoPortApp {
             app.ui.profile_bio = app.state.profile.bio.clone();
             app.ui.profile_bio_for = Some(app.state.profile.name.clone());
         }
-        // QA hook: exercise the shuffle card without UI automation.
-        if std::env::var("ECHOPORT_RANDOM_PLAY").is_ok() {
-            app.play_random(None);
+        // QA hook: trigger the online multi-source shuffle without UI automation.
+        if let Ok(seed) = std::env::var("ECHOPORT_RANDOM_SEARCH") {
+            if !app.demo || std::env::var("ECHOPORT_LIVE").is_ok() {
+                app.start_random_search(Some(seed));
+            }
         }
         // QA hook: open the theme-image crop dialog without clicking through
         // the native file picker.
@@ -703,7 +705,7 @@ impl EchoPortApp {
                 self.state.refresh_theme_target();
                 self.mark_dirty();
             }
-            Command::RandomPlay { genre } => self.play_random(genre),
+            Command::RandomPlay { genre } => self.start_random_search(genre),
             Command::SetTrackGenre { track_id, genre } => {
                 self.state.profile.set_genre_override(&track_id, genre);
                 self.mark_dirty();
@@ -1356,6 +1358,13 @@ impl EchoPortApp {
                     self.prefetch_album_covers();
                     self.mark_dirty();
                 }
+            }
+            AppEvent::RandomTracksReady {
+                tracks,
+                error,
+                seed,
+            } => {
+                self.finish_random_search(tracks, error, seed);
             }
             AppEvent::ThemeImagePicked(path) => {
                 if let Some(path) = path {
@@ -2333,16 +2342,75 @@ impl EchoPortApp {
         self.ctx.request_repaint();
     }
 
-    fn play_random(&mut self, genre: Option<String>) {
-        let mut candidates = self.state.random_candidates(genre.as_deref());
-        if candidates.is_empty() {
-            self.toast(
-                ToastKind::Error,
-                TextOrKey::Text(self.state.tr(Key::RandomEmpty).to_owned()),
-            );
+    fn start_random_search(&mut self, genre: Option<String>) {
+        if self.state.random_loading {
             return;
         }
-        // Pure Fisher–Yates shuffle; no popularity, history or play-count bias.
+        let seed = genre.clone().or_else(random_seed);
+        let Some(seed) = seed else {
+            return;
+        };
+        let query = seed.clone();
+        let platforms = vec![
+            Platform::YouTube,
+            Platform::SoundCloud,
+            Platform::Netease,
+            Platform::AppleMusic,
+            Platform::Bilibili,
+            Platform::InternetArchive,
+        ];
+        let http = self.http.clone();
+        let config = self.resolve_config.clone();
+        let tx = self.tx.clone();
+        self.state.random_loading = true;
+        self.toast(ToastKind::Info, Key::RandomSearching);
+        self.ctx.request_repaint();
+        std::thread::spawn(move || {
+            let results = providers::search(&http, &config, &query, &platforms, 8);
+            let mut tracks = Vec::new();
+            let mut errors = Vec::new();
+            for group in results {
+                if let Some(error) = group.error {
+                    errors.push(format!("{}: {error}", group.platform.label()));
+                }
+                tracks.extend(group.tracks);
+            }
+            let error = if tracks.is_empty() && !errors.is_empty() {
+                Some(errors.join(" · "))
+            } else {
+                None
+            };
+            let _ = tx.send(AppEvent::RandomTracksReady {
+                tracks,
+                error,
+                seed: Some(seed),
+            });
+        });
+    }
+
+    fn finish_random_search(
+        &mut self,
+        mut tracks: Vec<Track>,
+        error: Option<String>,
+        _seed: Option<String>,
+    ) {
+        self.state.random_loading = false;
+        if let Some(error) = error {
+            log::warn!("random multi-source search failed: {error}");
+            self.toast(ToastKind::Error, Key::RandomEmpty);
+            self.ctx.request_repaint();
+            return;
+        }
+        // Deduplicate across platforms and drop generic browsing artifacts.
+        let mut seen = std::collections::HashSet::new();
+        tracks.retain(|track| {
+            crate::state::shuffleable_track(track) && seen.insert(track.id.clone())
+        });
+        if tracks.is_empty() {
+            self.toast(ToastKind::Error, Key::RandomEmpty);
+            self.ctx.request_repaint();
+            return;
+        }
         let mut seed = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|duration| duration.subsec_nanos() as u64 ^ duration.as_secs())
@@ -2354,20 +2422,21 @@ impl EchoPortApp {
             seed ^= seed << 17;
             seed
         };
-        for index in (1..candidates.len()).rev() {
+        for index in (1..tracks.len()).rev() {
             let swap = (next() as usize) % (index + 1);
-            candidates.swap(index, swap);
+            tracks.swap(index, swap);
         }
-        let available = candidates.len();
+        let available = tracks.len();
         let count = if available <= 5 {
             available
         } else {
             let upper = available.min(10);
             (5 + (next() as usize) % (upper - 4)).min(upper)
         };
-        candidates.truncate(count);
-        self.state.random_picks = candidates.clone();
-        self.state.queue = candidates;
+        tracks.truncate(count);
+        self.state.profile.remember_many(&tracks);
+        self.state.random_picks = tracks.clone();
+        self.state.queue = tracks;
         self.state.queue_pos = 0;
         if let Some(first) = self.state.queue.first().cloned() {
             self.start_track(first);
@@ -3546,6 +3615,18 @@ pub(crate) fn save_color_image(
     let rgba = image::RgbaImage::from_raw(width, height, buffer)
         .ok_or_else(|| "invalid screenshot buffer".to_owned())?;
     rgba.save(path).map_err(|err| err.to_string())
+}
+
+fn random_seed() -> Option<String> {
+    let seeds = crate::state::RANDOM_GENRE_SEEDS;
+    if seeds.is_empty() {
+        return None;
+    }
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.subsec_nanos() as usize)
+        .unwrap_or(0);
+    Some(seeds[nanos % seeds.len()].to_owned())
 }
 
 fn page_from_key(key: &str) -> Option<Page> {

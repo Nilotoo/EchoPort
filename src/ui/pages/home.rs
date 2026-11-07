@@ -572,9 +572,13 @@ fn random_card(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut 
                 });
             });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if style::button(ui, theme, app.state.tr(Key::RandomPlay), Variant::Primary)
-                    .clicked()
-                {
+                let label = if app.state.random_loading {
+                    app.state.tr(Key::RandomSearching)
+                } else {
+                    app.state.tr(Key::RandomPlay)
+                };
+                let response = style::button(ui, theme, label, Variant::Primary);
+                if response.clicked() && !app.state.random_loading {
                     pending.push(Command::RandomPlay {
                         genre: app.ui.random_genre.clone(),
                     });
