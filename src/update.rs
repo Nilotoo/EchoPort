@@ -490,7 +490,7 @@ fn check_gitee_version_file(
             return Ok(None);
         }
     }
-    Ok(None)
+    Err("Gitee mirror has no release or VERSION file yet".to_owned())
 }
 
 fn check_version_file(
