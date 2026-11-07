@@ -1,0 +1,109 @@
+name: Upload release assets to Gitee
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/gitee-release-upload.yml
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download assets from GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: v0.4.1
+        run: |
+          set -euo pipefail
+          mkdir -p assets
+          GH_TOKEN="$GH_TOKEN" TAG="$TAG" python3 - <<'PY'
+import json
+import os
+import pathlib
+import urllib.request
+
+tag = os.environ["TAG"]
+repo = os.environ["GITHUB_REPOSITORY"]
+url = f"https://api.github.com/repos/{repo}/releases/tags/{tag}"
+request = urllib.request.Request(
+    url,
+    headers={
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+        "User-Agent": "EchoPort-release-upload",
+    },
+)
+with urllib.request.urlopen(request) as response:
+    release = json.load(response)
+out = pathlib.Path("assets")
+for asset in release.get("assets", []):
+    name = asset["name"]
+    if not name.endswith((".exe", ".tar.gz", ".sha256")):
+        continue
+    target = out / name
+    print(f"downloading {name}")
+    request = urllib.request.Request(
+        asset["browser_download_url"],
+        headers={
+            "Accept": "application/octet-stream",
+            "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+            "User-Agent": "EchoPort-release-upload",
+        },
+    )
+    with urllib.request.urlopen(request) as response, target.open("wb") as handle:
+        while True:
+            chunk = response.read(1024 * 1024)
+            if not chunk:
+                break
+            handle.write(chunk)
+PY
+
+      - name: Publish Gitee Release (assets only)
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_OWNER: ${{ vars.GITEE_OWNER }}
+          GITEE_REPO: ${{ vars.GITEE_REPO }}
+          TAG: v0.4.1
+        run: |
+          set -euo pipefail
+          owner="${GITEE_OWNER:-nilotoo_art}"
+          repo="${GITEE_REPO:-echo-port}"
+          if [ -z "${GITEE_TOKEN:-}" ]; then
+            echo "::notice::GITEE_TOKEN is not configured; skipping Gitee release upload."
+            exit 0
+          fi
+
+          api="https://gitee.com/api/v5/repos/${owner}/${repo}"
+          release_json=$(curl -fsS -X POST "${api}/releases" \
+            --data-urlencode "access_token=${GITEE_TOKEN}" \
+            --data-urlencode "tag_name=${TAG}" \
+            --data-urlencode "name=EchoPort ${TAG}" \
+            --data-urlencode "target_commitish=main" \
+            --data-urlencode "body=EchoPort release ${TAG}") || true
+          release_id=$(printf '%s' "${release_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))' 2>/dev/null || true)
+          if [ -z "${release_id}" ]; then
+            releases_json=$(curl -fsS "${api}/releases?access_token=${GITEE_TOKEN}&per_page=100")
+            release_id=$(printf '%s' "${releases_json}" | TAG="${TAG}" python3 -c 'import json,os,sys; tag=os.environ["TAG"]; print(next((r.get("id","") for r in json.load(sys.stdin) if r.get("tag_name")==tag),""))' 2>/dev/null || true)
+          fi
+          if [ -z "${release_id}" ]; then
+            echo "::error::Could not create or find Gitee release ${TAG}"
+            exit 1
+          fi
+
+          failed=0
+          while IFS= read -r -d '' file; do
+            echo "Uploading $(basename "$file") to Gitee ${TAG}"
+            if ! curl -fsS -X POST "${api}/releases/${release_id}/attach_files" \
+              -F "access_token=${GITEE_TOKEN}" \
+              -F "file=@${file}"; then
+              echo "::warning::Failed to upload ${file} to Gitee"
+              failed=1
+            fi
+          done < <(find assets -type f -print0)
+          if [ "${failed}" -ne 0 ]; then
+            exit 1
+          fi
