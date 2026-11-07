@@ -691,6 +691,7 @@ impl EchoPortApp {
                 self.state.set_follow_cover_accent(follow);
                 self.mark_dirty();
             }
+            Command::PickThemeImage => self.pick_theme_image_file(),
             Command::PrepareThemeImage(path) => self.prepare_theme_image(path),
             Command::SetThemeImage(path) => self.set_theme_image(path),
             Command::SetPhotoTheme(enabled) => {
@@ -1344,6 +1345,11 @@ impl EchoPortApp {
                     self.prefetch_page_covers();
                     self.prefetch_album_covers();
                     self.mark_dirty();
+                }
+            }
+            AppEvent::ThemeImagePicked(path) => {
+                if let Some(path) = path {
+                    self.prepare_theme_image(path);
                 }
             }
             AppEvent::ThemeImagePrepared { source, error } => {
@@ -2315,6 +2321,31 @@ impl EchoPortApp {
         self.mark_dirty();
         self.toast(ToastKind::Success, Key::ThemeImageApplied);
         self.ctx.request_repaint();
+    }
+
+    fn pick_theme_image_file(&mut self) {
+        // Windows/macOS native dialogs are application-modal, so keeping them on
+        // the UI thread is fine. On Linux the portal dialog is not reliably
+        // modal; blocking the egui thread made theme switching appear frozen.
+        #[cfg(target_os = "linux")]
+        {
+            let tx = self.tx.clone();
+            let title = self.state.tr(Key::ThemeImage).to_owned();
+            std::thread::spawn(move || {
+                let path = crate::platform::pick_file(
+                    &title,
+                    &[("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])],
+                );
+                let _ = tx.send(AppEvent::ThemeImagePicked(path));
+            });
+        }
+        #[cfg(not(target_os = "linux"))]
+        if let Some(path) = crate::platform::pick_file(
+            self.state.tr(Key::ThemeImage),
+            &[("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])],
+        ) {
+            self.prepare_theme_image(path);
+        }
     }
 
     fn prepare_theme_image(&mut self, source: std::path::PathBuf) {

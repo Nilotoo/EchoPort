@@ -645,6 +645,7 @@ pub enum Command {
     SetUiScale(f32),
     SetFollowCoverAccent(bool),
     SetLyricsEnabled(bool),
+    PickThemeImage,
     PrepareThemeImage(std::path::PathBuf),
     SetThemeImage(std::path::PathBuf),
     SetPhotoTheme(bool),
@@ -710,6 +711,7 @@ pub enum AppEvent {
     /// Album page data (metadata + ordered tracks + same-artist albums).
     AlbumDetailReady(Box<crate::model::AlbumDetail>),
     /// Lyrics fetched for a track (stale results are ignored by track id).
+    ThemeImagePicked(Option<std::path::PathBuf>),
     ThemeImagePrepared {
         source: Option<std::path::PathBuf>,
         error: Option<String>,

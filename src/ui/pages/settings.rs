@@ -407,13 +407,12 @@ fn paint_theme_preview(ui: &Ui, theme: &Theme, texture: &egui::TextureHandle, re
             uv.max.y = 1.0 - uv.min.y;
         }
     }
-    ui.painter().rect_filled(
-        rect,
-        CornerRadius::same(style::R_MD),
-        theme::Theme::default().surface,
-    );
     ui.painter()
-        .image(texture.id(), rect, uv, egui::Color32::WHITE);
+        .rect_filled(rect, CornerRadius::same(style::R_MD), theme.surface);
+    egui::Image::new(egui::load::SizedTexture::new(texture.id(), rect.size()))
+        .uv(uv)
+        .corner_radius(CornerRadius::same(style::R_MD))
+        .paint_at(ui, rect);
     ui.painter().rect_stroke(
         rect,
         CornerRadius::same(style::R_MD),
@@ -471,13 +470,8 @@ fn changelog(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, width: f32) {
     });
 }
 
-fn begin_theme_image_pick(app: &mut EchoPortApp, pending: &mut Vec<Command>) {
-    if let Some(path) = crate::platform::pick_file(
-        app.state.tr(Key::ThemeImage),
-        &[("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])],
-    ) {
-        pending.push(Command::PrepareThemeImage(path));
-    }
+fn begin_theme_image_pick(_app: &mut EchoPortApp, pending: &mut Vec<Command>) {
+    pending.push(Command::PickThemeImage);
 }
 
 fn photo_theme_tile(
@@ -517,7 +511,10 @@ fn photo_theme_tile(
                 uv.min.y = (1.0 - visible) * 0.5;
                 uv.max.y = 1.0 - uv.min.y;
             }
-            ui.painter().image(texture.id(), tile, uv, Color32::WHITE);
+            egui::Image::new(egui::load::SizedTexture::new(texture.id(), size))
+                .uv(uv)
+                .corner_radius(CornerRadius::same(style::R_MD))
+                .paint_at(ui, tile);
             ui.painter().rect_filled(
                 tile,
                 CornerRadius::same(style::R_MD),
