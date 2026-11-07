@@ -124,6 +124,7 @@ fn header(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec<C
                 app.ui.dialog = Some(Dialog::NewPlaylist {
                     seed: Vec::new(),
                     name: String::new(),
+                    description: String::new(),
                 });
             }
             if style::button_icon(
@@ -166,6 +167,7 @@ fn header(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec<C
                 app.ui.dialog = Some(Dialog::NewPlaylist {
                     seed: Vec::new(),
                     name: String::new(),
+                    description: String::new(),
                 });
             }
             ui.add_space(6.0);
@@ -228,6 +230,7 @@ fn list_panel(
                         app.ui.dialog = Some(Dialog::NewPlaylist {
                             seed: Vec::new(),
                             name: String::new(),
+                            description: String::new(),
                         });
                     }
                 }
@@ -249,6 +252,9 @@ fn list_panel(
                     .on_hover_cursor(egui::CursorIcon::PointingHand)
                     .on_hover_text(app.state.tr(Key::DoubleClickOpen));
             if response.clicked() {
+                // Single click must switch the visible detail, not just the
+                // row highlight; previously only double-click updated state.
+                app.state.selected_playlist = Some(playlist.id.clone());
                 app.ui.selected_playlist = Some(playlist.id.clone());
                 app.ui.selected_track = None;
             }
@@ -292,6 +298,7 @@ fn detail_panel(
                 app.ui.dialog = Some(Dialog::NewPlaylist {
                     seed: Vec::new(),
                     name: String::new(),
+                    description: String::new(),
                 });
             }
             return;

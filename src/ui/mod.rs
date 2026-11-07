@@ -46,6 +46,7 @@ pub enum Dialog {
     NewPlaylist {
         seed: Vec<Track>,
         name: String,
+        description: String,
     },
     RenamePlaylist {
         id: String,
@@ -61,6 +62,7 @@ pub enum Dialog {
     },
     NewProfile {
         name: String,
+        bio: String,
     },
     DeleteProfile {
         name: String,
@@ -118,6 +120,8 @@ pub struct UiState {
     theme_image: Option<(String, egui::TextureHandle)>,
     /// Pending crop selection for a newly chosen theme image.
     pub crop_theme_image: Option<ThemeImageCrop>,
+    /// Whether release notes older than the latest three are expanded.
+    pub changelog_expanded: bool,
 }
 
 impl UiState {
@@ -187,6 +191,7 @@ impl UiState {
             lyrics_scroll_pos: 0.0,
             theme_image: None,
             crop_theme_image: None,
+            changelog_expanded: false,
         }
     }
 }
@@ -267,6 +272,10 @@ pub fn layout(ctx: &egui::Context, app: &mut EchoPortApp) {
         app.ui.cache_page = None;
     }
 
+    let full_theme_image = app.state.full_theme_image_active();
+    if full_theme_image {
+        paint_full_theme_image(ctx, app, &theme);
+    }
     egui::TopBottomPanel::bottom("echoport-player")
         .exact_height(player_height)
         .resizable(false)
@@ -276,10 +285,6 @@ pub fn layout(ctx: &egui::Context, app: &mut EchoPortApp) {
             player_bar(ui, app, &theme, player_height, sidebar_width, &mut pending);
         });
 
-    let full_theme_image = app.state.full_theme_image_active();
-    if full_theme_image {
-        paint_full_theme_image(ctx, app, &theme);
-    }
     let sidebar_has_image = !full_theme_image && app.state.theme_image_path().is_some();
     egui::SidePanel::left("echoport-nav")
         .exact_width(sidebar_width)
@@ -1909,7 +1914,9 @@ fn dialogs(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, pending: &
             }
             let mut submitted = false;
             match &mut dialog {
-                Dialog::NewPlaylist { name, .. } | Dialog::NewProfile { name } => {
+                Dialog::NewPlaylist {
+                    name, description, ..
+                } => {
                     let response = dialog_text_input(
                         ui,
                         theme,
@@ -1922,6 +1929,48 @@ fn dialogs(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, pending: &
                     {
                         submitted = true;
                     }
+                    ui.add_space(10.0);
+                    ui.label(
+                        RichText::new(app.state.tr(Key::PlaylistDescription))
+                            .size(11.0)
+                            .color(theme.text_weak),
+                    );
+                    ui.add_space(4.0);
+                    ui.add(
+                        egui::TextEdit::multiline(description)
+                            .font(style::font(12.0))
+                            .text_color(theme.text)
+                            .desired_rows(2)
+                            .desired_width(ui.available_width()),
+                    );
+                }
+                Dialog::NewProfile { name, bio } => {
+                    let response = dialog_text_input(
+                        ui,
+                        theme,
+                        "dialog-name",
+                        name,
+                        app.state.tr(Key::PlaylistName),
+                    );
+                    if response.lost_focus()
+                        && ui.input(|input| input.key_pressed(egui::Key::Enter))
+                    {
+                        submitted = true;
+                    }
+                    ui.add_space(10.0);
+                    ui.label(
+                        RichText::new(app.state.tr(Key::BioLabel))
+                            .size(11.0)
+                            .color(theme.text_weak),
+                    );
+                    ui.add_space(4.0);
+                    ui.add(
+                        egui::TextEdit::multiline(bio)
+                            .font(style::font(12.0))
+                            .text_color(theme.text)
+                            .desired_rows(3)
+                            .desired_width(ui.available_width()),
+                    );
                 }
                 Dialog::RenamePlaylist {
                     name,
@@ -2054,7 +2103,11 @@ fn dialogs(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, pending: &
                 }
                 if submitted {
                     match &dialog {
-                        Dialog::NewPlaylist { seed, name } => {
+                        Dialog::NewPlaylist {
+                            seed,
+                            name,
+                            description,
+                        } => {
                             let name = if name.trim().is_empty() {
                                 format!(
                                     "{} {}",
@@ -2066,6 +2119,7 @@ fn dialogs(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, pending: &
                             };
                             pending.push(Command::CreatePlaylist {
                                 name,
+                                description: description.trim().to_owned(),
                                 tracks: seed.clone(),
                             });
                             keep = false;
@@ -2116,9 +2170,12 @@ fn dialogs(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, pending: &
                             });
                             keep = false;
                         }
-                        Dialog::NewProfile { name } => {
+                        Dialog::NewProfile { name, bio } => {
                             if !name.trim().is_empty() {
-                                pending.push(Command::NewProfile(name.trim().to_owned()));
+                                pending.push(Command::NewProfile {
+                                    name: name.trim().to_owned(),
+                                    bio: bio.trim().to_owned(),
+                                });
                             }
                             keep = false;
                         }

@@ -966,6 +966,7 @@ fn more_menu(
             app.ui.dialog = Some(Dialog::NewPlaylist {
                 seed: vec![track.clone()],
                 name: String::new(),
+                description: String::new(),
             });
         }
         style::menu_separator(ui, theme);
