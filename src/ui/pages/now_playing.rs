@@ -11,7 +11,7 @@ use crate::model::{format_duration, LinkKind, PlaybackState, SongBackground, Tra
 use crate::state::{Command, NowPlayingTab, Page};
 use crate::theme::{self, Theme};
 use crate::ui::style::{self, Icon, Variant};
-use crate::ui::{widgets, Dialog};
+use crate::ui::widgets;
 
 // ---------------------------------------------------------------------------
 // Page
@@ -468,7 +468,8 @@ fn cover_column(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, track: &Track
     }
     ui.add_space(14.0);
     // Macaron palette dots (from the cover when available) plus the release
-    // date (or just the dots when the date is unknown).
+    // date. Use a normal horizontal row so both share one vertical centre;
+    // painting the date manually at an offset made the dots sit too low.
     let palette = app.state.cover.palette;
     let dots = palette
         .map(|palette| palette.macarons)
@@ -487,29 +488,13 @@ fn cover_column(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, track: &Track
         }
         if let Some(label) = track.release_label() {
             ui.add_space(8.0);
-            style::paint_elided(
-                ui.painter(),
-                Pos2::new(ui.cursor().min.x, ui.cursor().min.y + 8.0),
-                &format!("{} {}", app.state.tr(Key::Released), label),
-                style::font(10.0),
-                style::weak_text(theme),
-                220.0,
+            ui.label(
+                RichText::new(format!("{} {}", app.state.tr(Key::Released), label))
+                    .size(10.0)
+                    .color(style::weak_text(theme)),
             );
         }
         ui.add_space(10.0);
-    });
-    // Small genre line directly below the release date / palette dots.
-    ui.horizontal(|ui| {
-        ui.add_space(2.0);
-        ui.label(
-            RichText::new(format!(
-                "{} · {}",
-                app.state.tr(Key::Genre),
-                app.state.genre_label(track)
-            ))
-            .size(10.0)
-            .color(style::weak_text(theme)),
-        );
     });
 }
 
@@ -878,8 +863,6 @@ fn background_content(
         });
     });
     ui.add_space(8.0);
-    genre_card(ui, app, theme, pending, track);
-    ui.add_space(10.0);
     if app.state.background.loading {
         let time = ui.ctx().input(|input| input.time);
         style::loading_pulse(ui, theme, app.state.tr(Key::BackgroundLoading), time);
@@ -979,52 +962,6 @@ fn background_content(
             }
         });
     }
-}
-
-fn genre_card(
-    ui: &mut Ui,
-    app: &mut EchoPortApp,
-    theme: &Theme,
-    pending: &mut Vec<Command>,
-    track: &Track,
-) {
-    let genre = app.state.genre_label(track);
-    background_card(ui, theme, app.state.tr(Key::Genre), |ui| {
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(&genre).size(15.0).color(theme.text));
-            if genre == app.state.tr(Key::UnknownGenre) {
-                ui.label(
-                    RichText::new(app.state.tr(Key::GenreHint))
-                        .size(9.5)
-                        .color(theme.text_weak),
-                );
-            }
-        });
-        ui.add_space(6.0);
-        ui.horizontal(|ui| {
-            let label = if app.state.random_loading {
-                app.state.tr(Key::RandomSearching)
-            } else {
-                app.state.tr(Key::RandomPlay)
-            };
-            if style::button(ui, theme, label, Variant::Primary).clicked()
-                && !app.state.random_loading
-            {
-                pending.push(Command::RandomPlay);
-            }
-            if style::button(ui, theme, app.state.tr(Key::EditGenre), Variant::Ghost).clicked() {
-                app.ui.dialog = Some(Dialog::EditGenre {
-                    track_id: track.id.clone(),
-                    title: format!("{} — {}", track.title, track.display_artist()),
-                    genre: if genre == app.state.tr(Key::UnknownGenre) {
-                        String::new()
-                    } else {
-                        genre.clone()
-                    },
-                });
-            }
-        });
-    });
 }
 
 fn background_card(ui: &mut Ui, theme: &Theme, title: &str, add_contents: impl FnOnce(&mut Ui)) {

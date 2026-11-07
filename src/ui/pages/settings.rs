@@ -886,8 +886,11 @@ fn downloads(
                 let hover_path = dir.clone();
                 ui.allocate_ui_with_layout(
                     Vec2::new(path_width, 30.0),
-                    Layout::left_to_right(Align::Center),
+                    Layout::top_down(Align::Min),
                     |ui| {
+                        // The path baseline sat a couple of pixels above the
+                        // Choose/Open buttons; nudge it down onto the centre.
+                        ui.add_space(4.0);
                         ui.add(
                             egui::Label::new(RichText::new(dir).size(11.0).color(theme.text))
                                 .truncate(),

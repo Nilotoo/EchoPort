@@ -65,8 +65,6 @@ struct ITunesItem {
     track_time_millis: Option<f64>,
     #[serde(default, rename = "trackCount")]
     track_count: Option<u32>,
-    #[serde(default, rename = "primaryGenreName")]
-    primary_genre_name: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -615,9 +613,6 @@ fn build_track(item: &ITunesItem) -> Option<Track> {
     if let Some(date) = item.release_date.as_deref().and_then(util::date_from_iso) {
         track = track.with_release_date(date);
     }
-    if let Some(genre) = item.primary_genre_name.as_deref().and_then(util::clean) {
-        track = track.with_genre(genre);
-    }
     Some(track)
 }
 
@@ -857,8 +852,7 @@ mod tests {
                 "artistType": "Artist",
                 "artistName": "Porter Robinson",
                 "artistLinkUrl": "https://music.apple.com/us/artist/porter-robinson/282330711?uo=4",
-                "artistId": 282330711,
-                "primaryGenreName": "Dance"
+                "artistId": 282330711
             },
             {
                 "wrapperType": "artist",

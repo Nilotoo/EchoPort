@@ -9,7 +9,6 @@ use crate::state::Command;
 use crate::theme::{self, Theme};
 use crate::ui::style::{self, Icon, Variant};
 use crate::ui::widgets::{self, TrackRow};
-use crate::ui::Dialog;
 
 pub fn draw(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec<Command>) {
     widgets::page_scroll(ui, |ui| {
@@ -115,28 +114,6 @@ pub fn draw(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec
                                 .color(theme.text_weak),
                         );
                     }
-                    ui.add_space(3.0);
-                    let genre = app.state.genre_label(track);
-                    ui.horizontal(|ui| {
-                        ui.label(
-                            RichText::new(format!("{} · {genre}", app.state.tr(Key::Genre)))
-                                .size(10.5)
-                                .color(theme.text_weak),
-                        );
-                        if style::button(ui, theme, app.state.tr(Key::EditGenre), Variant::Ghost)
-                            .clicked()
-                        {
-                            app.ui.dialog = Some(Dialog::EditGenre {
-                                track_id: track.id.clone(),
-                                title: format!("{} — {}", track.title, track.display_artist()),
-                                genre: if genre == app.state.tr(Key::UnknownGenre) {
-                                    String::new()
-                                } else {
-                                    genre.clone()
-                                },
-                            });
-                        }
-                    });
                 }
                 ui.add_space(8.0);
                 let favorite = app.state.profile.is_favorite_album(&album.id);

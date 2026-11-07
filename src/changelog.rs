@@ -31,27 +31,23 @@ impl ReleaseNote {
 /// Newest first. Add a new entry for every public release.
 pub const RELEASES: &[ReleaseNote] = &[
     ReleaseNote {
-        version: "0.5.0",
+        version: "0.4.1",
         date: "2026-11-07",
-        title_en: "Genres, shuffle and performance",
-        title_zh: "曲风、随机播放与性能优化",
+        title_en: "Favourite Tracks, full-window photo and UI polish",
+        title_zh: "Favourite Tracks、全屏照片与 UI 修正",
         items_en: &[
-            "Genre labels from local tags and already-integrated provider metadata, with a manual correction that survives restarts; unknown songs say Unknown.",
-            "A Shuffle card on Home and in Now Playing → Background searches 5–10 tracks across YouTube, SoundCloud, Netease, Apple Music, Bilibili and Internet Archive with a neutral random query, then shuffles them; no genre filter and no popularity ranking.",
-            "Genre is shown under the release date on the Now Playing cover and in album details; the shuffle card uses the first picked track's real cover.",
-            "No new external APIs or accounts: no Last.fm/Spotify/YouTube-key requirement, and no Unsplash dependency.",
-            "Favourite Tracks: a protected auto-playlist mirrors every favourite in order and cannot be deleted or edited manually.",
-            "Second image-theme layout: full-window photo mode with translucent panels; rejects sources below 960 × 480 (both sides at least 480 px).",
-            "Performance work: cover blurs are generated lazily, cover decoding is budgeted per frame, theme textures are capped at 2048 px, and transient audio output stream failures retry once.",
+            "Favourite Tracks: a protected auto-playlist mirrors every favourite in order and cannot be deleted, renamed, re-covered or edited manually.",
+            "Image theme second layout: full-window photo mode with translucent panels. It uses the uncropped image and rejects sources below 960 × 480 (both sides at least 480 px).",
+            "Full-window images are downscaled before being stored and uploaded, and theme textures are capped, reducing memory and frame-time cost with high-resolution photos.",
+            "Now Playing palette dots align with the release date; the download path and playlist action rows were adjusted to remove overlap.",
+            "Audio output stream failures retry once; cover blur generation and cover decoding remain lazy/budgeted for smoother scrolling.",
         ],
         items_zh: &[
-            "曲风来自本地文件标签与现有平台元数据，并支持重启后仍保留的手动修正；没有信息时显示“无法确定”。",
-            "首页和正在播放 → Background 新增“随机播放”卡片：用中性随机词在 YouTube/SoundCloud/网易云/Apple Music/Bilibili/Internet Archive 实时搜索 5–10 首再打乱播放；不按曲风、不按热度。",
-            "正在播放封面发行日期下方和专辑详情显示曲风；随机卡片使用第一批第一首歌的真实封面。",
-            "不新增任何外部 API 或账号：不需要 Last.fm/Spotify/YouTube Key，也不依赖 Unsplash。",
-            "Favourite Tracks 自动歌单：按顺序镜像所有收藏歌曲，不可删除、不可手动修改。",
-            "图片主题增加全屏照片模式：照片覆盖整个应用、面板半透明；低于 960×480（两边至少 480px）的图片不允许使用。",
-            "性能优化：封面模糊图按需生成、每帧限制封面解码数量、主题图片纹理限制到 2048px，音频输出流临时失败时自动重试一次。",
+            "Favourite Tracks 自动歌单：按顺序镜像全部收藏歌曲，不可删除、不可重命名、不可换封面、不可手动增删。",
+            "图片主题新增全屏照片布局：使用未裁剪原图覆盖整个应用，面板半透明；低于 960×480（两边至少 480px）的图片不允许使用。",
+            "全屏图片在保存和上传前会压缩，主题纹理也有限制，降低高分辨率照片的内存占用和掉帧。",
+            "正在播放封面的五个色点与发行日期对齐；下载目录和歌单操作行修正重叠。",
+            "音频输出流失败自动重试一次；封面模糊图按需生成、封面解码按帧限额，滚动更稳定。",
         ],
     },
     ReleaseNote {
@@ -145,6 +141,6 @@ mod tests {
             assert!(!release.items(Language::En).is_empty());
             assert!(!release.items(Language::Zh).is_empty());
         }
-        assert!(RELEASES.iter().any(|release| release.version == "0.5.0"));
+        assert!(RELEASES.iter().any(|release| release.version == "0.4.1"));
     }
 }
