@@ -72,6 +72,14 @@ pub enum Dialog {
     ExportProfile,
 }
 
+#[derive(Clone, Debug)]
+pub struct ThemeImageCrop {
+    pub source: std::path::PathBuf,
+    pub zoom: f32,
+    pub center_x: f32,
+    pub center_y: f32,
+}
+
 pub struct UiState {
     pub covers: CoverCache,
     /// Lazily uploaded textures for the embedded icon set.
@@ -108,6 +116,8 @@ pub struct UiState {
     pub lyrics_scroll_pos: f32,
     /// Decoded optional theme image shown behind the sidebar.
     theme_image: Option<(String, egui::TextureHandle)>,
+    /// Pending crop selection for a newly chosen theme image.
+    pub crop_theme_image: Option<ThemeImageCrop>,
 }
 
 impl UiState {
@@ -169,6 +179,7 @@ impl UiState {
             lyrics_track: None,
             lyrics_scroll_pos: 0.0,
             theme_image: None,
+            crop_theme_image: None,
         }
     }
 }
@@ -290,6 +301,7 @@ pub fn layout(ctx: &egui::Context, app: &mut EchoPortApp) {
     toasts(ctx, app, &theme, player_height);
     drop_prompt(ctx, app, &theme, player_height, &mut pending);
     dialogs(ctx, app, &theme, &mut pending);
+    theme_image_crop_dialog(ctx, app, &theme, &mut pending);
     handle_escape(ctx, app);
     splash::draw(ctx, app, &mut pending);
 
@@ -630,12 +642,213 @@ fn paint_sidebar_theme_image(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme) 
     }
     ui.painter()
         .image(texture.id(), rect, uv, egui::Color32::WHITE);
-    let scrim = if theme.dark {
-        egui::Color32::from_black_alpha(96)
-    } else {
-        egui::Color32::from_white_alpha(152)
-    };
+    // The full image theme may be light or dark independently of the old mode;
+    // veil the wallpaper with the derived panel colour so icons/text retain
+    // their computed contrast.
+    let scrim = theme::with_alpha(theme.panel, if theme.dark { 145 } else { 205 });
     ui.painter().rect_filled(rect, 0.0, scrim);
+}
+
+// ---------------------------------------------------------------------------
+// Theme image crop
+// ---------------------------------------------------------------------------
+
+fn theme_image_crop_dialog(
+    ctx: &egui::Context,
+    app: &mut EchoPortApp,
+    theme: &Theme,
+    pending: &mut Vec<Command>,
+) {
+    let Some(mut crop) = app.ui.crop_theme_image.take() else {
+        return;
+    };
+    let mut keep = true;
+    let mut apply = false;
+    let frame = Frame::new()
+        .fill(theme.surface)
+        .stroke(Stroke::new(1.0_f32, theme.border))
+        .corner_radius(CornerRadius::same(style::R_LG + 2))
+        .inner_margin(Margin::same(20))
+        .shadow(style::shadow(theme));
+    egui::Modal::new(Id::new("echoport-theme-image-crop"))
+        .frame(frame)
+        .backdrop_color(Color32::from_black_alpha(if theme.dark { 140 } else { 80 }))
+        .show(ctx, |ui| {
+            ui.set_width(760.0);
+            ui.label(
+                RichText::new(app.state.tr(Key::CropThemeImage))
+                    .size(18.0)
+                    .strong()
+                    .color(theme.text),
+            );
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(app.state.tr(Key::CropThemeImageHint))
+                    .size(11.0)
+                    .color(theme.text_weak),
+            );
+            ui.add_space(12.0);
+
+            if let Some(texture) = app.ui.theme_image_texture(ui.ctx(), &crop.source) {
+                let preview_size = Vec2::new(ui.available_width(), 390.0);
+                let (preview, response) =
+                    ui.allocate_exact_size(preview_size, Sense::click_and_drag());
+                ui.painter()
+                    .rect_filled(preview, CornerRadius::same(style::R_MD), theme.bg);
+                let image_size = texture.size_vec2();
+                let scale = (preview.width() / image_size.x)
+                    .min(preview.height() / image_size.y)
+                    .max(0.0001);
+                let image_rect = Rect::from_center_size(
+                    preview.center(),
+                    Vec2::new(image_size.x * scale, image_size.y * scale),
+                );
+                ui.painter().image(
+                    texture.id(),
+                    image_rect,
+                    Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                    Color32::WHITE,
+                );
+
+                let image_w = image_size.x.max(1.0) as u32;
+                let image_h = image_size.y.max(1.0) as u32;
+                let (cx, cy, cw, ch) = crate::theme::theme_image_crop_rect(
+                    image_w,
+                    image_h,
+                    crop.zoom,
+                    crop.center_x,
+                    crop.center_y,
+                );
+                let crop_rect = Rect::from_min_size(
+                    Pos2::new(
+                        image_rect.left() + cx as f32 * scale,
+                        image_rect.top() + cy as f32 * scale,
+                    ),
+                    Vec2::new(cw as f32 * scale, ch as f32 * scale),
+                );
+                // Dim everything outside the selected strip.
+                let shade = Color32::from_black_alpha(150);
+                if crop_rect.top() > preview.top() {
+                    ui.painter().rect_filled(
+                        Rect::from_min_max(
+                            preview.min,
+                            Pos2::new(preview.right(), crop_rect.top()),
+                        ),
+                        0.0,
+                        shade,
+                    );
+                }
+                if crop_rect.bottom() < preview.bottom() {
+                    ui.painter().rect_filled(
+                        Rect::from_min_max(
+                            Pos2::new(preview.left(), crop_rect.bottom()),
+                            preview.max,
+                        ),
+                        0.0,
+                        shade,
+                    );
+                }
+                if crop_rect.left() > preview.left() {
+                    ui.painter().rect_filled(
+                        Rect::from_min_max(
+                            Pos2::new(preview.left(), crop_rect.top()),
+                            Pos2::new(crop_rect.left(), crop_rect.bottom()),
+                        ),
+                        0.0,
+                        shade,
+                    );
+                }
+                if crop_rect.right() < preview.right() {
+                    ui.painter().rect_filled(
+                        Rect::from_min_max(
+                            Pos2::new(crop_rect.right(), crop_rect.top()),
+                            Pos2::new(preview.right(), crop_rect.bottom()),
+                        ),
+                        0.0,
+                        shade,
+                    );
+                }
+                ui.painter().rect_stroke(
+                    crop_rect,
+                    CornerRadius::same(4),
+                    Stroke::new(2.0_f32, theme.accent),
+                    egui::StrokeKind::Inside,
+                );
+                // Corner brackets.
+                let bracket = Stroke::new(3.0_f32, Color32::WHITE);
+                let arm = 14.0;
+                for (corner, dx, dy) in [
+                    (crop_rect.left_top(), 1.0, 1.0),
+                    (crop_rect.right_top(), -1.0, 1.0),
+                    (crop_rect.left_bottom(), 1.0, -1.0),
+                    (crop_rect.right_bottom(), -1.0, -1.0),
+                ] {
+                    ui.painter()
+                        .line_segment([corner, corner + Vec2::new(arm * dx, 0.0)], bracket);
+                    ui.painter()
+                        .line_segment([corner, corner + Vec2::new(0.0, arm * dy)], bracket);
+                }
+                if response.dragged() {
+                    let delta = response.drag_delta();
+                    crop.center_x = (crop.center_x + delta.x / (image_rect.width() / image_size.x))
+                        .clamp(0.0, 1.0);
+                    crop.center_y = (crop.center_y
+                        + delta.y / (image_rect.height() / image_size.y))
+                        .clamp(0.0, 1.0);
+                }
+                if response.hovered() {
+                    ctx.set_cursor_icon(egui::CursorIcon::Grab);
+                }
+            } else {
+                ui.colored_label(theme.text_weak, app.state.tr(Key::ThemeImageFailed));
+            }
+
+            ui.add_space(10.0);
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(app.state.tr(Key::Zoom))
+                        .size(11.0)
+                        .color(theme.text_weak),
+                );
+                ui.add(
+                    egui::Slider::new(&mut crop.zoom, 1.0..=3.0)
+                        .show_value(false)
+                        .trailing_fill(true),
+                );
+                ui.label(
+                    RichText::new(format!("{:.1}×", crop.zoom))
+                        .size(10.0)
+                        .color(theme.text_weak),
+                );
+            });
+            ui.add_space(12.0);
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if style::button(ui, theme, app.state.tr(Key::Save), style::Variant::Primary)
+                    .clicked()
+                {
+                    apply = true;
+                }
+                ui.add_space(6.0);
+                if style::button(ui, theme, app.state.tr(Key::Cancel), style::Variant::Ghost)
+                    .clicked()
+                {
+                    keep = false;
+                }
+            });
+        });
+    if ctx.input(|input| input.key_pressed(egui::Key::Escape)) {
+        keep = false;
+    }
+    if apply {
+        pending.push(Command::SetThemeImageCropped {
+            source: crop.source,
+            zoom: crop.zoom,
+            center_x: crop.center_x,
+            center_y: crop.center_y,
+        });
+    } else if keep {
+        app.ui.crop_theme_image = Some(crop);
+    }
 }
 
 // ---------------------------------------------------------------------------

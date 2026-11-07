@@ -108,27 +108,13 @@ fn header(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, mobile: bool) {
 // Continue listening
 // ---------------------------------------------------------------------------
 
-fn image_tint(app: &EchoPortApp, theme: &Theme, index: usize) -> egui::Color32 {
-    let Some(palette) = app.state.theme_image_palette else {
-        return theme.surface;
-    };
-    let color = match index {
-        0 => palette.vivid,
-        1 => palette.secondary,
-        2 => palette.macarons[0],
-        _ => palette.macarons[2],
-    };
-    theme::mix(theme.surface, color, if theme.dark { 0.28 } else { 0.26 })
-}
-
 fn hero(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec<Command>) {
     let width = ui.available_width();
     let height = (width * 0.115).clamp(96.0, 152.0);
     let s = height / 106.0;
     let (rect, _) = ui.allocate_exact_size(Vec2::new(width, height), Sense::hover());
-    let hero_fill = image_tint(app, theme, 0);
     ui.painter()
-        .rect_filled(rect, CornerRadius::same(style::R_LG), hero_fill);
+        .rect_filled(rect, CornerRadius::same(style::R_LG), theme.surface);
     ui.painter().rect_stroke(
         rect,
         CornerRadius::same(style::R_LG),
@@ -142,25 +128,13 @@ fn hero(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec<Com
         &clip,
         Pos2::new(rect.right() - 82.0 * s, rect.center().y + 12.0 * s),
         44.0 * s,
-        theme::with_alpha(
-            app.state
-                .theme_image_palette
-                .map(|palette| palette.macarons[0])
-                .unwrap_or(theme.highlight),
-            70,
-        ),
+        theme::with_alpha(theme.highlight, 70),
     );
     style::blob(
         &clip,
         Pos2::new(rect.right() - 142.0 * s, rect.center().y - 16.0 * s),
         21.0 * s,
-        theme::with_alpha(
-            app.state
-                .theme_image_palette
-                .map(|palette| palette.vivid)
-                .unwrap_or(theme.accent),
-            28,
-        ),
+        theme::with_alpha(theme.accent, 28),
     );
     clip.circle_stroke(
         Pos2::new(rect.right() - 118.0 * s, rect.center().y + 6.0 * s),
@@ -357,9 +331,8 @@ fn hero_mobile(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut 
     let width = ui.available_width();
     let height = 86.0;
     let (rect, _) = ui.allocate_exact_size(Vec2::new(width, height), Sense::hover());
-    let hero_fill = image_tint(app, theme, 0);
     ui.painter()
-        .rect_filled(rect, CornerRadius::same(style::R_LG), hero_fill);
+        .rect_filled(rect, CornerRadius::same(style::R_LG), theme.surface);
     ui.painter().rect_stroke(
         rect,
         CornerRadius::same(style::R_LG),
@@ -530,39 +503,25 @@ fn bottom_row(
     pending: &mut Vec<Command>,
     mobile: bool,
 ) {
-    let fills = [
-        image_tint(app, theme, 1),
-        image_tint(app, theme, 2),
-        image_tint(app, theme, 3),
-    ];
     if mobile {
-        card_shell(ui, theme, fills[0], |ui| {
-            favourites(ui, app, theme, pending)
-        });
+        card_shell(ui, theme, |ui| favourites(ui, app, theme, pending));
         ui.add_space(10.0);
-        card_shell(ui, theme, fills[1], |ui| playlists(ui, app, theme));
+        card_shell(ui, theme, |ui| playlists(ui, app, theme));
         ui.add_space(10.0);
-        card_shell(ui, theme, fills[2], |ui| sources(ui, app, theme));
+        card_shell(ui, theme, |ui| sources(ui, app, theme));
         return;
     }
     ui.columns(3, |cols| {
-        card_shell(&mut cols[0], theme, fills[0], |ui| {
+        card_shell(&mut cols[0], theme, |ui| {
             favourites(ui, app, theme, pending)
         });
-        card_shell(&mut cols[1], theme, fills[1], |ui| {
-            playlists(ui, app, theme)
-        });
-        card_shell(&mut cols[2], theme, fills[2], |ui| sources(ui, app, theme));
+        card_shell(&mut cols[1], theme, |ui| playlists(ui, app, theme));
+        card_shell(&mut cols[2], theme, |ui| sources(ui, app, theme));
     });
 }
 
-fn card_shell<R>(
-    ui: &mut Ui,
-    theme: &Theme,
-    fill: egui::Color32,
-    add_contents: impl FnOnce(&mut Ui) -> R,
-) -> R {
-    style::card_with_fill(theme, fill)
+fn card_shell<R>(ui: &mut Ui, theme: &Theme, add_contents: impl FnOnce(&mut Ui) -> R) -> R {
+    style::card(theme)
         .show(ui, |ui| {
             ui.set_min_width(ui.available_width());
             let tall = (ui.ctx().screen_rect().height() - 800.0) * 0.17;

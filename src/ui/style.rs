@@ -161,11 +161,6 @@ pub fn paragraph(ui: &mut Ui, text: &str, size: f32, color: Color32) -> Response
 
 /// Standard raised card: surface fill, hairline border, soft shadow.
 #[allow(dead_code)]
-/// Card with a custom surface tint (used by the optional theme image).
-pub fn card_with_fill(theme: &Theme, fill: egui::Color32) -> egui::Frame {
-    card(theme).fill(fill)
-}
-
 pub fn card(theme: &Theme) -> egui::Frame {
     egui::Frame::new()
         .fill(theme.surface)

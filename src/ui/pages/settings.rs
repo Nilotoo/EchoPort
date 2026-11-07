@@ -12,7 +12,7 @@ use crate::state::{Command, Page};
 use crate::theme::{self, Palette, Theme, ThemeMode};
 use crate::ui::style::{self, Icon, Variant};
 use crate::ui::widgets;
-use crate::ui::{theme_mode_hint, theme_mode_label};
+use crate::ui::{theme_mode_hint, theme_mode_label, ThemeImageCrop};
 
 pub fn draw(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec<Command>) {
     widgets::page_scroll(ui, |ui| {
@@ -184,7 +184,8 @@ fn appearance(
                 }
                 let selected = app.state.theme_mode == mode;
                 let label = theme_mode_label(&app.state, mode);
-                if theme_tile(ui, theme, mode, label, selected, tile_w, palette).clicked()
+                if !app.state.theme_image_palette.is_some()
+                    && theme_tile(ui, theme, mode, label, selected, tile_w, palette).clicked()
                     && !selected
                 {
                     pending.push(Command::SetThemeMode(mode));
@@ -197,6 +198,14 @@ fn appearance(
                 .size(10.5)
                 .color(theme.text_weak),
         );
+        if app.state.theme_image_palette.is_some() {
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(app.state.tr(Key::ThemeImageAutoHint))
+                    .size(10.0)
+                    .color(theme.accent),
+            );
+        }
         ui.add_space(14.0);
         style::divider(ui, theme);
         ui.add_space(10.0);
@@ -270,7 +279,12 @@ fn appearance(
                             app.state.tr(Key::ThemeImage),
                             &[("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])],
                         ) {
-                            pending.push(Command::SetThemeImage(path));
+                            app.ui.crop_theme_image = Some(ThemeImageCrop {
+                                source: path,
+                                zoom: 1.0,
+                                center_x: 0.5,
+                                center_y: 0.5,
+                            });
                         }
                     }
                 },
