@@ -173,6 +173,26 @@ pub fn crop_theme_image_png(
     Ok(output.into_inner())
 }
 
+/// Decode an arbitrary image, bound it to `max_edge` and re-encode it as PNG.
+/// Large camera photos are downscaled before the crop UI decodes them again.
+pub fn prepare_theme_image_png(bytes: &[u8], max_edge: u32) -> Result<Vec<u8>, String> {
+    let mut image = image::load_from_memory(bytes).map_err(|err| err.to_string())?;
+    let longest = image.width().max(image.height());
+    if longest > max_edge.max(1) {
+        let scale = max_edge as f32 / longest as f32;
+        image = image.resize(
+            (image.width() as f32 * scale).round().max(1.0) as u32,
+            (image.height() as f32 * scale).round().max(1.0) as u32,
+            image::imageops::FilterType::Lanczos3,
+        );
+    }
+    let mut output = std::io::Cursor::new(Vec::new());
+    image
+        .write_to(&mut output, image::ImageFormat::Png)
+        .map_err(|err| err.to_string())?;
+    Ok(output.into_inner())
+}
+
 /// Extract a palette from a local image file.
 pub fn extract_palette_file(path: &Path) -> Option<Palette> {
     let bytes = std::fs::read(path).ok()?;
@@ -975,6 +995,23 @@ mod tests {
             decoded.width() as f32 / decoded.height() as f32,
             THEME_IMAGE_CROP_ASPECT
         );
+    }
+
+    #[test]
+    fn oversized_theme_image_is_downscaled() {
+        let mut source = image::RgbImage::new(4200, 100);
+        for (x, _, pixel) in source.enumerate_pixels_mut() {
+            *pixel = image::Rgb([(x % 255) as u8, 40, 80]);
+        }
+        let mut encoded = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgb8(source)
+            .write_to(&mut encoded, image::ImageFormat::Png)
+            .expect("encode source");
+        let prepared =
+            prepare_theme_image_png(encoded.get_ref(), 4096).expect("prepare should succeed");
+        let decoded = image::load_from_memory(&prepared).expect("decode prepared");
+        assert_eq!(decoded.width(), 4096);
+        assert_eq!(decoded.height(), 98);
     }
 
     #[test]

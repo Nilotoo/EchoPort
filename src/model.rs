@@ -397,10 +397,13 @@ pub struct Settings {
     #[serde(default = "default_true")]
     pub lyrics_enabled: bool,
     /// Optional custom theme image. The file is copied into the app data
-    /// directory; only the sidebar paints the image, while derived colours tint
-    /// the home hero and summary cards.
+    /// directory and is one of the selectable theme presets.
     #[serde(default)]
     pub theme_image: Option<PathBuf>,
+    /// When true the image palette is the active theme; choosing Pulse/Tide/Ink
+    /// turns this off while keeping the saved image for later.
+    #[serde(default = "default_true")]
+    pub photo_theme: bool,
     pub download_format: DownloadFormat,
     pub download_dir: PathBuf,
     pub music_dirs: Vec<PathBuf>,
@@ -433,6 +436,7 @@ impl Default for Settings {
             follow_cover_accent: true,
             lyrics_enabled: true,
             theme_image: None,
+            photo_theme: true,
             download_format: DownloadFormat::Mp3,
             download_dir: music_dir.join("EchoPort"),
             music_dirs: vec![music_dir],
