@@ -23,11 +23,6 @@ pub fn draw(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec
                         .size(26.0)
                         .color(theme.text),
                 );
-                ui.label(
-                    RichText::new(app.state.tr(Key::AboutHint))
-                        .size(11.5)
-                        .color(theme.text_weak),
-                );
             });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 ui.label(

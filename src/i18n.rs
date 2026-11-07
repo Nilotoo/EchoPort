@@ -160,6 +160,7 @@ pub enum Key {
     PlaylistCreatedToast,
     PlaylistDeletedToast,
     NoPlaylistsHint,
+    PlaylistsHint,
     // downloads
     Download,
     DownloadCenter,
@@ -575,6 +576,10 @@ impl Key {
             NoPlaylistsHint => (
                 "Create a playlist and mix songs from any source.",
                 "新建歌单，把不同平台的歌曲混在一起。",
+            ),
+            PlaylistsHint => (
+                "Choose across platforms and create playlists freely.",
+                "可选择不同平台，自由创建歌单。",
             ),
             Download => ("Download", "下载"),
             DownloadCenter => ("Download center", "下载中心"),

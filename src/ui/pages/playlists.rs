@@ -104,7 +104,7 @@ fn header(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec<C
         );
         ui.add(
             egui::Label::new(
-                RichText::new(app.state.tr(Key::NoPlaylistsHint))
+                RichText::new(app.state.tr(Key::PlaylistsHint))
                     .size(11.0)
                     .color(theme.text_weak),
             )
@@ -149,7 +149,7 @@ fn header(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec<C
                     .color(theme.text),
             );
             ui.label(
-                RichText::new(app.state.tr(Key::NoPlaylistsHint))
+                RichText::new(app.state.tr(Key::PlaylistsHint))
                     .size(11.5)
                     .color(theme.text_weak),
             );
@@ -420,7 +420,7 @@ fn detail_panel(
                 );
                 ui.add_space(4.0);
                 ui.label(
-                    RichText::new(app.state.tr(Key::NoPlaylistsHint))
+                    RichText::new(app.state.tr(Key::PlaylistsHint))
                         .size(11.0)
                         .color(theme.text_weak),
                 );
