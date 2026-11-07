@@ -742,8 +742,8 @@ impl Key {
             ThemeImageFailed => ("Could not use that image", "无法使用该图片"),
             CropThemeImage => ("Crop theme image", "裁剪主题图片"),
             CropThemeImageHint => (
-                "Drag the image to choose the vertical strip shown in the sidebar; pinch/scroll zoom is available with the slider.",
-                "拖动图片选择左侧栏要显示的区域；用下方滑块调整缩放。",
+                "Drag or use arrow keys to fine-tune the vertical strip shown in the sidebar; adjust zoom with the slider.",
+                "拖动或方向键微调左侧栏要显示的区域；用下方滑块调整缩放。",
             ),
             Zoom => ("Zoom", "缩放"),
             DoubleClickPlay => ("Double-click to play", "双击播放"),
