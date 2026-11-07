@@ -133,6 +133,38 @@ fn section_card<R>(
         .inner
 }
 
+/// A settings row with a wrapping text column and a single control on the
+/// right. Reserving the control width up-front is what keeps long English
+/// hints from sliding underneath switches/buttons in narrow columns.
+fn setting_row(
+    ui: &mut Ui,
+    theme: &Theme,
+    title: &str,
+    hint: &str,
+    control_width: f32,
+    add_control: impl FnOnce(&mut Ui),
+) {
+    let row_width = ui.available_width();
+    let text_width = (row_width - control_width - 12.0).max(120.0);
+    ui.horizontal_top(|ui| {
+        ui.allocate_ui_with_layout(
+            Vec2::new(text_width, 0.0),
+            Layout::top_down(Align::Min),
+            |ui| {
+                ui.set_max_width(text_width);
+                ui.label(RichText::new(title).size(12.0).color(theme.text));
+                ui.add_space(2.0);
+                ui.add(
+                    egui::Label::new(RichText::new(hint).size(10.0).color(theme.text_weak)).wrap(),
+                );
+            },
+        );
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            add_control(ui);
+        });
+    });
+}
+
 // ---------------------------------------------------------------------------
 // Appearance
 // ---------------------------------------------------------------------------
@@ -181,24 +213,13 @@ fn appearance(
         ui.add_space(10.0);
 
         // Follow-cover accent toggle: a separate switch, not a theme mode.
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.label(
-                    RichText::new(app.state.tr(Key::FollowCoverAccent))
-                        .size(12.0)
-                        .color(theme.text),
-                );
-                ui.add_space(2.0);
-                ui.add(
-                    egui::Label::new(
-                        RichText::new(app.state.tr(Key::FollowCoverAccentHint))
-                            .size(10.0)
-                            .color(theme.text_weak),
-                    )
-                    .wrap(),
-                );
-            });
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+        setting_row(
+            ui,
+            theme,
+            app.state.tr(Key::FollowCoverAccent),
+            app.state.tr(Key::FollowCoverAccentHint),
+            52.0,
+            |ui| {
                 if style::switch(
                     ui,
                     theme,
@@ -211,29 +232,18 @@ fn appearance(
                         !app.state.follow_cover_accent,
                     ));
                 }
-            });
-        });
+            },
+        );
         ui.add_space(14.0);
         style::divider(ui, theme);
         ui.add_space(10.0);
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.label(
-                    RichText::new(app.state.tr(Key::ShowLyrics))
-                        .size(12.0)
-                        .color(theme.text),
-                );
-                ui.add_space(2.0);
-                ui.add(
-                    egui::Label::new(
-                        RichText::new(app.state.tr(Key::ShowLyricsHint))
-                            .size(10.0)
-                            .color(theme.text_weak),
-                    )
-                    .wrap(),
-                );
-            });
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+        setting_row(
+            ui,
+            theme,
+            app.state.tr(Key::ShowLyrics),
+            app.state.tr(Key::ShowLyricsHint),
+            52.0,
+            |ui| {
                 if style::switch(
                     ui,
                     theme,
@@ -246,30 +256,19 @@ fn appearance(
                         !app.state.profile.settings.lyrics_enabled,
                     ));
                 }
-            });
-        });
+            },
+        );
         if !cfg!(target_os = "android") {
             ui.add_space(14.0);
             style::divider(ui, theme);
             ui.add_space(10.0);
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.label(
-                        RichText::new(app.state.tr(Key::ThemeImage))
-                            .size(12.0)
-                            .color(theme.text),
-                    );
-                    ui.add_space(2.0);
-                    ui.add(
-                        egui::Label::new(
-                            RichText::new(app.state.tr(Key::ThemeImageHint))
-                                .size(10.0)
-                                .color(theme.text_weak),
-                        )
-                        .wrap(),
-                    );
-                });
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            setting_row(
+                ui,
+                theme,
+                app.state.tr(Key::ThemeImage),
+                app.state.tr(Key::ThemeImageHint),
+                118.0,
+                |ui| {
                     if style::button(
                         ui,
                         theme,
@@ -285,8 +284,8 @@ fn appearance(
                             pending.push(Command::SetThemeImage(path));
                         }
                     }
-                });
-            });
+                },
+            );
             let current = app.state.theme_image_path();
             if let Some(path) = current {
                 ui.add_space(8.0);
