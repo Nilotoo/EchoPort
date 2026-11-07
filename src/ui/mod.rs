@@ -2148,12 +2148,13 @@ fn dialogs(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, pending: &
                             .color(theme.text_weak),
                     );
                     ui.add_space(4.0);
-                    ui.add(
-                        egui::TextEdit::multiline(description)
-                            .font(style::font(12.0))
-                            .text_color(theme.text)
-                            .desired_rows(2)
-                            .desired_width(ui.available_width()),
+                    dialog_multiline_input(
+                        ui,
+                        theme,
+                        "dialog-playlist-description",
+                        description,
+                        app.state.tr(Key::PlaylistDescription),
+                        2,
                     );
                 }
                 Dialog::NewProfile { name, bio } => {
@@ -2176,12 +2177,13 @@ fn dialogs(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, pending: &
                             .color(theme.text_weak),
                     );
                     ui.add_space(4.0);
-                    ui.add(
-                        egui::TextEdit::multiline(bio)
-                            .font(style::font(12.0))
-                            .text_color(theme.text)
-                            .desired_rows(3)
-                            .desired_width(ui.available_width()),
+                    dialog_multiline_input(
+                        ui,
+                        theme,
+                        "dialog-profile-bio",
+                        bio,
+                        app.state.tr(Key::BioLabel),
+                        3,
                     );
                 }
                 Dialog::RenamePlaylist {
@@ -2211,12 +2213,13 @@ fn dialogs(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, pending: &
                             .color(theme.text_weak),
                     );
                     ui.add_space(4.0);
-                    ui.add(
-                        egui::TextEdit::multiline(description)
-                            .font(style::font(12.0))
-                            .text_color(theme.text)
-                            .desired_rows(2)
-                            .desired_width(ui.available_width()),
+                    dialog_multiline_input(
+                        ui,
+                        theme,
+                        "dialog-playlist-description",
+                        description,
+                        app.state.tr(Key::PlaylistDescription),
+                        2,
                     );
                     ui.add_space(8.0);
                     ui.horizontal(|ui| {
@@ -2405,6 +2408,56 @@ fn dialogs(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, pending: &
     if keep {
         app.ui.dialog = Some(dialog);
     }
+}
+
+/// Multiline variant of the dialog input. The frame and inner padding are drawn
+/// explicitly so the cursor starts inside the box (the raw multiline text edit
+/// previously showed a grey native background with the caret on its edge).
+fn dialog_multiline_input(
+    ui: &mut Ui,
+    theme: &Theme,
+    id_salt: &str,
+    value: &mut String,
+    hint: &str,
+    rows: usize,
+) -> egui::Response {
+    let id = Id::new(id_salt);
+    let height = 10.0 + rows as f32 * 19.0;
+    let width = ui.available_width();
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(width, height), Sense::hover());
+    let focused = ui.ctx().memory(|memory| memory.has_focus(id));
+    ui.painter().rect_filled(
+        rect,
+        CornerRadius::same(style::R_MD),
+        if focused {
+            theme.surface
+        } else {
+            style::wash(theme)
+        },
+    );
+    ui.painter().rect_stroke(
+        rect,
+        CornerRadius::same(style::R_MD),
+        Stroke::new(
+            if focused { 1.5_f32 } else { 1.0_f32 },
+            if focused { theme.accent } else { theme.border },
+        ),
+        StrokeKind::Inside,
+    );
+    // Deliberately inset the actual editor: this gives the caret and first line
+    // the same left/top breathing room as the single-line name field.
+    let inner = rect.shrink2(Vec2::new(12.0, 9.0));
+    ui.put(
+        inner,
+        egui::TextEdit::multiline(value)
+            .id(id)
+            .frame(false)
+            .margin(Margin::ZERO)
+            .hint_text(hint)
+            .font(style::font(12.5))
+            .text_color(theme.text)
+            .desired_width(inner.width()),
+    )
 }
 
 fn dialog_text_input(
