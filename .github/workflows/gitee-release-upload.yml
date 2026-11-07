@@ -20,47 +20,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p assets
-          GH_TOKEN="$GH_TOKEN" TAG="$TAG" python3 - <<'PY'
-import json
-import os
-import pathlib
-import urllib.request
-
-tag = os.environ["TAG"]
-repo = os.environ["GITHUB_REPOSITORY"]
-url = f"https://api.github.com/repos/{repo}/releases/tags/{tag}"
-request = urllib.request.Request(
-    url,
-    headers={
-        "Accept": "application/vnd.github+json",
-        "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
-        "User-Agent": "EchoPort-release-upload",
-    },
-)
-with urllib.request.urlopen(request) as response:
-    release = json.load(response)
-out = pathlib.Path("assets")
-for asset in release.get("assets", []):
-    name = asset["name"]
-    if not name.endswith((".exe", ".tar.gz", ".sha256")):
-        continue
-    target = out / name
-    print(f"downloading {name}")
-    request = urllib.request.Request(
-        asset["browser_download_url"],
-        headers={
-            "Accept": "application/octet-stream",
-            "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
-            "User-Agent": "EchoPort-release-upload",
-        },
-    )
-    with urllib.request.urlopen(request) as response, target.open("wb") as handle:
-        while True:
-            chunk = response.read(1024 * 1024)
-            if not chunk:
-                break
-            handle.write(chunk)
-PY
+          gh release download "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir assets \
+            --clobber
 
       - name: Publish Gitee Release (assets only)
         env:
