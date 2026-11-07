@@ -249,6 +249,18 @@ impl EchoPortApp {
             app.ui.profile_bio = app.state.profile.bio.clone();
             app.ui.profile_bio_for = Some(app.state.profile.name.clone());
         }
+        // QA hook: open the theme-image crop dialog without clicking through
+        // the native file picker.
+        if let Ok(path) = std::env::var("ECHOPORT_CROP_IMAGE") {
+            if !app.demo || std::env::var("ECHOPORT_LIVE").is_ok() {
+                app.ui.crop_theme_image = Some(crate::ui::ThemeImageCrop {
+                    source: std::path::PathBuf::from(path),
+                    zoom: 1.0,
+                    center_x: 0.5,
+                    center_y: 0.5,
+                });
+            }
+        }
         // QA hook: start a live search without UI automation.
         if let Ok(query) = std::env::var("ECHOPORT_SEARCH_QUERY") {
             if !app.demo && !query.trim().is_empty() {
@@ -679,11 +691,18 @@ impl EchoPortApp {
                 self.mark_dirty();
             }
             Command::SetThemeImage(path) => self.set_theme_image(path),
+            Command::SetThemeImageCropped {
+                source,
+                zoom,
+                center_x,
+                center_y,
+            } => self.set_theme_image_cropped(source, zoom, center_x, center_y),
             Command::ClearThemeImage => {
                 if let Some(path) = self.state.profile.settings.theme_image.take() {
                     let _ = std::fs::remove_file(path);
                 }
                 self.state.theme_image_palette = None;
+                self.state.refresh_theme_target();
                 self.ui.invalidate_theme_image();
                 self.mark_dirty();
                 self.toast(ToastKind::Info, Key::ThemeImageRemoved);
@@ -2217,6 +2236,54 @@ impl EchoPortApp {
         }
         self.state.profile.settings.theme_image = Some(target);
         self.state.theme_image_palette = Some(palette);
+        self.state.refresh_theme_target();
+        self.ui.invalidate_theme_image();
+        self.mark_dirty();
+        self.toast(ToastKind::Success, Key::ThemeImageApplied);
+        self.ctx.request_repaint();
+    }
+
+    fn set_theme_image_cropped(
+        &mut self,
+        source: std::path::PathBuf,
+        zoom: f32,
+        center_x: f32,
+        center_y: f32,
+    ) {
+        const MAX_THEME_IMAGE: u64 = 32 * 1024 * 1024;
+        let too_large = std::fs::metadata(&source)
+            .map(|meta| meta.len() > MAX_THEME_IMAGE)
+            .unwrap_or(true);
+        if too_large {
+            self.toast(ToastKind::Error, Key::ThemeImageFailed);
+            return;
+        }
+        let Ok(bytes) = std::fs::read(&source) else {
+            self.toast(ToastKind::Error, Key::ThemeImageFailed);
+            return;
+        };
+        let bytes = match crate::theme::crop_theme_image_png(&bytes, zoom, center_x, center_y) {
+            Ok(bytes) => bytes,
+            Err(err) => {
+                log::warn!("theme image crop failed: {err}");
+                self.toast(ToastKind::Error, Key::ThemeImageFailed);
+                return;
+            }
+        };
+        let Some(palette) = crate::theme::extract_palette_bytes(&bytes) else {
+            self.toast(ToastKind::Error, Key::ThemeImageFailed);
+            return;
+        };
+        let target = self.paths.data_dir.join("theme-image.img");
+        let tmp = self.paths.data_dir.join("theme-image.img.tmp");
+        let _ = std::fs::remove_file(&target);
+        if std::fs::write(&tmp, &bytes).is_err() || std::fs::rename(&tmp, &target).is_err() {
+            self.toast(ToastKind::Error, Key::ThemeImageFailed);
+            return;
+        }
+        self.state.profile.settings.theme_image = Some(target);
+        self.state.theme_image_palette = Some(palette);
+        self.state.refresh_theme_target();
         self.ui.invalidate_theme_image();
         self.mark_dirty();
         self.toast(ToastKind::Success, Key::ThemeImageApplied);

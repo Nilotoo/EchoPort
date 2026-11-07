@@ -90,6 +90,9 @@ pub struct Palette {
     pub deep: Color32,
     /// Five pastel accents derived from the artwork.
     pub macarons: [Color32; 5],
+    /// Mean HSL lightness of the sampled image. Used to choose an automatically
+    /// light or dark full theme when a custom image is active.
+    pub mean_luminance: f32,
 }
 
 impl Palette {
@@ -100,6 +103,7 @@ impl Palette {
             soft: Color32::from_rgb(0xDA, 0xF2, 0xF2),
             deep: Color32::from_rgb(0x1E, 0x2D, 0x58),
             macarons: MACARONS,
+            mean_luminance: 0.5,
         }
     }
 }
@@ -112,6 +116,62 @@ pub const MACARONS: [Color32; 5] = [
     Color32::from_rgb(0xCD, 0xBD, 0xFF), // lavender
     Color32::from_rgb(0xFF, 0xD9, 0xB0), // peach
 ];
+
+/// Sidebar wallpaper crop aspect (width / height). Close to the real sidebar
+/// proportions; the final sidebar still cover-crops but this keeps the crop
+/// preview honest for the user.
+pub const THEME_IMAGE_CROP_ASPECT: f32 = 0.30;
+
+/// Map a zoomed/panned sidebar crop to source pixel coordinates.
+/// `center_x` / `center_y` are normalized 0..1.
+pub fn theme_image_crop_rect(
+    image_width: u32,
+    image_height: u32,
+    zoom: f32,
+    center_x: f32,
+    center_y: f32,
+) -> (u32, u32, u32, u32) {
+    let iw = image_width.max(1) as f32;
+    let ih = image_height.max(1) as f32;
+    let zoom = zoom.clamp(1.0, 3.0);
+    let (base_w, base_h) = if iw / ih > THEME_IMAGE_CROP_ASPECT {
+        (ih * THEME_IMAGE_CROP_ASPECT, ih)
+    } else {
+        (iw, iw / THEME_IMAGE_CROP_ASPECT)
+    };
+    let crop_w = (base_w / zoom).clamp(1.0, iw);
+    let crop_h = (base_h / zoom).clamp(1.0, ih);
+    let cx = (center_x.clamp(0.0, 1.0) * iw).clamp(crop_w * 0.5, iw - crop_w * 0.5);
+    let cy = (center_y.clamp(0.0, 1.0) * ih).clamp(crop_h * 0.5, ih - crop_h * 0.5);
+    let x = (cx - crop_w * 0.5).round().clamp(0.0, iw - crop_w) as u32;
+    let y = (cy - crop_h * 0.5).round().clamp(0.0, ih - crop_h) as u32;
+    (
+        x,
+        y,
+        crop_w.round().max(1.0) as u32,
+        crop_h.round().max(1.0) as u32,
+    )
+}
+
+/// Crop a sidebar strip from encoded image bytes and return PNG bytes. Used by
+/// the settings crop dialog; keeping the math next to the rect helper makes it
+/// independently testable.
+pub fn crop_theme_image_png(
+    bytes: &[u8],
+    zoom: f32,
+    center_x: f32,
+    center_y: f32,
+) -> Result<Vec<u8>, String> {
+    let image = image::load_from_memory(bytes).map_err(|err| err.to_string())?;
+    let (x, y, w, h) =
+        theme_image_crop_rect(image.width(), image.height(), zoom, center_x, center_y);
+    let cropped = image.crop_imm(x, y, w, h);
+    let mut output = std::io::Cursor::new(Vec::new());
+    cropped
+        .write_to(&mut output, image::ImageFormat::Png)
+        .map_err(|err| err.to_string())?;
+    Ok(output.into_inner())
+}
 
 /// Extract a palette from a local image file.
 pub fn extract_palette_file(path: &Path) -> Option<Palette> {
@@ -131,8 +191,12 @@ pub fn extract_palette_image(image: &image::DynamicImage) -> Option<Palette> {
         .to_rgb8();
     let mut buckets: std::collections::HashMap<u16, (u32, u64, u64, u64)> =
         std::collections::HashMap::with_capacity(1024);
+    let mut lightness_sum = 0.0f64;
+    let mut lightness_count = 0u64;
     for pixel in small.pixels() {
         let [r, g, b] = pixel.0;
+        lightness_sum += f64::from(to_hsl(Color32::from_rgb(r, g, b)).2);
+        lightness_count += 1;
         let key = (u16::from(r >> 4) << 8) | (u16::from(g >> 4) << 4) | u16::from(b >> 4);
         let entry = buckets.entry(key).or_insert((0, 0, 0, 0));
         entry.0 += 1;
@@ -211,6 +275,7 @@ pub fn extract_palette_image(image: &image::DynamicImage) -> Option<Palette> {
         soft,
         deep,
         macarons,
+        mean_luminance: (lightness_sum / lightness_count.max(1) as f64) as f32,
     })
 }
 
@@ -383,6 +448,80 @@ impl Theme {
         self.on_accent = best_on(self.accent);
         self.on_highlight = best_on(self.highlight);
         self
+    }
+
+    /// Build a complete theme from a user image palette. The image decides the
+    /// light/dark base; every foreground/background pair is contrast-checked so
+    /// text and icons stay readable on the generated surfaces.
+    pub fn from_image_palette(palette: &Palette) -> Self {
+        let dark = palette.mean_luminance < 0.47;
+        if dark {
+            let bg = mix(Color32::from_rgb(0x0A, 0x0F, 0x18), palette.deep, 0.40);
+            let panel = mix(bg, Color32::WHITE, 0.055);
+            let surface = mix(panel, palette.vivid, 0.17);
+            let surface_hover = mix(surface, Color32::WHITE, 0.10);
+            let border = mix(surface, Color32::WHITE, 0.22);
+            let text = readable_on(Color32::from_rgb(0xF4, 0xF7, 0xFF), bg, 7.0);
+            let text_weak = readable_on(mix(text, bg, 0.42), bg, 4.5);
+            let accent = readable_on(brighten_for_dark(palette.vivid), bg, 3.2);
+            let highlight = brighten_for_dark(palette.secondary);
+            let mut macarons = MACARONS;
+            for (index, macaron) in macarons.iter_mut().enumerate() {
+                let (h, s, l) = to_hsl(palette.macarons[index]);
+                *macaron = from_hsl(h, (s * 0.72).min(0.52), (l * 0.52).max(0.30));
+            }
+            Self {
+                dark: true,
+                bg,
+                panel,
+                surface,
+                surface_hover,
+                border,
+                text,
+                text_weak,
+                accent,
+                accent_soft: mix(panel, accent, 0.22),
+                on_accent: best_on(accent),
+                highlight,
+                on_highlight: best_on(highlight),
+                macaron: macarons,
+                glow: [
+                    mix(palette.vivid, bg, 0.58),
+                    mix(palette.secondary, panel, 0.52),
+                ],
+            }
+        } else {
+            let paper = Color32::from_rgb(0xFF, 0xFF, 0xFF);
+            let bg = mix(paper, palette.soft, 0.62);
+            let panel = mix(paper, palette.soft, 0.44);
+            let surface = mix(panel, palette.vivid, 0.09);
+            let surface_hover = mix(surface, palette.vivid, 0.12);
+            let border = mix(surface, palette.vivid, 0.30);
+            let text = readable_on(palette.deep, bg, 7.0);
+            let text_weak = readable_on(mix(text, bg, 0.34), bg, 4.5);
+            let accent = readable_on(palette.vivid, bg, 4.5);
+            let highlight = readable_on(palette.secondary, bg, 3.2);
+            Self {
+                dark: false,
+                bg,
+                panel,
+                surface,
+                surface_hover,
+                border,
+                text,
+                text_weak,
+                accent,
+                accent_soft: mix(surface, palette.soft, 0.72),
+                on_accent: best_on(accent),
+                highlight,
+                on_highlight: best_on(highlight),
+                macaron: palette.macarons,
+                glow: [
+                    mix(palette.vivid, Color32::WHITE, 0.74),
+                    mix(palette.secondary, Color32::WHITE, 0.82),
+                ],
+            }
+        }
     }
 
     // -- Script / user overrides ---------------------------------------------
@@ -792,6 +931,50 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn image_theme_auto_contrast() {
+        for mean_luminance in [0.15f32, 0.85] {
+            let mut palette = Palette::fallback();
+            palette.mean_luminance = mean_luminance;
+            let theme = Theme::from_image_palette(&palette);
+            assert_eq!(theme.dark, mean_luminance < 0.47);
+            assert!(contrast(theme.text, theme.bg) >= 4.0);
+            assert!(contrast(theme.text, theme.surface) >= 4.0);
+            assert!(contrast(theme.accent, theme.bg) >= 3.0);
+            assert!(contrast(theme.on_accent, theme.accent) >= 3.0);
+        }
+    }
+
+    #[test]
+    fn image_crop_stays_inside_source() {
+        let (x, y, w, h) = theme_image_crop_rect(2000, 1000, 1.0, 0.5, 0.5);
+        assert_eq!((w, h), (300, 1000));
+        assert_eq!((x, y), (850, 0));
+        let (x, y, w, h) = theme_image_crop_rect(2000, 1000, 2.0, 0.0, 0.0);
+        assert!(x + w <= 2000 && y + h <= 1000);
+        assert!(w > 0 && h > 0);
+    }
+
+    #[test]
+    fn crop_theme_image_produces_png() {
+        let mut source = image::RgbaImage::new(120, 80);
+        for (x, y, pixel) in source.enumerate_pixels_mut() {
+            *pixel = image::Rgba([(x % 255) as u8, (y % 255) as u8, 80, 255]);
+        }
+        let mut encoded = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(source)
+            .write_to(&mut encoded, image::ImageFormat::Png)
+            .expect("encode source");
+        let cropped =
+            crop_theme_image_png(encoded.get_ref(), 1.0, 0.5, 0.5).expect("crop should succeed");
+        let decoded = image::load_from_memory(&cropped).expect("decode crop");
+        assert!(decoded.width() > 0 && decoded.height() > 0);
+        assert_eq!(
+            decoded.width() as f32 / decoded.height() as f32,
+            THEME_IMAGE_CROP_ASPECT
+        );
     }
 
     #[test]

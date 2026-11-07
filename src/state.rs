@@ -314,13 +314,15 @@ impl AppState {
             volume,
             ..PlaybackStatus::default()
         };
-        let theme = Theme::for_mode(theme_mode, None);
         let theme_image_palette = std::env::var_os("ECHOPORT_THEME_IMAGE")
             .map(std::path::PathBuf::from)
             .filter(|path| path.is_file())
             .or_else(|| profile.settings.theme_image.clone())
             .as_deref()
             .and_then(crate::theme::extract_palette_file);
+        let theme = theme_image_palette
+            .map(|palette| Theme::from_image_palette(&palette))
+            .unwrap_or_else(|| Theme::for_mode(theme_mode, None));
         Self {
             lang: profile.settings.language,
             page: Page::Home,
@@ -411,7 +413,10 @@ impl AppState {
         } else {
             None
         };
-        let mut target = Theme::for_mode(self.theme_mode, palette);
+        let mut target = self
+            .theme_image_palette
+            .map(|image_palette| Theme::from_image_palette(&image_palette))
+            .unwrap_or_else(|| Theme::for_mode(self.theme_mode, palette));
         if let Some(accent) = self.accent_override {
             target = target.with_accent(accent);
         }
@@ -599,6 +604,12 @@ pub enum Command {
     SetFollowCoverAccent(bool),
     SetLyricsEnabled(bool),
     SetThemeImage(std::path::PathBuf),
+    SetThemeImageCropped {
+        source: std::path::PathBuf,
+        zoom: f32,
+        center_x: f32,
+        center_y: f32,
+    },
     ClearThemeImage,
     /// Streamed-audio cache cap in MiB; `0` = delete played tracks immediately.
     SetCacheLimit(u32),
