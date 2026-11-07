@@ -166,6 +166,11 @@ pub struct Track {
     /// Release date as reported by the platform (`YYYY-MM-DD` when known).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub release_date: Option<String>,
+    /// Genre / style from embedded tags or provider metadata. `None` means it
+    /// is genuinely unknown; the UI shows “无法确定” and manual overrides live in
+    /// the profile.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub genre: Option<String>,
 }
 
 impl Track {
@@ -190,6 +195,7 @@ impl Track {
             local_path: None,
             year: None,
             release_date: None,
+            genre: None,
         }
     }
 
@@ -249,6 +255,14 @@ impl Track {
         let date = date.into();
         if !date.trim().is_empty() {
             self.release_date = Some(date);
+        }
+        self
+    }
+
+    pub fn with_genre(mut self, genre: impl Into<String>) -> Self {
+        let genre = genre.into().trim().to_owned();
+        if !genre.is_empty() {
+            self.genre = Some(genre);
         }
         self
     }
@@ -485,6 +499,10 @@ pub struct Profile {
     pub local_files: Vec<PathBuf>,
     #[serde(default)]
     pub history: Vec<HistoryEntry>,
+    /// User corrections keyed by track id; values win over embedded/provider
+    /// metadata and survive even when the same track is re-fetched.
+    #[serde(default)]
+    pub genre_overrides: BTreeMap<String, String>,
 }
 
 pub const PROFILE_SCHEMA: u32 = 1;
@@ -504,6 +522,37 @@ impl Profile {
             favorite_albums: Vec::new(),
             local_files: Vec::new(),
             history: Vec::new(),
+            genre_overrides: BTreeMap::new(),
+        }
+    }
+
+    /// Effective genre for a track: explicit manual correction first, then the
+    /// embedded/provider genre. Empty values are treated as unknown.
+    pub fn effective_genre<'a>(&'a self, track: &'a Track) -> Option<&'a str> {
+        self.genre_overrides
+            .get(&track.id)
+            .map(String::as_str)
+            .filter(|genre| !genre.trim().is_empty())
+            .or_else(|| {
+                track
+                    .genre
+                    .as_deref()
+                    .filter(|genre| !genre.trim().is_empty())
+            })
+    }
+
+    /// Set or clear a manual genre correction.
+    pub fn set_genre_override(&mut self, track_id: &str, genre: Option<String>) {
+        match genre
+            .map(|genre| genre.trim().to_owned())
+            .filter(|genre| !genre.is_empty())
+        {
+            Some(genre) => {
+                self.genre_overrides.insert(track_id.to_owned(), genre);
+            }
+            None => {
+                self.genre_overrides.remove(track_id);
+            }
         }
     }
 
@@ -994,6 +1043,8 @@ pub struct ProfileShare {
     pub local_files: Vec<PathBuf>,
     #[serde(default)]
     pub history: Vec<HistoryEntry>,
+    #[serde(default)]
+    pub genre_overrides: BTreeMap<String, String>,
 }
 
 pub const PROFILE_SHARE_FORMAT: &str = "echoport-profile";
@@ -1014,6 +1065,7 @@ impl ProfileShare {
             favorite_albums: profile.favorite_albums.clone(),
             local_files: profile.local_files.clone(),
             history: profile.history.clone(),
+            genre_overrides: profile.genre_overrides.clone(),
         }
     }
 
@@ -1027,6 +1079,7 @@ impl ProfileShare {
         profile.favorite_albums = self.favorite_albums;
         profile.local_files = self.local_files;
         profile.history = self.history;
+        profile.genre_overrides = self.genre_overrides;
         profile
     }
 }
@@ -1253,5 +1306,17 @@ mod tests {
         assert_eq!(parsed.local_files.len(), 1);
         assert!(!parsed.toggle_favorite_album(&album));
         assert!(!parsed.is_favorite_album(&album.id));
+    }
+
+    #[test]
+    fn manual_genre_override_wins_over_embedded_tag() {
+        let mut profile = Profile::new("genre-test", Settings::default());
+        let track = Track::new(Platform::Local, "/tmp/a.mp3", "A", "B").with_genre("Ambient");
+        profile.remember(&track);
+        assert_eq!(profile.effective_genre(&track), Some("Ambient"));
+        profile.set_genre_override(&track.id, Some("J-pop".to_owned()));
+        assert_eq!(profile.effective_genre(&track), Some("J-pop"));
+        profile.set_genre_override(&track.id, None);
+        assert_eq!(profile.effective_genre(&track), Some("Ambient"));
     }
 }

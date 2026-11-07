@@ -70,6 +70,11 @@ pub enum Dialog {
         format: DownloadFormat,
     },
     ExportProfile,
+    EditGenre {
+        track_id: String,
+        title: String,
+        genre: String,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -118,6 +123,8 @@ pub struct UiState {
     theme_image: Option<(String, egui::TextureHandle)>,
     /// Pending crop selection for a newly chosen theme image.
     pub crop_theme_image: Option<ThemeImageCrop>,
+    /// Selected genre filter for the shuffle card.
+    pub random_genre: Option<String>,
 }
 
 impl UiState {
@@ -143,6 +150,13 @@ impl UiState {
             {
                 return None;
             }
+            // The sidebar is only a few hundred px wide; uploading a full
+            // 24 MP camera frame wastes GPU memory and slows resize redraws.
+            let image = if image.width() > 2048 || image.height() > 2048 {
+                image.thumbnail(2048, 2048)
+            } else {
+                image
+            };
             let rgba = image.to_rgba8();
             let color_image = egui::ColorImage::from_rgba_unmultiplied(
                 [rgba.width() as usize, rgba.height() as usize],
@@ -180,6 +194,7 @@ impl UiState {
             lyrics_scroll_pos: 0.0,
             theme_image: None,
             crop_theme_image: None,
+            random_genre: None,
         }
     }
 }
@@ -1858,6 +1873,12 @@ fn dialogs(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, pending: &
                     app.state.tr(Key::ExportProfile),
                     false,
                 ),
+                Dialog::EditGenre { .. } => (
+                    app.state.tr(Key::EditGenre),
+                    app.state.tr(Key::GenreHint),
+                    app.state.tr(Key::Save),
+                    false,
+                ),
             };
             ui.label(RichText::new(title).size(18.0).strong().color(theme.text));
             ui.add_space(6.0);
@@ -1956,6 +1977,26 @@ fn dialogs(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, pending: &
                                 .map(|name| name.to_string_lossy().into_owned())
                                 .unwrap_or_default(),
                         );
+                    }
+                }
+                Dialog::EditGenre { title, genre, .. } => {
+                    ui.label(
+                        RichText::new(title.as_str())
+                            .size(11.0)
+                            .color(theme.text_weak),
+                    );
+                    ui.add_space(4.0);
+                    let response = dialog_text_input(
+                        ui,
+                        theme,
+                        "dialog-genre",
+                        genre,
+                        app.state.tr(Key::GenreHint),
+                    );
+                    if response.lost_focus()
+                        && ui.input(|input| input.key_pressed(egui::Key::Enter))
+                    {
+                        submitted = true;
                     }
                 }
                 Dialog::Download { format, .. } => {
@@ -2082,6 +2123,16 @@ fn dialogs(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, pending: &
                         }
                         Dialog::DeleteProfile { name } => {
                             pending.push(Command::DeleteProfile(name.clone()));
+                            keep = false;
+                        }
+                        Dialog::EditGenre {
+                            track_id, genre, ..
+                        } => {
+                            pending.push(Command::SetTrackGenre {
+                                track_id: track_id.clone(),
+                                genre: Some(genre.trim().to_owned())
+                                    .filter(|value| !value.is_empty()),
+                            });
                             keep = false;
                         }
                     }

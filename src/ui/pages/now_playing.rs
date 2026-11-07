@@ -11,7 +11,7 @@ use crate::model::{format_duration, LinkKind, PlaybackState, SongBackground, Tra
 use crate::state::{Command, NowPlayingTab, Page};
 use crate::theme::{self, Theme};
 use crate::ui::style::{self, Icon, Variant};
-use crate::ui::widgets;
+use crate::ui::{widgets, Dialog};
 
 // ---------------------------------------------------------------------------
 // Page
@@ -498,6 +498,19 @@ fn cover_column(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, track: &Track
         }
         ui.add_space(10.0);
     });
+    // Small genre line directly below the release date / palette dots.
+    ui.horizontal(|ui| {
+        ui.add_space(2.0);
+        ui.label(
+            RichText::new(format!(
+                "{} · {}",
+                app.state.tr(Key::Genre),
+                app.state.genre_label(track)
+            ))
+            .size(10.0)
+            .color(style::weak_text(theme)),
+        );
+    });
 }
 
 fn track_details(
@@ -865,6 +878,8 @@ fn background_content(
         });
     });
     ui.add_space(8.0);
+    genre_card(ui, app, theme, pending, track);
+    ui.add_space(10.0);
     if app.state.background.loading {
         let time = ui.ctx().input(|input| input.time);
         style::loading_pulse(ui, theme, app.state.tr(Key::BackgroundLoading), time);
@@ -964,6 +979,51 @@ fn background_content(
             }
         });
     }
+}
+
+fn genre_card(
+    ui: &mut Ui,
+    app: &mut EchoPortApp,
+    theme: &Theme,
+    pending: &mut Vec<Command>,
+    track: &Track,
+) {
+    let genre = app.state.genre_label(track);
+    background_card(ui, theme, app.state.tr(Key::Genre), |ui| {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(&genre).size(15.0).color(theme.text));
+            if genre == app.state.tr(Key::UnknownGenre) {
+                ui.label(
+                    RichText::new(app.state.tr(Key::GenreHint))
+                        .size(9.5)
+                        .color(theme.text_weak),
+                );
+            }
+        });
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            if style::button(ui, theme, app.state.tr(Key::RandomPlay), Variant::Primary).clicked() {
+                let filter = if genre == app.state.tr(Key::UnknownGenre) {
+                    None
+                } else {
+                    Some(genre.clone())
+                };
+                app.ui.random_genre = filter.clone();
+                pending.push(Command::RandomPlay { genre: filter });
+            }
+            if style::button(ui, theme, app.state.tr(Key::EditGenre), Variant::Ghost).clicked() {
+                app.ui.dialog = Some(Dialog::EditGenre {
+                    track_id: track.id.clone(),
+                    title: format!("{} — {}", track.title, track.display_artist()),
+                    genre: if genre == app.state.tr(Key::UnknownGenre) {
+                        String::new()
+                    } else {
+                        genre.clone()
+                    },
+                });
+            }
+        });
+    });
 }
 
 fn background_card(ui: &mut Ui, theme: &Theme, title: &str, add_contents: impl FnOnce(&mut Ui)) {

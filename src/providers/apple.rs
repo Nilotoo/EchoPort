@@ -65,6 +65,8 @@ struct ITunesItem {
     track_time_millis: Option<f64>,
     #[serde(default, rename = "trackCount")]
     track_count: Option<u32>,
+    #[serde(default, rename = "primaryGenreName")]
+    primary_genre_name: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -612,6 +614,9 @@ fn build_track(item: &ITunesItem) -> Option<Track> {
     // Full release date when the API provides it (it does for songs).
     if let Some(date) = item.release_date.as_deref().and_then(util::date_from_iso) {
         track = track.with_release_date(date);
+    }
+    if let Some(genre) = item.primary_genre_name.as_deref().and_then(util::clean) {
+        track = track.with_genre(genre);
     }
     Some(track)
 }
