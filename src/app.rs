@@ -302,6 +302,15 @@ impl EchoPortApp {
             app.state.refresh_theme_target();
             app.state.theme = app.state.theme_target;
         }
+        // QA hook: open the new-playlist dialog with a Chinese description for
+        // layout/IME checks.
+        if std::env::var("ECHOPORT_NEW_PLAYLIST_DIALOG").is_ok() {
+            app.ui.dialog = Some(ui::Dialog::NewPlaylist {
+                seed: Vec::new(),
+                name: "中文测试".to_owned(),
+                description: "这是一段中文简介测试。".to_owned(),
+            });
+        }
         // QA hook: open the theme-image crop dialog without clicking through
         // the native file picker.
         if let Ok(path) = std::env::var("ECHOPORT_CROP_IMAGE") {
@@ -951,6 +960,12 @@ impl EchoPortApp {
 
     pub fn update_frame(&mut self, ctx: &Context) {
         self.frames += 1;
+        // Ask winit for IME as soon as any field owns focus, before the next
+        // layout pass. This is what lets fcitx/Sogou preedit reach multiline
+        // description fields, not just the single-line name fields.
+        if ctx.memory(|memory| memory.focused().is_some()) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::IMEAllowed(true));
+        }
         let dropped = ctx.input(|input| input.raw.dropped_files.clone());
         if !dropped.is_empty() {
             self.handle_dropped_files(dropped);

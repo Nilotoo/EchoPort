@@ -525,22 +525,24 @@ impl Theme {
         // palette), so clamp every large surface toward a neutral light/dark
         // backing before applying translucency.
         let neutral = if self.dark {
-            Color32::from_rgb(0x08, 0x0B, 0x11)
+            // Match the readable Ink preset rather than near-black; pure black
+            // panels over a photo looked muddy and crushed detail.
+            Color32::from_rgb(0x1D, 0x24, 0x2E)
         } else {
             Color32::from_rgb(0xF7, 0xF8, 0xFB)
         };
         let panel = if self.dark {
-            mix(self.panel, neutral, 0.62)
+            mix(self.panel, neutral, 0.58)
         } else {
             mix(self.panel, neutral, 0.78)
         };
         let surface = if self.dark {
-            mix(self.surface, neutral, 0.52)
+            mix(self.surface, neutral, 0.48)
         } else {
             mix(self.surface, neutral, 0.68)
         };
         let bg = if self.dark {
-            mix(self.bg, neutral, 0.50)
+            mix(self.bg, neutral, 0.42)
         } else {
             mix(self.bg, neutral, 0.62)
         };
@@ -552,7 +554,7 @@ impl Theme {
             border: with_alpha(self.border, 225),
             // Secondary copy sits on a photo-backed surface; bias it toward
             // the primary text colour so captions do not disappear.
-            text_weak: mix(self.text_weak, self.text, 0.28),
+            text_weak: mix(self.text_weak, self.text, 0.65),
             ..self
         }
     }
@@ -563,13 +565,17 @@ impl Theme {
     pub fn from_image_palette(palette: &Palette) -> Self {
         let dark = palette.mean_luminance < 0.47;
         if dark {
-            let bg = mix(Color32::from_rgb(0x0A, 0x0F, 0x18), palette.deep, 0.40);
-            let panel = mix(bg, Color32::WHITE, 0.055);
-            let surface = mix(panel, palette.vivid, 0.17);
-            let surface_hover = mix(surface, Color32::WHITE, 0.10);
-            let border = mix(surface, Color32::WHITE, 0.22);
-            let text = readable_on(Color32::from_rgb(0xF4, 0xF7, 0xFF), bg, 7.0);
-            let text_weak = readable_on(mix(text, bg, 0.42), bg, 4.5);
+            // Use Ink's neutrals as the starting point. Image tints and accents
+            // still personalise the theme, but the surface luminance stays
+            // comfortable instead of collapsing to near-black.
+            let ink = Self::ink();
+            let bg = mix(ink.bg, palette.deep, 0.12);
+            let panel = mix(ink.panel, palette.deep, 0.12);
+            let surface = mix(ink.surface, palette.vivid, 0.10);
+            let surface_hover = mix(ink.surface_hover, palette.vivid, 0.08);
+            let border = ink.border;
+            let text = ink.text;
+            let text_weak = readable_on(mix(ink.text_weak, ink.text, 0.20), bg, 5.0);
             let accent = readable_on(brighten_for_dark(palette.vivid), bg, 3.2);
             let highlight = brighten_for_dark(palette.secondary);
             let mut macarons = MACARONS;
@@ -605,7 +611,7 @@ impl Theme {
             let surface_hover = mix(surface, palette.vivid, 0.12);
             let border = mix(surface, palette.vivid, 0.30);
             let text = readable_on(palette.deep, bg, 7.0);
-            let text_weak = readable_on(mix(text, bg, 0.34), bg, 4.5);
+            let text_weak = readable_on(mix(text, bg, 0.24), bg, 5.2);
             let accent = readable_on(palette.vivid, bg, 4.5);
             let highlight = readable_on(palette.secondary, bg, 3.2);
             Self {

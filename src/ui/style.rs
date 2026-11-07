@@ -1693,7 +1693,14 @@ pub fn tracks_count(state: &AppState, count: usize) -> String {
 /// Guarantees a minimum contrast against the page background so theme-derived
 /// palettes never wash the small labels out.
 pub fn weak_text(theme: &Theme) -> Color32 {
-    theme::readable_on(mix(theme.text_weak, theme.text, 0.45), theme.bg, 4.0)
+    // Captions live on cards, which can be brighter/more washed than the page
+    // background. Bias toward primary text and check against the average card
+    // background so photo themes remain legible.
+    theme::readable_on(
+        mix(theme.text_weak, theme.text, 0.70),
+        mix(theme.bg, theme.surface, 0.5),
+        5.2,
+    )
 }
 
 /// A simple key/value row used on the profile and settings pages.
