@@ -141,28 +141,17 @@ fn setting_row(
     theme: &Theme,
     title: &str,
     hint: &str,
-    control_width: f32,
+    _control_width: f32,
     add_control: impl FnOnce(&mut Ui),
 ) {
-    let row_width = ui.available_width();
-    let text_width = (row_width - control_width - 12.0).max(120.0);
-    ui.horizontal_top(|ui| {
-        ui.allocate_ui_with_layout(
-            Vec2::new(text_width, 0.0),
-            Layout::top_down(Align::Min),
-            |ui| {
-                ui.set_max_width(text_width);
-                ui.label(RichText::new(title).size(12.0).color(theme.text));
-                ui.add_space(2.0);
-                ui.add(
-                    egui::Label::new(RichText::new(hint).size(10.0).color(theme.text_weak)).wrap(),
-                );
-            },
-        );
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(title).size(12.0).color(theme.text));
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             add_control(ui);
         });
     });
+    ui.add_space(2.0);
+    ui.add(egui::Label::new(RichText::new(hint).size(10.0).color(theme.text_weak)).wrap());
 }
 
 // ---------------------------------------------------------------------------
