@@ -508,6 +508,7 @@ impl AppState {
     pub fn set_language(&mut self, lang: Language) {
         self.lang = lang;
         self.profile.settings.language = lang;
+        self.profile.ensure_favorites_playlist();
     }
 
     pub fn set_theme_mode(&mut self, mode: ThemeMode) {
@@ -681,6 +682,7 @@ pub enum Command {
     CopyText(String),
     CreatePlaylist {
         name: String,
+        description: String,
         tracks: Vec<Track>,
     },
     RenamePlaylist {
@@ -705,7 +707,10 @@ pub enum Command {
         track_id: String,
     },
     SwitchProfile(String),
-    NewProfile(String),
+    NewProfile {
+        name: String,
+        bio: String,
+    },
     DeleteProfile(String),
     ScanLibrary,
     AddMusicDir(PathBuf),

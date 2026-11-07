@@ -619,14 +619,20 @@ impl Profile {
     /// list, so a long favourites collection never disappears from the playlist
     /// view because of list truncation in the UI.
     pub fn ensure_favorites_playlist(&mut self) {
-        let description = match self.settings.language {
-            Language::En => "All favourited tracks, updated automatically.".to_owned(),
-            Language::Zh => "自动收录所有收藏歌曲，不可删除。".to_owned(),
+        let (name, description) = match self.settings.language {
+            Language::En => (
+                FAVORITES_PLAYLIST_NAME.to_owned(),
+                format!("All songs favourited by “{}”.", self.name),
+            ),
+            Language::Zh => (
+                "收藏的歌曲".to_owned(),
+                format!("收录“{}”所有收藏的歌曲", self.name),
+            ),
         };
         let now = unix_now();
         let favorites = self.favorites.clone();
         if let Some(playlist) = self.playlist_mut(FAVORITES_PLAYLIST_ID) {
-            playlist.name = FAVORITES_PLAYLIST_NAME.to_owned();
+            playlist.name = name;
             playlist.description = description;
             if playlist.track_ids != favorites {
                 playlist.track_ids = favorites;
@@ -638,9 +644,9 @@ impl Profile {
             0,
             Playlist {
                 id: FAVORITES_PLAYLIST_ID.to_owned(),
-                name: FAVORITES_PLAYLIST_NAME.to_owned(),
+                name,
                 description,
-                track_ids: self.favorites.clone(),
+                track_ids: favorites,
                 cover_path: None,
                 created_at: now,
                 updated_at: now,
@@ -1333,5 +1339,19 @@ mod tests {
             .playlist(FAVORITES_PLAYLIST_ID)
             .expect("auto playlist")
             .is_empty());
+    }
+
+    #[test]
+    fn favourites_playlist_localizes_name_and_description() {
+        let mut profile = Profile::new("Nilo", Settings::default());
+        profile.ensure_favorites_playlist();
+        let playlist = profile.playlist(FAVORITES_PLAYLIST_ID).expect("auto");
+        assert_eq!(playlist.name, "Favourite Tracks");
+        assert!(playlist.description.contains("Nilo"));
+        profile.settings.language = Language::Zh;
+        profile.ensure_favorites_playlist();
+        let playlist = profile.playlist(FAVORITES_PLAYLIST_ID).expect("auto");
+        assert_eq!(playlist.name, "收藏的歌曲");
+        assert_eq!(playlist.description, "收录“Nilo”所有收藏的歌曲");
     }
 }

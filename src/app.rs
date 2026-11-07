@@ -561,8 +561,15 @@ impl EchoPortApp {
                 self.ctx.copy_text(text);
                 self.toast(ToastKind::Success, Key::ToastCopied);
             }
-            Command::CreatePlaylist { name, tracks } => {
+            Command::CreatePlaylist {
+                name,
+                description,
+                tracks,
+            } => {
                 let id = self.state.profile.create_playlist(name);
+                if let Some(playlist) = self.state.profile.playlist_mut(&id) {
+                    playlist.description = description;
+                }
                 self.state.profile.add_tracks_to_playlist(&id, &tracks);
                 self.state.selected_playlist = Some(id);
                 self.state.page = Page::Playlists;
@@ -635,7 +642,7 @@ impl EchoPortApp {
                 }
             }
             Command::SwitchProfile(name) => self.switch_profile(&name),
-            Command::NewProfile(name) => {
+            Command::NewProfile { name, bio } => {
                 let name = name.trim();
                 if name.is_empty() {
                     return;
@@ -644,7 +651,8 @@ impl EchoPortApp {
                     language: self.state.lang,
                     ..Settings::default()
                 };
-                let profile = Profile::new(name, settings);
+                let mut profile = Profile::new(name, settings);
+                profile.bio = bio;
                 if let Err(err) = self.store.save(&profile) {
                     log::warn!("could not save new profile: {err}");
                     return;
@@ -3261,9 +3269,23 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
             self.toast(ToastKind::Info, Key::EmptyPlaylist);
             return;
         }
-        let share = PlaylistShare::new(playlist.name.clone(), playlist.description.clone(), tracks);
-        let safe_name: String = playlist
-            .name
+        let (share_name, share_description) = if playlist_id == crate::model::FAVORITES_PLAYLIST_ID
+        {
+            match self.state.lang {
+                crate::i18n::Language::Zh => (
+                    format!("{}的收藏的歌曲", self.state.profile.name),
+                    format!("{}收录的所有收藏歌曲", self.state.profile.name),
+                ),
+                crate::i18n::Language::En => (
+                    format!("{}'s favourite songs", self.state.profile.name),
+                    format!("All songs favourited by {}", self.state.profile.name),
+                ),
+            }
+        } else {
+            (playlist.name.clone(), playlist.description.clone())
+        };
+        let share = PlaylistShare::new(share_name.clone(), share_description, tracks);
+        let safe_name: String = share_name
             .chars()
             .map(|c| {
                 if c.is_alphanumeric() || matches!(c, '-' | '_' | ' ') {
@@ -3611,9 +3633,16 @@ fn seed_demo(state: &mut AppState, paths: &AppPaths) {
     for track in tracks.iter().take(5).rev() {
         profile.add_history(&track.id);
     }
-    profile.playlists[0].description = "清晨与海风 / morning breeze".to_owned();
-    profile.playlists[1].description = "低照度耳机时间 / low light, headphones".to_owned();
-    profile.playlists[2].description = "马卡龙配色歌单 / pastel study mix".to_owned();
+    if let Some(playlist) = profile.playlist_mut(&blue_hour) {
+        playlist.description = "清晨与海风 / morning breeze".to_owned();
+    }
+    if let Some(playlist) = profile.playlist_mut(&night) {
+        playlist.description = "低照度耳机时间 / low light, headphones".to_owned();
+    }
+    if let Some(playlist) = profile.playlist_mut(&macaron) {
+        playlist.description = "马卡龙配色歌单 / pastel study mix".to_owned();
+    }
+    profile.ensure_favorites_playlist();
     state.profile = profile;
 
     state.library = LibraryView {

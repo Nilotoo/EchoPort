@@ -281,6 +281,8 @@ pub enum Key {
     Changelog,
     ChangelogHint,
     ChangelogCurrent,
+    ShowOlderReleases,
+    HideOlderReleases,
     ThemeImage,
     ThemeImageHint,
     ThemeImageAutoHint,
@@ -727,6 +729,8 @@ impl Key {
                 "查看 EchoPort 近期版本更新了什么。",
             ),
             ChangelogCurrent => ("current", "当前"),
+            ShowOlderReleases => ("Show older versions", "展开更早版本"),
+            HideOlderReleases => ("Collapse older versions", "收起更早版本"),
             ThemeImage => ("Theme image", "主题图片"),
             ThemeImageHint => (
                 "Pick a vertical crop. The sidebar shows it directly and its palette becomes the full UI theme, with automatic light/dark contrast.",
@@ -979,8 +983,8 @@ impl Key {
             ),
             UiScale => ("Interface scale", "界面缩放"),
             IconCredits => (
-                "Icons © Singular Programmer · MIT-0",
-                "图标 © Singular Programmer · MIT-0",
+                "License: GPL-3.0-only",
+                "许可证：GPL-3.0-only",
             ),
             UiScaleHint => (
                 "Zoom the whole interface for HiDPI screens or larger text. Applies immediately and is remembered.",

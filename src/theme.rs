@@ -493,11 +493,11 @@ impl Theme {
     /// through while cards and panels remain readable over the image veil.
     pub fn translucent(self) -> Self {
         Self {
-            bg: with_alpha(self.bg, 108),
-            panel: with_alpha(self.panel, 174),
-            surface: with_alpha(self.surface, 208),
-            surface_hover: with_alpha(self.surface_hover, 226),
-            border: with_alpha(self.border, 214),
+            bg: with_alpha(self.bg, 88),
+            panel: with_alpha(self.panel, 148),
+            surface: with_alpha(self.surface, 176),
+            surface_hover: with_alpha(self.surface_hover, 200),
+            border: with_alpha(self.border, 200),
             ..self
         }
     }

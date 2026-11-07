@@ -68,6 +68,7 @@ fn header(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme) {
             {
                 app.ui.dialog = Some(Dialog::NewProfile {
                     name: String::new(),
+                    bio: String::new(),
                 });
             }
             if !app.ui.profile_editing
@@ -154,6 +155,7 @@ fn profiles_section(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: 
         {
             app.ui.dialog = Some(Dialog::NewProfile {
                 name: String::new(),
+                bio: String::new(),
             });
         }
     });

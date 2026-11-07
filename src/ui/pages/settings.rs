@@ -467,7 +467,13 @@ fn changelog(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, width: f32) {
     section_card(ui, theme, Icon::Clock, app.state.tr(Key::Changelog), |ui| {
         style::hint_line(ui, theme, app.state.tr(Key::ChangelogHint));
         ui.add_space(8.0);
-        for (index, release) in crate::changelog::RELEASES.iter().enumerate() {
+        let releases = crate::changelog::RELEASES;
+        let visible = if app.ui.changelog_expanded {
+            releases.len()
+        } else {
+            releases.len().min(3)
+        };
+        for (index, release) in releases.iter().take(visible).enumerate() {
             if index > 0 {
                 ui.add_space(10.0);
             }
@@ -506,6 +512,17 @@ fn changelog(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, width: f32) {
                         .size(10.5)
                         .color(theme.text_weak),
                 );
+            }
+        }
+        if releases.len() > 3 {
+            ui.add_space(10.0);
+            let label = if app.ui.changelog_expanded {
+                app.state.tr(Key::HideOlderReleases)
+            } else {
+                app.state.tr(Key::ShowOlderReleases)
+            };
+            if style::button(ui, theme, label, Variant::Ghost).clicked() {
+                app.ui.changelog_expanded = !app.ui.changelog_expanded;
             }
         }
     });
@@ -860,67 +877,51 @@ fn downloads(
                 }
             });
             ui.add_space(12.0);
-            // One centered row: label, path and buttons all share the same
-            // vertical centre (the path used to look a few pixels too high).
+            // Title + buttons on one row; the long path gets its own line so it
+            // cannot run underneath the folder buttons.
             ui.horizontal(|ui| {
-                ui.allocate_ui_with_layout(
-                    Vec2::new(86.0, 30.0),
-                    Layout::left_to_right(Align::Center),
-                    |ui| {
-                        ui.label(
-                            RichText::new(app.state.tr(Key::DownloadFolder))
-                                .size(11.0)
-                                .color(theme.text_weak),
-                        );
-                    },
+                ui.label(
+                    RichText::new(app.state.tr(Key::DownloadFolder))
+                        .size(11.0)
+                        .color(theme.text_weak),
                 );
-                ui.add_space(6.0);
-                let dir = app
-                    .state
-                    .profile
-                    .settings
-                    .download_dir
-                    .to_string_lossy()
-                    .into_owned();
-                let path_width = (ui.available_width() - 190.0).max(100.0);
-                let hover_path = dir.clone();
-                ui.allocate_ui_with_layout(
-                    Vec2::new(path_width, 30.0),
-                    Layout::top_down(Align::Min),
-                    |ui| {
-                        // The path baseline sat a couple of pixels above the
-                        // Choose/Open buttons; nudge it down onto the centre.
-                        ui.add_space(4.0);
-                        ui.add(
-                            egui::Label::new(RichText::new(dir).size(11.0).color(theme.text))
-                                .truncate(),
-                        )
-                        .on_hover_text(hover_path);
-                    },
-                );
-                if style::button_sized(
-                    ui,
-                    theme,
-                    app.state.tr(Key::ChooseFolder),
-                    Variant::Secondary,
-                    30.0,
-                )
-                .clicked()
-                {
-                    pending.push(Command::PickDownloadFolder);
-                }
-                if style::button_sized(
-                    ui,
-                    theme,
-                    app.state.tr(Key::OpenFolder),
-                    Variant::Ghost,
-                    30.0,
-                )
-                .clicked()
-                {
-                    pending.push(Command::OpenDownloadFolder);
-                }
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if style::button_sized(
+                        ui,
+                        theme,
+                        app.state.tr(Key::OpenFolder),
+                        Variant::Ghost,
+                        30.0,
+                    )
+                    .clicked()
+                    {
+                        pending.push(Command::OpenDownloadFolder);
+                    }
+                    ui.add_space(4.0);
+                    if style::button_sized(
+                        ui,
+                        theme,
+                        app.state.tr(Key::ChooseFolder),
+                        Variant::Secondary,
+                        30.0,
+                    )
+                    .clicked()
+                    {
+                        pending.push(Command::PickDownloadFolder);
+                    }
+                });
             });
+            ui.add_space(3.0);
+            let dir = app
+                .state
+                .profile
+                .settings
+                .download_dir
+                .to_string_lossy()
+                .into_owned();
+            let hover_path = dir.clone();
+            ui.add(egui::Label::new(RichText::new(dir).size(11.0).color(theme.text)).truncate())
+                .on_hover_text(hover_path);
             let _ = width;
         },
     );

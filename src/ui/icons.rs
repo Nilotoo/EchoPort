@@ -1,6 +1,6 @@
 //! Embedded black/white icon set (white PNG variants, tinted at paint time).
 //!
-//! Assets live in `assets/icons/` (MIT-0, © Singular Programmer). The white
+//! Assets live in `assets/icons/` (MIT-0). The white
 //! glyphs are embedded in the binary and uploaded lazily as egui textures;
 //! the cache lives in `UiState::icon_assets` and is shared with the painting
 //! helpers through the egui context, so textures are uploaded at most once per
