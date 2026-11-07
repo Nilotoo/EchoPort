@@ -109,9 +109,6 @@ jobs:
     needs: [quality, linux, windows-setup]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -138,7 +135,7 @@ jobs:
           files: artifacts/**/*
           generate_release_notes: true
 
-      - name: Mirror repository and publish Gitee Release
+      - name: Publish Gitee Release (assets only)
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           GITEE_OWNER: ${{ vars.GITEE_OWNER }}
@@ -152,11 +149,6 @@ jobs:
             echo "::notice::GITEE_TOKEN is not configured; skipping Gitee mirror."
             exit 0
           fi
-
-          git config user.name "EchoPort CI"
-          git config user.email "ci@echoport.local"
-          git remote add gitee "https://${owner}:${GITEE_TOKEN}@gitee.com/${owner}/${repo}.git"
-          git push gitee HEAD:refs/heads/main --tags --force
 
           api="https://gitee.com/api/v5/repos/${owner}/${repo}"
           release_json=$(curl -fsS -X POST "${api}/releases"             --data-urlencode "access_token=${GITEE_TOKEN}"             --data-urlencode "tag_name=${TAG}"             --data-urlencode "name=EchoPort ${TAG}"             --data-urlencode "target_commitish=main"             --data-urlencode "body=EchoPort release ${TAG}") || true
