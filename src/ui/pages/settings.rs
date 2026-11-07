@@ -340,6 +340,47 @@ fn appearance(
                         }
                     });
                 });
+                ui.add_space(10.0);
+                ui.label(
+                    RichText::new(app.state.tr(Key::ThemeImageMode))
+                        .size(11.0)
+                        .color(theme.text_weak),
+                );
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    let full = app.state.profile.settings.theme_image_full;
+                    if style::chip(
+                        ui,
+                        theme,
+                        app.state.tr(Key::ThemeImageModeSidebar),
+                        None,
+                        !full,
+                    )
+                    .clicked()
+                        && full
+                    {
+                        pending.push(Command::SetThemeImageFull(false));
+                    }
+                    let full_response =
+                        style::chip(ui, theme, app.state.tr(Key::ThemeImageModeFull), None, full);
+                    if app.state.theme_image_full_ok {
+                        if full_response.clicked() && !full {
+                            pending.push(Command::SetThemeImageFull(true));
+                        }
+                    } else {
+                        full_response.on_hover_text(app.state.tr(Key::ThemeImageTooSmall));
+                    }
+                });
+                ui.add_space(3.0);
+                ui.label(
+                    RichText::new(if app.state.theme_image_full_ok {
+                        app.state.tr(Key::ThemeImageFullHint)
+                    } else {
+                        app.state.tr(Key::ThemeImageTooSmall)
+                    })
+                    .size(9.5)
+                    .color(theme.text_weak),
+                );
             }
         }
         ui.add_space(14.0);

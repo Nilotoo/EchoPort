@@ -320,8 +320,12 @@ mod tests {
         store.save(&profile).expect("save");
 
         let loaded = store.load("Tester").expect("load");
-        assert_eq!(loaded.playlists.len(), 1);
-        assert_eq!(loaded.playlists[0].name, "Road trip");
+        // Favourite Tracks is auto-created in addition to the user playlist.
+        assert_eq!(loaded.playlists.len(), 2);
+        assert!(loaded
+            .playlists
+            .iter()
+            .any(|playlist| playlist.name == "Road trip"));
         assert!(loaded.is_favorite(&track.id));
 
         assert_eq!(store.list(), vec!["Tester".to_owned()]);

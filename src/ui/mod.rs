@@ -123,8 +123,6 @@ pub struct UiState {
     theme_image: Option<(String, egui::TextureHandle)>,
     /// Pending crop selection for a newly chosen theme image.
     pub crop_theme_image: Option<ThemeImageCrop>,
-    /// Selected genre filter for the shuffle card.
-    pub random_genre: Option<String>,
 }
 
 impl UiState {
@@ -194,7 +192,6 @@ impl UiState {
             lyrics_scroll_pos: 0.0,
             theme_image: None,
             crop_theme_image: None,
-            random_genre: None,
         }
     }
 }
@@ -284,7 +281,11 @@ pub fn layout(ctx: &egui::Context, app: &mut EchoPortApp) {
             player_bar(ui, app, &theme, player_height, sidebar_width, &mut pending);
         });
 
-    let sidebar_has_image = app.state.theme_image_path().is_some();
+    let full_theme_image = app.state.full_theme_image_active();
+    if full_theme_image {
+        paint_full_theme_image(ctx, app, &theme);
+    }
+    let sidebar_has_image = !full_theme_image && app.state.theme_image_path().is_some();
     egui::SidePanel::left("echoport-nav")
         .exact_width(sidebar_width)
         .resizable(false)
@@ -638,6 +639,37 @@ fn mobile_player(
 
 /// Paint the user's theme image behind the sidebar. The central panel is left
 /// untouched; the image is softly veiled so navigation keeps its contrast.
+fn paint_full_theme_image(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme) {
+    let Some(path) = app.state.full_theme_image_path() else {
+        return;
+    };
+    let Some(texture) = app.ui.theme_image_texture(ctx, &path) else {
+        return;
+    };
+    let screen = ctx.screen_rect();
+    let image_size = texture.size_vec2();
+    if screen.width() <= 1.0 || screen.height() <= 1.0 || image_size.x <= 0.0 || image_size.y <= 0.0
+    {
+        return;
+    }
+    let mut uv = egui::Rect::from_min_max(egui::Pos2::ZERO, egui::Pos2::new(1.0, 1.0));
+    let image_aspect = image_size.x / image_size.y;
+    let screen_aspect = screen.width() / screen.height();
+    if image_aspect > screen_aspect {
+        let visible = screen_aspect / image_aspect;
+        uv.min.x = (1.0 - visible) * 0.5;
+        uv.max.x = 1.0 - uv.min.x;
+    } else if image_aspect < screen_aspect {
+        let visible = image_aspect / screen_aspect;
+        uv.min.y = (1.0 - visible) * 0.5;
+        uv.max.y = 1.0 - uv.min.y;
+    }
+    let painter = ctx.layer_painter(egui::LayerId::background());
+    painter.image(texture.id(), screen, uv, egui::Color32::WHITE);
+    let veil = theme::with_alpha(theme.panel, if theme.dark { 112 } else { 82 });
+    painter.rect_filled(screen, 0.0, veil);
+}
+
 fn paint_sidebar_theme_image(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme) {
     let Some(path) = app.state.theme_image_path() else {
         return;

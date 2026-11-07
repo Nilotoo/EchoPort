@@ -193,6 +193,25 @@ pub fn prepare_theme_image_png(bytes: &[u8], max_edge: u32) -> Result<Vec<u8>, S
     Ok(output.into_inner())
 }
 
+/// Full-window backgrounds need enough pixels to cover a desktop without
+/// turning into a blurry smear. Both dimensions must be at least 480 px and the
+/// long edge at least 960 px; tiny placeholder images are rejected.
+pub const FULL_THEME_MIN_SHORT_EDGE: u32 = 480;
+pub const FULL_THEME_MIN_LONG_EDGE: u32 = 960;
+
+pub fn theme_image_meets_full_min(path: &std::path::Path) -> bool {
+    // Theme originals are stored as extension-less `.img` files, so use the
+    // bytes' magic rather than the path extension to pick a decoder.
+    let Ok(bytes) = std::fs::read(path) else {
+        return false;
+    };
+    let Ok(image) = image::load_from_memory(&bytes) else {
+        return false;
+    };
+    image.width().min(image.height()) >= FULL_THEME_MIN_SHORT_EDGE
+        && image.width().max(image.height()) >= FULL_THEME_MIN_LONG_EDGE
+}
+
 /// Extract a palette from a local image file.
 pub fn extract_palette_file(path: &Path) -> Option<Palette> {
     let bytes = std::fs::read(path).ok()?;
@@ -468,6 +487,19 @@ impl Theme {
         self.on_accent = best_on(self.accent);
         self.on_highlight = best_on(self.highlight);
         self
+    }
+
+    /// Make the large surfaces translucent so a full-window photo can show
+    /// through while cards and panels remain readable over the image veil.
+    pub fn translucent(self) -> Self {
+        Self {
+            bg: with_alpha(self.bg, 108),
+            panel: with_alpha(self.panel, 174),
+            surface: with_alpha(self.surface, 208),
+            surface_hover: with_alpha(self.surface_hover, 226),
+            border: with_alpha(self.border, 214),
+            ..self
+        }
     }
 
     /// Build a complete theme from a user image palette. The image decides the
@@ -995,6 +1027,33 @@ mod tests {
             decoded.width() as f32 / decoded.height() as f32,
             THEME_IMAGE_CROP_ASPECT
         );
+    }
+
+    #[test]
+    fn full_theme_minimum_accepts_valid_photo() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("echoport-full-min-test.img");
+        let image = image::RgbImage::from_fn(960, 480, |x, y| {
+            image::Rgb([(x % 255) as u8, (y % 255) as u8, 80])
+        });
+        image
+            .write_to(
+                &mut std::io::BufWriter::new(std::fs::File::create(&path).expect("file")),
+                image::ImageFormat::Png,
+            )
+            .expect("save test image");
+        assert!(theme_image_meets_full_min(&path));
+        let small = image::RgbImage::new(300, 200);
+        let small_path = dir.join("echoport-small-test.img");
+        small
+            .write_to(
+                &mut std::io::BufWriter::new(std::fs::File::create(&small_path).expect("file")),
+                image::ImageFormat::Png,
+            )
+            .expect("save small");
+        assert!(!theme_image_meets_full_min(&small_path));
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(&small_path);
     }
 
     #[test]

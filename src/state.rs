@@ -296,6 +296,8 @@ pub struct AppState {
     pub random_picks: Vec<Track>,
     /// True while an online multi-source shuffle search is in flight.
     pub random_loading: bool,
+    /// Whether the uncropped full-window image passes the minimum size.
+    pub theme_image_full_ok: bool,
 
     pub selected_playlist: Option<String>,
     pub now_playing_tab: NowPlayingTab,
@@ -307,31 +309,6 @@ pub struct AppState {
     /// True when running with the offline demo data (used for screenshots).
     pub demo: bool,
 }
-
-/// Built-in style seeds used by the online multi-source shuffle. They are not a
-/// recommendation model; one seed is chosen randomly and searched verbatim.
-pub const RANDOM_GENRE_SEEDS: &[&str] = &[
-    "electronic",
-    "ambient",
-    "J-pop",
-    "electro pop",
-    "progressive house",
-    "midwest emo",
-    "lo-fi",
-    "indie rock",
-    "hip hop",
-    "jazz",
-    "classical",
-    "techno",
-    "synthwave",
-    "drum and bass",
-    "R&B",
-    "folk",
-    "metal",
-    "city pop",
-    "shoegaze",
-    "post-rock",
-];
 
 /// Imported browsing artifacts such as “Bilibili video 123…” are not songs and
 /// should not show up in a random listening queue.
@@ -355,7 +332,27 @@ pub(crate) fn shuffleable_track(track: &Track) -> bool {
 }
 
 impl AppState {
-    pub fn new(profile: Profile, profiles: Vec<String>) -> Self {
+    pub fn new(mut profile: Profile, profiles: Vec<String>) -> Self {
+        profile.ensure_favorites_playlist();
+        let env_theme_image = std::env::var_os("ECHOPORT_THEME_IMAGE")
+            .map(std::path::PathBuf::from)
+            .filter(|path| path.is_file());
+        let full_theme_image_ok = profile
+            .settings
+            .theme_image_original
+            .as_deref()
+            .filter(|path| path.is_file())
+            .or(env_theme_image.as_deref())
+            .or(profile
+                .settings
+                .theme_image
+                .as_deref()
+                .filter(|path| path.is_file()))
+            .map(crate::theme::theme_image_meets_full_min)
+            .unwrap_or(false);
+        if !full_theme_image_ok {
+            profile.settings.theme_image_full = false;
+        }
         let theme_mode = profile.settings.theme_mode;
         let volume = profile.settings.volume;
         let follow_cover_accent = profile.settings.follow_cover_accent;
@@ -380,12 +377,25 @@ impl AppState {
                     .theme_image
                     .as_ref()
                     .is_some_and(|path| path.is_file()));
+        let full_theme = photo_theme
+            && profile.settings.theme_image_full
+            && full_theme_image_ok
+            && profile
+                .settings
+                .theme_image_original
+                .as_ref()
+                .is_some_and(|path| path.is_file());
         let theme = if photo_theme {
             theme_image_palette
                 .map(|palette| Theme::from_image_palette(&palette))
                 .unwrap_or_else(|| Theme::for_mode(theme_mode, None))
         } else {
             Theme::for_mode(theme_mode, None)
+        };
+        let theme = if full_theme {
+            theme.translucent()
+        } else {
+            theme
         };
         Self {
             lang: profile.settings.language,
@@ -423,6 +433,7 @@ impl AppState {
             shuffle: false,
             random_picks: Vec::new(),
             random_loading: false,
+            theme_image_full_ok: full_theme_image_ok,
             selected_playlist: None,
             now_playing_tab: NowPlayingTab::Track,
             queue_panel_open: false,
@@ -486,6 +497,41 @@ impl AppState {
             .flatten()
     }
 
+    /// Best source for full-window mode: uncropped copy, QA override, then the
+    /// saved crop for profiles created before the original was retained.
+    fn full_theme_image_source(&self) -> Option<std::path::PathBuf> {
+        if let Some(path) = self.profile.settings.theme_image_original.clone() {
+            if path.is_file() {
+                return Some(path);
+            }
+        }
+        self.saved_theme_image_path()
+    }
+
+    /// Uncropped image for full-window mode, when enabled and available.
+    pub fn full_theme_image_path(&self) -> Option<std::path::PathBuf> {
+        if !self.photo_theme_active() || !self.profile.settings.theme_image_full {
+            return None;
+        }
+        self.full_theme_image_source().filter(|path| path.is_file())
+    }
+
+    pub fn full_theme_image_active(&self) -> bool {
+        self.theme_image_full_ok && self.full_theme_image_path().is_some()
+    }
+
+    /// Re-evaluate the full-theme minimum size after a new image/profile.
+    pub fn refresh_full_theme_validation(&mut self) {
+        self.theme_image_full_ok = self
+            .full_theme_image_source()
+            .as_deref()
+            .map(crate::theme::theme_image_meets_full_min)
+            .unwrap_or(false);
+        if !self.theme_image_full_ok {
+            self.profile.settings.theme_image_full = false;
+        }
+    }
+
     pub fn set_language(&mut self, lang: Language) {
         self.lang = lang;
         self.profile.settings.language = lang;
@@ -498,46 +544,6 @@ impl AppState {
     }
 
     /// Recompute the target theme after a new cover palette arrives.
-    /// Genres currently known from embedded tags or manual corrections,
-    /// sorted case-insensitively. Empty when nothing has a genre yet.
-    pub fn known_genres(&self) -> Vec<String> {
-        let mut genres: Vec<String> = Vec::new();
-        for track in self
-            .profile
-            .tracks
-            .values()
-            .chain(self.library.tracks.iter())
-        {
-            if let Some(genre) = self
-                .profile
-                .effective_genre(track)
-                .map(str::trim)
-                .filter(|genre| !genre.is_empty())
-            {
-                if !genres
-                    .iter()
-                    .any(|known: &String| known.eq_ignore_ascii_case(genre))
-                {
-                    genres.push(genre.to_owned());
-                }
-            }
-        }
-        genres.sort_by_key(|genre| genre.to_lowercase());
-        genres
-    }
-
-    /// Genres for the shuffle picker: known local/provider tags first, then the
-    /// built-in style seeds so online-only use still has useful choices.
-    pub fn shuffle_genres(&self) -> Vec<String> {
-        let mut genres = self.known_genres();
-        for seed in RANDOM_GENRE_SEEDS {
-            if !genres.iter().any(|genre| genre.eq_ignore_ascii_case(seed)) {
-                genres.push((*seed).to_owned());
-            }
-        }
-        genres
-    }
-
     pub fn genre_label(&self, track: &Track) -> String {
         self.profile
             .effective_genre(track)
@@ -567,6 +573,9 @@ impl AppState {
         }
         if let Some(macaron) = self.macaron_override {
             target = target.with_macaron(macaron);
+        }
+        if self.full_theme_image_active() {
+            target = target.translucent();
         }
         self.theme_target = target;
     }
@@ -749,9 +758,8 @@ pub enum Command {
     PrepareThemeImage(std::path::PathBuf),
     SetThemeImage(std::path::PathBuf),
     SetPhotoTheme(bool),
-    RandomPlay {
-        genre: Option<String>,
-    },
+    SetThemeImageFull(bool),
+    RandomPlay,
     SetTrackGenre {
         track_id: String,
         genre: Option<String>,
@@ -822,7 +830,6 @@ pub enum AppEvent {
     RandomTracksReady {
         tracks: Vec<Track>,
         error: Option<String>,
-        seed: Option<String>,
     },
     ThemeImagePrepared {
         source: Option<std::path::PathBuf>,

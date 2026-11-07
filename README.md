@@ -23,7 +23,9 @@ Rust + egui 原生应用，Linux / Windows（macOS 构建暂缓），GPL-3.0。
 - **播放**：本地文件直接解码；在线结果经 `yt-dlp` 解析公开音频；队列、随机、循环、倍速。
 - **歌词**：正在播放页滚动歌词（本地 `.lrc` 优先，LRCLIB 公开 API 兜底），设置里可关闭。
 - **主题图片**：设置里选择并裁剪一张竖向图片；左栏直接显示图片，图片配色会生成整套亮/暗主题，图标和文字自动取对比色。
-- **曲风与随机播放**：首页和正在播放 Background 按随机曲风在 YouTube / SoundCloud / 网易云 / Apple Music / Bilibili / Internet Archive 实时搜索 5–10 首；不按热度，曲风来自本地标签、已有平台元数据和手动修正，未知显示“无法确定”。
+- **曲风与随机播放**：首页和正在播放 Background 用中性随机词在 YouTube / SoundCloud / 网易云 / Apple Music / Bilibili / Internet Archive 实时搜索 5–10 首再打乱；不按曲风、不按热度。曲风展示来自本地标签、已有平台元数据和手动修正，未知显示“无法确定”。
+- **Favourite Tracks**：自动创建、不可删除的歌单，按顺序镜像全部收藏歌曲。
+- **图片主题布局**：侧栏图片（当前）或全屏照片；全屏模式要求原图至少 960 × 480，两边至少 480px，面板半透明。
 - **专辑 / 艺人**：封面、发行日期、曲风、曲目、收藏、同艺人其它专辑；背景来自 Wikipedia / MusicBrainz。
 - **歌单**：本地与在线曲目混排，自定义封面/简介，可导出/导入离线分享文件。
 - **下载**：每次下载前可选 MP3 / M4A / Opus / FLAC；专辑可整张下载；Windows 安装包内置 `yt-dlp.exe` + `ffmpeg.exe`。
@@ -87,7 +89,7 @@ Linux 依赖：`libasound2-dev`、`libxkbcommon-dev`、`libxcb-*-dev`、`libx11-
 - 不破解 DRM；Spotify / Apple Music 仅使用公开搜索/元数据，播放匹配公开音频。
 - 更新检查只访问 GitHub 公开 Release，支持关闭；安装包更新会校验发布页 SHA256。
 - Windows 安装器未签名，首次运行会有 SmartScreen 提示。
-- 评论、社交、云同步、热度推荐流不在项目范围内；随机播放只从用户已有曲库中抽取，不做算法画像。
+- 评论、社交、云同步、热度推荐流不在项目范围内；随机播放只做多源搜索后打乱，不做曲风画像或热度排序。
 - 歌词来自本地 `.lrc` 或 LRCLIB；不抓取付费/会员歌词。
 - macOS 构建脚本保留，但当前 Release 暂不提供。
 
