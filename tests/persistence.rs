@@ -79,6 +79,7 @@ fn profile_roundtrip_keeps_every_field() {
         download_format: DownloadFormat::Flac,
         download_dir: PathBuf::from("/tmp/echoport-downloads"),
         music_dirs: vec![PathBuf::from("/music/a"), PathBuf::from("/music/b")],
+        theme_image: Some(PathBuf::from("/tmp/theme.jpg")),
         volume: 0.33,
         results_per_platform: 7,
         ..Settings::default()
@@ -129,6 +130,10 @@ fn profile_roundtrip_keeps_every_field() {
         PathBuf::from("/tmp/echoport-downloads")
     );
     assert_eq!(loaded.settings.music_dirs.len(), 2);
+    assert_eq!(
+        loaded.settings.theme_image.as_deref(),
+        Some(std::path::Path::new("/tmp/theme.jpg"))
+    );
     assert_eq!(loaded.settings.volume, 0.33);
     assert_eq!(loaded.settings.results_per_platform, 7);
 
