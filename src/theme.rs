@@ -546,15 +546,38 @@ impl Theme {
         } else {
             mix(self.bg, neutral, 0.62)
         };
+        // Text over a photo must not inherit a mid-tone colour from the image
+        // palette (brown/pink "dark" colours were still too faint on cards and
+        // captions). Use a neutral, high-contrast pair in full-window mode.
+        let text = if self.dark {
+            Color32::from_rgb(0xE9, 0xF0, 0xFA)
+        } else {
+            Color32::from_rgb(0x12, 0x17, 0x1F)
+        };
+        let text_weak = if self.dark {
+            Color32::from_rgb(0xC2, 0xCE, 0xDF)
+        } else {
+            Color32::from_rgb(0x3E, 0x47, 0x55)
+        };
+        // Accent text/icons are used directly on these surfaces. Re-check
+        // after neutralising the background instead of trusting contrast
+        // against the original image palette.
+        let accent = readable_on(self.accent, surface, 3.5);
+        let highlight = readable_on(self.highlight, surface, 3.0);
+        let on_accent = best_on(accent);
+        let on_highlight = best_on(highlight);
         Self {
             bg: with_alpha(bg, 132),
             panel: with_alpha(panel, 216),
             surface: with_alpha(surface, 234),
             surface_hover: with_alpha(surface, 240),
             border: with_alpha(self.border, 225),
-            // Secondary copy sits on a photo-backed surface; bias it toward
-            // the primary text colour so captions do not disappear.
-            text_weak: mix(self.text_weak, self.text, 0.65),
+            text,
+            text_weak,
+            accent,
+            highlight,
+            on_accent,
+            on_highlight,
             ..self
         }
     }
