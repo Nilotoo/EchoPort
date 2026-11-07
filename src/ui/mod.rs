@@ -269,6 +269,7 @@ pub fn layout(ctx: &egui::Context, app: &mut EchoPortApp) {
             player_bar(ui, app, &theme, player_height, sidebar_width, &mut pending);
         });
 
+    let sidebar_has_image = app.state.theme_image_path().is_some();
     egui::SidePanel::left("echoport-nav")
         .exact_width(sidebar_width)
         .resizable(false)
@@ -276,10 +277,22 @@ pub fn layout(ctx: &egui::Context, app: &mut EchoPortApp) {
         .frame(
             Frame::new()
                 .fill(theme.panel)
-                .inner_margin(Margin::symmetric(14, 0)),
+                .inner_margin(Margin::symmetric(if sidebar_has_image { 0 } else { 14 }, 0)),
         )
         .show(ctx, |ui| {
-            sidebar(ui, app, &theme, &mut pending);
+            if sidebar_has_image {
+                // Paint on the full panel before insetting the navigation content.
+                paint_sidebar_theme_image(ui, app, &theme);
+                let content_rect = ui.max_rect().shrink2(Vec2::new(14.0, 0.0));
+                let mut content = ui.new_child(
+                    egui::UiBuilder::new()
+                        .max_rect(content_rect)
+                        .layout(Layout::top_down(Align::Min)),
+                );
+                sidebar(&mut content, app, &theme, &mut pending);
+            } else {
+                sidebar(ui, app, &theme, &mut pending);
+            }
         });
 
     egui::CentralPanel::default()
@@ -789,12 +802,12 @@ fn theme_image_crop_dialog(
                         .line_segment([corner, corner + Vec2::new(0.0, arm * dy)], bracket);
                 }
                 if response.dragged() {
-                    let delta = response.drag_delta();
-                    crop.center_x = (crop.center_x + delta.x / (image_rect.width() / image_size.x))
-                        .clamp(0.0, 1.0);
-                    crop.center_y = (crop.center_y
-                        + delta.y / (image_rect.height() / image_size.y))
-                        .clamp(0.0, 1.0);
+                    // `drag_delta()` is cumulative since press; using it every frame
+                    // made the crop fly from one edge to the other. Use the
+                    // per-frame pointer delta instead.
+                    let delta = ui.input(|input| input.pointer.delta());
+                    crop.center_x = (crop.center_x + delta.x / image_rect.width()).clamp(0.0, 1.0);
+                    crop.center_y = (crop.center_y + delta.y / image_rect.height()).clamp(0.0, 1.0);
                 }
                 if response.hovered() {
                     ctx.set_cursor_icon(egui::CursorIcon::Grab);
@@ -856,7 +869,6 @@ fn theme_image_crop_dialog(
 // ---------------------------------------------------------------------------
 
 fn sidebar(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec<Command>) {
-    paint_sidebar_theme_image(ui, app, theme);
     let screen_h = ui.ctx().screen_rect().height();
     let short = screen_h < 620.0;
     ui.spacing_mut().item_spacing = Vec2::new(4.0, if short { 1.0 } else { 3.0 });
