@@ -480,12 +480,10 @@ fn mobile_player(
                 CornerRadius::same(style::R_MD),
                 style::wash(theme),
             );
-            style::paint_icon(
-                ui.painter(),
-                Icon::Music,
-                cover_rect.shrink(12.0),
-                theme.text_weak,
-            );
+            let note = cover_rect.shrink(12.0);
+            if !style::paint_note(ui.painter(), note, theme.text_weak) {
+                style::paint_icon(ui.painter(), Icon::Music, note, theme.text_weak);
+            }
         }
     }
     let cover_response = ui.interact(
@@ -1237,12 +1235,10 @@ fn player_left(
                 CornerRadius::same(style::R_MD),
                 style::wash(theme),
             );
-            style::paint_icon(
-                ui.painter(),
-                Icon::Music,
-                cover_rect.shrink(16.0),
-                theme.text_weak,
-            );
+            let note = cover_rect.shrink(16.0);
+            if !style::paint_note(ui.painter(), note, theme.text_weak) {
+                style::paint_icon(ui.painter(), Icon::Music, note, theme.text_weak);
+            }
         }
     }
     if loading {
