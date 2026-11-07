@@ -18,7 +18,10 @@ use crate::theme::{self, Theme};
 use crate::ui::style;
 
 const MAX_TEXTURE_SIDE: u32 = 256;
-const MAX_TEXTURES: usize = 64;
+const MAX_TEXTURES: usize = 96;
+/// Decode at most this many new covers per UI frame; large search/home grids
+/// otherwise decode dozens of JPEGs synchronously in a single frame.
+const MAX_DECODES_PER_FRAME: u32 = 2;
 const BLUR_SIDE: u32 = 64;
 
 pub struct CoverCache {
@@ -28,6 +31,9 @@ pub struct CoverCache {
     misses: HashMap<String, f64>,
     clock: u64,
     last_used: HashMap<String, u64>,
+    /// Per-frame decode budget, reset when egui starts a new frame.
+    decode_frame: u64,
+    decode_used: u32,
     /// Cross-fade state for the now-playing cover.
     fade_key: Option<String>,
     fade_at: f64,
@@ -46,6 +52,8 @@ impl CoverCache {
             misses: HashMap::new(),
             clock: 0,
             last_used: HashMap::new(),
+            decode_frame: u64::MAX,
+            decode_used: 0,
             fade_key: None,
             fade_at: f64::NEG_INFINITY,
         }
@@ -63,35 +71,46 @@ impl CoverCache {
                 return None;
             }
         }
-        let Some((texture, blurred)) = load_textures(ctx, path) else {
+        // Keep list scrolling smooth: covers appear over the next few frames
+        // instead of decoding the whole visible grid in one frame.
+        let frame = ctx.cumulative_frame_nr();
+        if self.decode_frame != frame {
+            self.decode_frame = frame;
+            self.decode_used = 0;
+        }
+        if self.decode_used >= MAX_DECODES_PER_FRAME {
+            ctx.request_repaint_after(std::time::Duration::from_millis(16));
+            return None;
+        }
+        self.decode_used += 1;
+        let Some(texture) = load_base_texture(ctx, path) else {
             self.misses.insert(base_key, now);
             return None;
         };
-        for (key, handle) in [(base_key.clone(), texture), (blur_key(path), blurred)] {
-            if self.textures.len() >= MAX_TEXTURES {
-                self.evict_oldest();
-            }
-            self.textures.insert(key.clone(), handle);
-            self.last_used.insert(key, self.clock);
+        if self.textures.len() >= MAX_TEXTURES {
+            self.evict_oldest();
         }
+        self.textures.insert(base_key.clone(), texture);
+        self.last_used.insert(base_key.clone(), self.clock);
         self.textures.get(&base_key).cloned()
     }
 
     /// A tiny pre-blurred version of the cover, prepared once per path and
     /// reused as the immersive Now Playing backdrop. No image work per frame.
-    pub fn blurred(&mut self, ctx: &Context, path: &Path, now: f64) -> Option<TextureHandle> {
+    pub fn blurred(&mut self, ctx: &Context, path: &Path, _now: f64) -> Option<TextureHandle> {
         self.clock = self.clock.wrapping_add(1);
         let key = blur_key(path);
         if let Some(texture) = self.textures.get(&key) {
             self.last_used.insert(key, self.clock);
             return Some(texture.clone());
         }
-        let _ = self.texture(ctx, path, now)?;
-        let texture = self.textures.get(&key).cloned();
-        if texture.is_some() {
-            self.last_used.insert(key, self.clock);
+        let texture = load_blur_texture(ctx, path)?;
+        if self.textures.len() >= MAX_TEXTURES {
+            self.evict_oldest();
         }
-        texture
+        self.textures.insert(key.clone(), texture.clone());
+        self.last_used.insert(key, self.clock);
+        Some(texture)
     }
 
     /// Drop textures whose underlying cache files were deleted (e.g. search
@@ -232,7 +251,7 @@ fn blur_key(path: &Path) -> String {
     format!("{}#blur", path.to_string_lossy())
 }
 
-fn load_textures(ctx: &Context, path: &Path) -> Option<(TextureHandle, TextureHandle)> {
+fn load_base_texture(ctx: &Context, path: &Path) -> Option<TextureHandle> {
     let bytes = std::fs::read(path).ok()?;
     if bytes.len() < 32 {
         return None;
@@ -243,7 +262,21 @@ fn load_textures(ctx: &Context, path: &Path) -> Option<(TextureHandle, TextureHa
     } else {
         image
     };
-    // The immersive backdrop: a 64px blurred copy, generated exactly once.
+    let rgba = image.to_rgba8();
+    let size = [rgba.width() as usize, rgba.height() as usize];
+    let color_image = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+    let name = format!("cover:{}", path.to_string_lossy());
+    Some(ctx.load_texture(name, color_image, TextureOptions::LINEAR))
+}
+
+/// Blurred backdrops are only needed by the Now Playing view. Generating them
+/// lazily for every list thumbnail wasted CPU and texture slots.
+fn load_blur_texture(ctx: &Context, path: &Path) -> Option<TextureHandle> {
+    let bytes = std::fs::read(path).ok()?;
+    if bytes.len() < 32 {
+        return None;
+    }
+    let image = image::load_from_memory(&bytes).ok()?;
     let blurred = image
         .resize_exact(BLUR_SIDE, BLUR_SIDE, image::imageops::FilterType::Triangle)
         .blur(10.0)
@@ -253,12 +286,5 @@ fn load_textures(ctx: &Context, path: &Path) -> Option<(TextureHandle, TextureHa
         blurred.as_raw(),
     );
     let blur_name = format!("cover-blur:{}", path.to_string_lossy());
-    let blurred = ctx.load_texture(blur_name, blurred_image, TextureOptions::LINEAR);
-
-    let rgba = image.to_rgba8();
-    let size = [rgba.width() as usize, rgba.height() as usize];
-    let color_image = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
-    let name = format!("cover:{}", path.to_string_lossy());
-    let texture = ctx.load_texture(name, color_image, TextureOptions::LINEAR);
-    Some((texture, blurred))
+    Some(ctx.load_texture(blur_name, blurred_image, TextureOptions::LINEAR))
 }

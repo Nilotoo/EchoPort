@@ -249,6 +249,10 @@ impl EchoPortApp {
             app.ui.profile_bio = app.state.profile.bio.clone();
             app.ui.profile_bio_for = Some(app.state.profile.name.clone());
         }
+        // QA hook: exercise the shuffle card without UI automation.
+        if std::env::var("ECHOPORT_RANDOM_PLAY").is_ok() {
+            app.play_random(None);
+        }
         // QA hook: open the theme-image crop dialog without clicking through
         // the native file picker.
         if let Ok(path) = std::env::var("ECHOPORT_CROP_IMAGE") {
@@ -698,6 +702,12 @@ impl EchoPortApp {
                 self.state.profile.settings.photo_theme = enabled;
                 self.state.refresh_theme_target();
                 self.mark_dirty();
+            }
+            Command::RandomPlay { genre } => self.play_random(genre),
+            Command::SetTrackGenre { track_id, genre } => {
+                self.state.profile.set_genre_override(&track_id, genre);
+                self.mark_dirty();
+                self.ctx.request_repaint();
             }
             Command::SetThemeImageCropped {
                 source,
@@ -2323,6 +2333,48 @@ impl EchoPortApp {
         self.ctx.request_repaint();
     }
 
+    fn play_random(&mut self, genre: Option<String>) {
+        let mut candidates = self.state.random_candidates(genre.as_deref());
+        if candidates.is_empty() {
+            self.toast(
+                ToastKind::Error,
+                TextOrKey::Text(self.state.tr(Key::RandomEmpty).to_owned()),
+            );
+            return;
+        }
+        // Pure Fisher–Yates shuffle; no popularity, history or play-count bias.
+        let mut seed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.subsec_nanos() as u64 ^ duration.as_secs())
+            .unwrap_or(0x9E37_79B9_7F4A_7C15)
+            | 1;
+        let mut next = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        for index in (1..candidates.len()).rev() {
+            let swap = (next() as usize) % (index + 1);
+            candidates.swap(index, swap);
+        }
+        let available = candidates.len();
+        let count = if available <= 5 {
+            available
+        } else {
+            let upper = available.min(10);
+            (5 + (next() as usize) % (upper - 4)).min(upper)
+        };
+        candidates.truncate(count);
+        self.state.random_picks = candidates.clone();
+        self.state.queue = candidates;
+        self.state.queue_pos = 0;
+        if let Some(first) = self.state.queue.first().cloned() {
+            self.start_track(first);
+        }
+        self.ctx.request_repaint();
+    }
+
     fn pick_theme_image_file(&mut self) {
         // Windows/macOS native dialogs are application-modal, so keeping them on
         // the UI thread is fine. On Linux the portal dialog is not reliably
@@ -3774,6 +3826,7 @@ fn demo_tracks() -> Vec<Track> {
             local_path: Some(PathBuf::from("/demo/Cafe de Flore.mp3")),
             year: None,
             release_date: None,
+            genre: None,
         },
         Track::new(Platform::YouTube, "demo-8", "Slow Transit", "Kite & Harbor")
             .with_album("Lines")

@@ -28,6 +28,8 @@ pub fn draw(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec
         ui.add_space(if mobile { 16.0 } else { 14.0 });
         recently_played(ui, app, theme, pending, mobile);
         ui.add_space(if mobile { 14.0 } else { 12.0 });
+        random_card(ui, app, theme, pending);
+        ui.add_space(if mobile { 14.0 } else { 12.0 });
         bottom_row(ui, app, theme, pending, mobile);
         ui.add_space(8.0);
     });
@@ -495,6 +497,124 @@ fn recently_played(
 // ---------------------------------------------------------------------------
 // Bottom row: favourites, playlists, sources
 // ---------------------------------------------------------------------------
+
+fn random_card(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec<Command>) {
+    style::card(theme).show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
+        let first = app.state.random_picks.first().cloned();
+        let picks = app.state.random_picks.len();
+        ui.horizontal(|ui| {
+            ui.set_height(78.0);
+            let cover = Rect::from_min_size(
+                Pos2::new(ui.cursor().left(), ui.cursor().top()),
+                Vec2::splat(78.0),
+            );
+            ui.allocate_rect(cover, Sense::hover());
+            if let Some(track) = first.as_ref() {
+                widgets::paint_track_cover(ui, app, theme, track, cover, style::R_MD);
+            } else {
+                let (a, b) = style::generated_cover_colors(theme, "random-shuffle");
+                style::gradient_cover(
+                    ui.painter(),
+                    cover,
+                    style::R_MD,
+                    a,
+                    b,
+                    Some(
+                        &app.state
+                            .tr(Key::RandomPlay)
+                            .chars()
+                            .next()
+                            .unwrap_or('?')
+                            .to_string(),
+                    ),
+                );
+            }
+            ui.add_space(76.0 + 12.0);
+            ui.vertical(|ui| {
+                ui.add_space(5.0);
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new(app.state.tr(Key::RandomPlay))
+                            .size(15.0)
+                            .strong()
+                            .color(theme.text),
+                    );
+                    if picks > 0 {
+                        ui.label(
+                            RichText::new(format!("{picks} {}", app.state.tr(Key::TracksCount)))
+                                .size(10.0)
+                                .color(theme.text_weak),
+                        );
+                    }
+                });
+                ui.label(
+                    RichText::new(app.state.tr(Key::RandomHint))
+                        .size(10.0)
+                        .color(theme.text_weak),
+                );
+                ui.add_space(5.0);
+                ui.horizontal(|ui| {
+                    if let Some(track) = first.as_ref() {
+                        ui.add(
+                            egui::Label::new(
+                                RichText::new(format!(
+                                    "{} — {}",
+                                    track.title,
+                                    track.display_artist()
+                                ))
+                                .size(11.0)
+                                .color(theme.text),
+                            )
+                            .truncate(),
+                        );
+                    }
+                });
+            });
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if style::button(ui, theme, app.state.tr(Key::RandomPlay), Variant::Primary)
+                    .clicked()
+                {
+                    pending.push(Command::RandomPlay {
+                        genre: app.ui.random_genre.clone(),
+                    });
+                }
+                ui.add_space(4.0);
+                let genres = app.state.known_genres();
+                let selected = app
+                    .ui
+                    .random_genre
+                    .as_deref()
+                    .unwrap_or(app.state.tr(Key::RandomAll));
+                egui::ComboBox::from_id_salt("random-genre")
+                    .selected_text(RichText::new(selected).size(10.5).color(theme.text))
+                    .width(140.0)
+                    .show_ui(ui, |ui| {
+                        if ui
+                            .selectable_label(
+                                app.ui.random_genre.is_none(),
+                                app.state.tr(Key::RandomAll),
+                            )
+                            .clicked()
+                        {
+                            app.ui.random_genre = None;
+                        }
+                        for genre in genres {
+                            let selected = app
+                                .ui
+                                .random_genre
+                                .as_deref()
+                                .map(|current| current.eq_ignore_ascii_case(&genre))
+                                .unwrap_or(false);
+                            if ui.selectable_label(selected, &genre).clicked() {
+                                app.ui.random_genre = Some(genre.clone());
+                            }
+                        }
+                    });
+            });
+        });
+    });
+}
 
 fn bottom_row(
     ui: &mut Ui,

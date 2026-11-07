@@ -118,7 +118,9 @@ struct Shared {
     /// Incremented to invalidate/stop the current decoder thread.
     generation: AtomicU64,
     /// Set from the cpal error callback; the engine thread turns it into status.
-    stream_error: AtomicBool,
+    /// This path is not realtime-critical, so keeping the backend message helps
+    /// diagnose device/config failures instead of reporting a generic error.
+    stream_error: Mutex<Option<String>>,
 }
 
 impl Shared {
@@ -140,7 +142,7 @@ impl Shared {
             flush_epoch: AtomicU64::new(0),
             flushed_epoch: AtomicU64::new(0),
             generation: AtomicU64::new(0),
-            stream_error: AtomicBool::new(false),
+            stream_error: Mutex::new(None),
         }
     }
 
@@ -635,7 +637,10 @@ where
         },
         move |err| {
             log::warn!("audio output stream error: {err}");
-            error_shared.stream_error.store(true, Ordering::Release);
+            *error_shared
+                .stream_error
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(err.to_string());
         },
         None,
     )
@@ -869,22 +874,48 @@ fn decoder_thread(
 
 fn engine_thread(shared: Arc<Shared>, commands: Receiver<Cmd>) {
     let mut active: Option<ActiveOutput> = None;
+    let mut last_loaded: Option<PathBuf> = None;
+    // USB interfaces and PipeWire devices occasionally fail the first stream
+    // with a transient backend error. Retry once before surfacing the failure.
+    let mut stream_retries = 0u8;
     loop {
         match commands.recv_timeout(ENGINE_TICK) {
             Ok(Cmd::Shutdown) | Err(RecvTimeoutError::Disconnected) => break,
             Ok(Cmd::Load(path)) => {
                 stop_playback(&shared, &mut active);
+                last_loaded = Some(path.clone());
+                stream_retries = 0;
                 handle_load(&shared, &mut active, path);
             }
             Ok(Cmd::Play) => handle_play(&shared, &mut active),
             Ok(Cmd::Pause) => handle_pause(&shared, &mut active),
             Ok(Cmd::Seek(seconds)) => handle_seek(&shared, seconds),
-            Ok(Cmd::Stop) => stop_playback(&shared, &mut active),
+            Ok(Cmd::Stop) => {
+                stop_playback(&shared, &mut active);
+                last_loaded = None;
+            }
             Err(RecvTimeoutError::Timeout) => {}
         }
 
-        if shared.stream_error.swap(false, Ordering::AcqRel) {
-            shared.set_error("audio output stream failed");
+        if let Some(error) = shared
+            .stream_error
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take()
+        {
+            if stream_retries < 1 {
+                if let Some(path) = last_loaded.clone() {
+                    stream_retries += 1;
+                    log::warn!("audio stream failed ({error}); retrying output once");
+                    stop_playback(&shared, &mut active);
+                    handle_load(&shared, &mut active, path);
+                    if shared.play_requested.load(Ordering::Acquire) {
+                        handle_play(&shared, &mut active);
+                    }
+                    continue;
+                }
+            }
+            shared.set_error(format!("audio output stream failed: {error}"));
         }
     }
     stop_playback(&shared, &mut active);

@@ -292,6 +292,8 @@ pub struct AppState {
     pub queue_pos: usize,
     pub repeat: RepeatMode,
     pub shuffle: bool,
+    /// Most recent random batch, shown on the home/background cards.
+    pub random_picks: Vec<Track>,
 
     pub selected_playlist: Option<String>,
     pub now_playing_tab: NowPlayingTab,
@@ -302,6 +304,27 @@ pub struct AppState {
 
     /// True when running with the offline demo data (used for screenshots).
     pub demo: bool,
+}
+
+/// Imported browsing artifacts such as “Bilibili video 123…” are not songs and
+/// should not show up in a random listening queue.
+fn shuffleable_track(track: &Track) -> bool {
+    let title = track.title.trim().to_lowercase();
+    if title.is_empty() {
+        return false;
+    }
+    let generated_prefix = ["bilibili video ", "youtube video ", "soundcloud track "]
+        .iter()
+        .any(|prefix| title.starts_with(prefix));
+    if generated_prefix {
+        let artist = track.artist.trim().to_lowercase();
+        let unknown =
+            artist.is_empty() || artist == "unknown" || artist == "未知歌手" || artist == "—";
+        if unknown {
+            return false;
+        }
+    }
+    true
 }
 
 impl AppState {
@@ -371,6 +394,7 @@ impl AppState {
             queue_pos: 0,
             repeat: RepeatMode::Off,
             shuffle: false,
+            random_picks: Vec::new(),
             selected_playlist: None,
             now_playing_tab: NowPlayingTab::Track,
             queue_panel_open: false,
@@ -446,6 +470,82 @@ impl AppState {
     }
 
     /// Recompute the target theme after a new cover palette arrives.
+    /// All known tracks that can be used by the shuffle picker.
+    pub fn random_candidates(&self, genre: Option<&str>) -> Vec<Track> {
+        let wanted = genre.map(|genre| genre.trim().to_lowercase());
+        // A remembered track may predate local genre scanning. Merge by id and
+        // prefer the copy that actually carries a genre.
+        let mut merged: std::collections::BTreeMap<String, Track> =
+            std::collections::BTreeMap::new();
+        for track in self
+            .profile
+            .tracks
+            .values()
+            .chain(self.library.tracks.iter())
+        {
+            match merged.entry(track.id.clone()) {
+                std::collections::btree_map::Entry::Vacant(slot) => {
+                    slot.insert(track.clone());
+                }
+                std::collections::btree_map::Entry::Occupied(mut slot) => {
+                    if self.profile.effective_genre(slot.get()).is_none()
+                        && self.profile.effective_genre(track).is_some()
+                    {
+                        slot.insert(track.clone());
+                    }
+                }
+            }
+        }
+        merged
+            .into_values()
+            .filter(shuffleable_track)
+            .filter(|track| {
+                wanted.as_deref().is_none_or(|wanted| {
+                    self.profile
+                        .effective_genre(track)
+                        .map(|genre| genre.trim().to_lowercase() == wanted)
+                        .unwrap_or(false)
+                })
+            })
+            .collect()
+    }
+
+    /// Genres currently known from embedded tags or manual corrections,
+    /// sorted case-insensitively. Empty when nothing has a genre yet.
+    pub fn known_genres(&self) -> Vec<String> {
+        let mut genres: Vec<String> = Vec::new();
+        for track in self
+            .profile
+            .tracks
+            .values()
+            .chain(self.library.tracks.iter())
+        {
+            if let Some(genre) = self
+                .profile
+                .effective_genre(track)
+                .map(str::trim)
+                .filter(|genre| !genre.is_empty())
+            {
+                if !genres
+                    .iter()
+                    .any(|known: &String| known.eq_ignore_ascii_case(genre))
+                {
+                    genres.push(genre.to_owned());
+                }
+            }
+        }
+        genres.sort_by_key(|genre| genre.to_lowercase());
+        genres
+    }
+
+    pub fn genre_label(&self, track: &Track) -> String {
+        self.profile
+            .effective_genre(track)
+            .map(str::to_owned)
+            .filter(|genre| !genre.trim().is_empty())
+            .unwrap_or_else(|| self.tr(Key::UnknownGenre).to_owned())
+    }
+
     pub fn refresh_theme_target(&mut self) {
         let palette = if self.follow_cover_accent {
             self.cover.palette.as_ref()
@@ -649,6 +749,13 @@ pub enum Command {
     PrepareThemeImage(std::path::PathBuf),
     SetThemeImage(std::path::PathBuf),
     SetPhotoTheme(bool),
+    RandomPlay {
+        genre: Option<String>,
+    },
+    SetTrackGenre {
+        track_id: String,
+        genre: Option<String>,
+    },
     SetThemeImageCropped {
         source: std::path::PathBuf,
         zoom: f32,

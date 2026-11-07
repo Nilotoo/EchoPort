@@ -33,6 +33,8 @@ pub struct Metadata {
     pub webpage_url: Option<String>,
     /// Best-effort release/upload date as `YYYY-MM-DD`.
     pub release_date: Option<String>,
+    /// Genre reported by the extractor (SoundCloud often has one).
+    pub genre: Option<String>,
 }
 
 /// Import a pasted page URL as a `Track` via `yt-dlp -J`.
@@ -175,6 +177,9 @@ pub fn metadata_from_json(json: &str) -> Result<Metadata, String> {
     let webpage_url = util::get_str(entry, "/webpage_url")
         .or_else(|| util::get_str(entry, "/original_url"))
         .and_then(util::https_url);
+    let genre = util::get_str(entry, "/genre")
+        .map(util::tidy_text)
+        .filter(|genre| !genre.is_empty());
     // Prefer a real release date over the upload date; both are best effort.
     let release_date = util::get_str(entry, "/release_date")
         .and_then(util::date_from_iso)
@@ -195,6 +200,7 @@ pub fn metadata_from_json(json: &str) -> Result<Metadata, String> {
         thumbnail,
         webpage_url,
         release_date,
+        genre,
     })
 }
 
@@ -220,6 +226,9 @@ fn track_from_metadata(platform: Platform, metadata: &Metadata, requested_url: &
     if let Some(date) = &metadata.release_date {
         track = track.with_release_date(date.clone());
     }
+    if let Some(genre) = &metadata.genre {
+        track = track.with_genre(genre.clone());
+    }
     track
 }
 
@@ -237,6 +246,7 @@ mod tests {
         "webpage_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
         "upload_date": "20091025",
         "extractor": "youtube",
+        "genre": "Electronic",
         "_type": "video"
     }"#;
 
@@ -277,6 +287,7 @@ mod tests {
         let track =
             track_from_metadata(Platform::YouTube, &metadata, "https://youtu.be/dQw4w9WgXcQ");
         assert_eq!(track.platform, Platform::YouTube);
+        assert_eq!(track.genre.as_deref(), Some("Electronic"));
         assert_eq!(track.title, metadata.title);
         assert_eq!(track.artist, "Rick Astley");
         assert_eq!(track.duration_secs, Some(213.0));
