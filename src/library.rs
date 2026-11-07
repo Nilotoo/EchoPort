@@ -130,13 +130,6 @@ fn track_from_file(path: &Path) -> Track {
                 {
                     track.album = Some(album);
                 }
-                if let Some(genre) = tag
-                    .genre()
-                    .map(|genre| genre.trim().to_owned())
-                    .filter(|genre| !genre.is_empty())
-                {
-                    track.genre = Some(genre);
-                }
                 // Year plus full release date when the tag carries one.
                 if let Some(date) = tag.date() {
                     apply_tag_date(&mut track, date);

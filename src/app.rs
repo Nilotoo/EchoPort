@@ -249,18 +249,17 @@ impl EchoPortApp {
             app.ui.profile_bio = app.state.profile.bio.clone();
             app.ui.profile_bio_for = Some(app.state.profile.name.clone());
         }
+        // QA hook: open Favourite Tracks for visual checks.
+        if std::env::var("ECHOPORT_FAVOURITES_PLAYLIST").is_ok() {
+            app.state.page = Page::Playlists;
+            app.state.selected_playlist = Some(crate::model::FAVORITES_PLAYLIST_ID.to_owned());
+        }
         // QA hook: exercise full-window photo mode in screenshots.
         if std::env::var("ECHOPORT_FULL_THEME").is_ok() {
             app.state.refresh_full_theme_validation();
             app.state.profile.settings.theme_image_full = true;
             app.state.refresh_theme_target();
             app.state.theme = app.state.theme_target;
-        }
-        // QA hook: trigger the online multi-source shuffle without UI automation.
-        if let Ok(seed) = std::env::var("ECHOPORT_RANDOM_SEARCH") {
-            if !app.demo || std::env::var("ECHOPORT_LIVE").is_ok() {
-                app.start_random_search(Some(seed));
-            }
         }
         // QA hook: open the theme-image crop dialog without clicking through
         // the native file picker.
@@ -730,12 +729,6 @@ impl EchoPortApp {
                 self.mark_dirty();
                 self.ctx.request_repaint();
             }
-            Command::RandomPlay => self.start_random_search(None),
-            Command::SetTrackGenre { track_id, genre } => {
-                self.state.profile.set_genre_override(&track_id, genre);
-                self.mark_dirty();
-                self.ctx.request_repaint();
-            }
             Command::SetThemeImageCropped {
                 source,
                 zoom,
@@ -931,6 +924,13 @@ impl EchoPortApp {
             self.handle_shortcuts(ctx);
         }
         crate::ui::layout(ctx, self);
+        // Make sure focused text fields explicitly ask winit for IME input.
+        // Some Linux IMEs (fcitx/Sogou/ibus) only forward preedit events when
+        // the window has enabled IME; egui normally does this on focus, and
+        // this is an extra guard for third-party input methods.
+        if ctx.wants_keyboard_input() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::IMEAllowed(true));
+        }
         self.handle_screenshot(ctx);
         if self.state.playback.state.is_playing() {
             let interval = if self.state.ui_backgrounded { 1000 } else { 66 };
@@ -1388,9 +1388,6 @@ impl EchoPortApp {
                     self.prefetch_album_covers();
                     self.mark_dirty();
                 }
-            }
-            AppEvent::RandomTracksReady { tracks, error } => {
-                self.finish_random_search(tracks, error);
             }
             AppEvent::ThemeImagePicked(path) => {
                 if let Some(path) = path {
@@ -2326,9 +2323,14 @@ impl EchoPortApp {
     }
 
     fn save_full_theme_original(&mut self, source: &std::path::Path) -> Result<(), String> {
+        const MAX_FULL_IMAGE_EDGE: u32 = 1920;
+        let bytes = std::fs::read(source).map_err(|err| err.to_string())?;
+        // Full-window mode paints the photo every frame; keeping a 4-8K source
+        // here caused visible stutter and large GPU uploads. Compress it once.
+        let prepared = crate::theme::prepare_theme_image_png(&bytes, MAX_FULL_IMAGE_EDGE)?;
         let target = self.paths.data_dir.join("theme-image-original.img");
         let temp = self.paths.data_dir.join("theme-image-original.img.tmp");
-        std::fs::copy(source, &temp).map_err(|err| err.to_string())?;
+        std::fs::write(&temp, prepared).map_err(|err| err.to_string())?;
         let _ = std::fs::remove_file(&target);
         std::fs::rename(&temp, &target).map_err(|err| err.to_string())?;
         self.state.profile.settings.theme_image_original = Some(target);
@@ -2386,99 +2388,6 @@ impl EchoPortApp {
         self.ui.invalidate_theme_image();
         self.mark_dirty();
         self.toast(ToastKind::Success, Key::ThemeImageApplied);
-        self.ctx.request_repaint();
-    }
-
-    fn start_random_search(&mut self, query_override: Option<String>) {
-        if self.state.random_loading {
-            return;
-        }
-        // Platform providers are query-based; a neutral random search word
-        // gives varied results without filtering by genre or popularity.
-        let query = query_override
-            .filter(|query| !query.trim().is_empty())
-            .unwrap_or_else(random_search_word);
-        let platforms = vec![
-            Platform::YouTube,
-            Platform::SoundCloud,
-            Platform::Netease,
-            Platform::AppleMusic,
-            Platform::Bilibili,
-            Platform::InternetArchive,
-        ];
-        let http = self.http.clone();
-        let config = self.resolve_config.clone();
-        let tx = self.tx.clone();
-        self.state.random_loading = true;
-        self.toast(ToastKind::Info, Key::RandomSearching);
-        self.ctx.request_repaint();
-        std::thread::spawn(move || {
-            let results = providers::search(&http, &config, &query, &platforms, 8);
-            let mut tracks = Vec::new();
-            let mut errors = Vec::new();
-            for group in results {
-                if let Some(error) = group.error {
-                    errors.push(format!("{}: {error}", group.platform.label()));
-                }
-                tracks.extend(group.tracks);
-            }
-            let error = if tracks.is_empty() && !errors.is_empty() {
-                Some(errors.join(" · "))
-            } else {
-                None
-            };
-            let _ = tx.send(AppEvent::RandomTracksReady { tracks, error });
-        });
-    }
-
-    fn finish_random_search(&mut self, mut tracks: Vec<Track>, error: Option<String>) {
-        self.state.random_loading = false;
-        if let Some(error) = error {
-            log::warn!("random multi-source search failed: {error}");
-            self.toast(ToastKind::Error, Key::RandomEmpty);
-            self.ctx.request_repaint();
-            return;
-        }
-        // Deduplicate across platforms and drop generic browsing artifacts.
-        let mut seen = std::collections::HashSet::new();
-        tracks.retain(|track| {
-            crate::state::shuffleable_track(track) && seen.insert(track.id.clone())
-        });
-        if tracks.is_empty() {
-            self.toast(ToastKind::Error, Key::RandomEmpty);
-            self.ctx.request_repaint();
-            return;
-        }
-        let mut seed = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|duration| duration.subsec_nanos() as u64 ^ duration.as_secs())
-            .unwrap_or(0x9E37_79B9_7F4A_7C15)
-            | 1;
-        let mut next = || {
-            seed ^= seed << 13;
-            seed ^= seed >> 7;
-            seed ^= seed << 17;
-            seed
-        };
-        for index in (1..tracks.len()).rev() {
-            let swap = (next() as usize) % (index + 1);
-            tracks.swap(index, swap);
-        }
-        let available = tracks.len();
-        let count = if available <= 5 {
-            available
-        } else {
-            let upper = available.min(10);
-            (5 + (next() as usize) % (upper - 4)).min(upper)
-        };
-        tracks.truncate(count);
-        self.state.profile.remember_many(&tracks);
-        self.state.random_picks = tracks.clone();
-        self.state.queue = tracks;
-        self.state.queue_pos = 0;
-        if let Some(first) = self.state.queue.first().cloned() {
-            self.start_track(first);
-        }
         self.ctx.request_repaint();
     }
 
@@ -3658,21 +3567,6 @@ pub(crate) fn save_color_image(
     rgba.save(path).map_err(|err| err.to_string())
 }
 
-fn random_search_word() -> String {
-    // Neutral, non-style vocabulary. Platform search needs a query, so this is
-    // the only way to get fresh results without a recommendation API.
-    const WORDS: &[&str] = &[
-        "love", "night", "dream", "summer", "rain", "light", "blue", "fire", "ocean", "city",
-        "moon", "stars", "time", "home", "fall", "run", "stay", "gold", "echo", "river", "heart",
-        "sky", "dance", "lost", "young", "holiday", "memory", "wind", "sun", "after",
-    ];
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.subsec_nanos() as usize)
-        .unwrap_or(0);
-    format!("{} song", WORDS[nanos % WORDS.len()])
-}
-
 fn page_from_key(key: &str) -> Option<Page> {
     Some(match key {
         "home" => Page::Home,
@@ -3846,7 +3740,7 @@ fn seed_demo(state: &mut AppState, paths: &AppPaths) {
                     kind: crate::model::LinkKind::Wikipedia,
                     title: "Dream pop — Wikipedia".to_owned(),
                     url: "https://en.wikipedia.org/wiki/Dream_pop".to_owned(),
-                    subtitle: Some("genre context".to_owned()),
+                    subtitle: Some("Wikipedia".to_owned()),
                 },
                 crate::model::BackgroundLink {
                     kind: crate::model::LinkKind::Genius,
@@ -3951,7 +3845,6 @@ fn demo_tracks() -> Vec<Track> {
             local_path: Some(PathBuf::from("/demo/Cafe de Flore.mp3")),
             year: None,
             release_date: None,
-            genre: None,
         },
         Track::new(Platform::YouTube, "demo-8", "Slow Transit", "Kite & Harbor")
             .with_album("Lines")

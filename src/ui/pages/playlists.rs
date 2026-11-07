@@ -1,5 +1,5 @@
 //! Playlists: list + detail view, create / rename / delete, mixed-platform
-//! tracks, play all and shuffle.
+//! tracks and play all.
 
 use egui::{Align, Layout, RichText, Ui, Vec2};
 
@@ -369,23 +369,6 @@ fn detail_panel(
             if play_all.clicked() && !tracks.is_empty() {
                 pending.push(Command::PlayPlaylist(playlist.id.clone()));
             }
-            ui.add_space(2.0);
-            if style::button_icon(
-                ui,
-                theme,
-                Icon::Shuffle,
-                app.state.tr(Key::ShuffleAll),
-                Variant::Tonal,
-            )
-            .clicked()
-                && !tracks.is_empty()
-            {
-                let shuffled = shuffle_tracks(tracks, ui.ctx().input(|input| input.time));
-                if !app.state.shuffle {
-                    pending.push(Command::ToggleShuffle);
-                }
-                pending.push(Command::PlayTracks(shuffled));
-            }
             let auto_favorites = playlist.id == crate::model::FAVORITES_PLAYLIST_ID;
             if !auto_favorites
                 && style::button(ui, theme, app.state.tr(Key::Delete), Variant::Ghost).clicked()
@@ -407,13 +390,6 @@ fn detail_panel(
                     new_cover: None,
                     clear_cover: false,
                 });
-            }
-            if auto_favorites {
-                ui.label(
-                    RichText::new(app.state.tr(Key::FavoritesCount))
-                        .size(10.0)
-                        .color(theme.text_weak),
-                );
             }
             if !cfg!(target_os = "android")
                 && style::button(ui, theme, app.state.tr(Key::ExportPlaylist), Variant::Ghost)
@@ -444,21 +420,16 @@ fn detail_panel(
             });
             return;
         }
+        let auto_favorites = playlist.id == crate::model::FAVORITES_PLAYLIST_ID;
         for (index, track) in tracks.iter().enumerate() {
-            let mut row = TrackRow::new(tracks, index)
-                .playlist(&playlist.id)
-                .salt("playlist-detail");
+            let mut row = TrackRow::new(tracks, index).salt("playlist-detail");
+            if !auto_favorites {
+                row = row.playlist(&playlist.id);
+            }
             row.height = 50.0;
             widgets::track_row(ui, app, theme, pending, track, row);
         }
     });
-}
-
-fn shuffle_tracks(tracks: &[crate::model::Track], salt: f64) -> Vec<crate::model::Track> {
-    let mut out = tracks.to_vec();
-    let salt = (salt * 1_000.0) as u64;
-    out.sort_by_key(|track| crate::model::stable_hash(&format!("{}:{salt}", track.id)));
-    out
 }
 
 /// Keep the theme helper referenced for future inline editing.

@@ -292,10 +292,6 @@ pub struct AppState {
     pub queue_pos: usize,
     pub repeat: RepeatMode,
     pub shuffle: bool,
-    /// Most recent random batch, shown on the home/background cards.
-    pub random_picks: Vec<Track>,
-    /// True while an online multi-source shuffle search is in flight.
-    pub random_loading: bool,
     /// Whether the uncropped full-window image passes the minimum size.
     pub theme_image_full_ok: bool,
 
@@ -308,27 +304,6 @@ pub struct AppState {
 
     /// True when running with the offline demo data (used for screenshots).
     pub demo: bool,
-}
-
-/// Imported browsing artifacts such as “Bilibili video 123…” are not songs and
-/// should not show up in a random listening queue.
-pub(crate) fn shuffleable_track(track: &Track) -> bool {
-    let title = track.title.trim().to_lowercase();
-    if title.is_empty() {
-        return false;
-    }
-    let generated_prefix = ["bilibili video ", "youtube video ", "soundcloud track "]
-        .iter()
-        .any(|prefix| title.starts_with(prefix));
-    if generated_prefix {
-        let artist = track.artist.trim().to_lowercase();
-        let unknown =
-            artist.is_empty() || artist == "unknown" || artist == "未知歌手" || artist == "—";
-        if unknown {
-            return false;
-        }
-    }
-    true
 }
 
 impl AppState {
@@ -431,8 +406,6 @@ impl AppState {
             queue_pos: 0,
             repeat: RepeatMode::Off,
             shuffle: false,
-            random_picks: Vec::new(),
-            random_loading: false,
             theme_image_full_ok: full_theme_image_ok,
             selected_playlist: None,
             now_playing_tab: NowPlayingTab::Track,
@@ -544,14 +517,6 @@ impl AppState {
     }
 
     /// Recompute the target theme after a new cover palette arrives.
-    pub fn genre_label(&self, track: &Track) -> String {
-        self.profile
-            .effective_genre(track)
-            .map(str::to_owned)
-            .filter(|genre| !genre.trim().is_empty())
-            .unwrap_or_else(|| self.tr(Key::UnknownGenre).to_owned())
-    }
-
     pub fn refresh_theme_target(&mut self) {
         let palette = if self.follow_cover_accent {
             self.cover.palette.as_ref()
@@ -759,11 +724,6 @@ pub enum Command {
     SetThemeImage(std::path::PathBuf),
     SetPhotoTheme(bool),
     SetThemeImageFull(bool),
-    RandomPlay,
-    SetTrackGenre {
-        track_id: String,
-        genre: Option<String>,
-    },
     SetThemeImageCropped {
         source: std::path::PathBuf,
         zoom: f32,
@@ -827,10 +787,6 @@ pub enum AppEvent {
     AlbumDetailReady(Box<crate::model::AlbumDetail>),
     /// Lyrics fetched for a track (stale results are ignored by track id).
     ThemeImagePicked(Option<std::path::PathBuf>),
-    RandomTracksReady {
-        tracks: Vec<Track>,
-        error: Option<String>,
-    },
     ThemeImagePrepared {
         source: Option<std::path::PathBuf>,
         error: Option<String>,
