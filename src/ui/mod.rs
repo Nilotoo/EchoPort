@@ -201,7 +201,14 @@ impl UiState {
 // ---------------------------------------------------------------------------
 
 pub fn layout(ctx: &egui::Context, app: &mut EchoPortApp) {
-    let theme = app.state.theme;
+    // Full-window mode must be translucent on the same frame the setting is
+    // toggled, not only after a restart. Re-assert the alpha locally in case a
+    // command was dispatched after the previous layout pass.
+    let mut theme = app.state.theme;
+    if app.state.full_theme_image_active() {
+        theme = theme.translucent();
+        app.state.theme = theme;
+    }
     let mut pending: Vec<Command> = Vec::new();
 
     // Phone/tablet shell: no permanent sidebar; bottom navigation + compact
