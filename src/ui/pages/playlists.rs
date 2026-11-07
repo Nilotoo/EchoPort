@@ -386,13 +386,19 @@ fn detail_panel(
                 }
                 pending.push(Command::PlayTracks(shuffled));
             }
-            if style::button(ui, theme, app.state.tr(Key::Delete), Variant::Ghost).clicked() {
+            let auto_favorites = playlist.id == crate::model::FAVORITES_PLAYLIST_ID;
+            if !auto_favorites
+                && style::button(ui, theme, app.state.tr(Key::Delete), Variant::Ghost).clicked()
+            {
                 app.ui.dialog = Some(Dialog::DeletePlaylist {
                     id: playlist.id.clone(),
                     name: playlist.name.clone(),
                 });
             }
-            if style::button(ui, theme, app.state.tr(Key::EditPlaylist), Variant::Ghost).clicked() {
+            if !auto_favorites
+                && style::button(ui, theme, app.state.tr(Key::EditPlaylist), Variant::Ghost)
+                    .clicked()
+            {
                 app.ui.dialog = Some(Dialog::RenamePlaylist {
                     id: playlist.id.clone(),
                     name: playlist.name.clone(),
@@ -401,6 +407,13 @@ fn detail_panel(
                     new_cover: None,
                     clear_cover: false,
                 });
+            }
+            if auto_favorites {
+                ui.label(
+                    RichText::new(app.state.tr(Key::FavoritesCount))
+                        .size(10.0)
+                        .color(theme.text_weak),
+                );
             }
             if !cfg!(target_os = "android")
                 && style::button(ui, theme, app.state.tr(Key::ExportPlaylist), Variant::Ghost)

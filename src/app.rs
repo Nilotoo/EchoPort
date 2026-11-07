@@ -249,6 +249,13 @@ impl EchoPortApp {
             app.ui.profile_bio = app.state.profile.bio.clone();
             app.ui.profile_bio_for = Some(app.state.profile.name.clone());
         }
+        // QA hook: exercise full-window photo mode in screenshots.
+        if std::env::var("ECHOPORT_FULL_THEME").is_ok() {
+            app.state.refresh_full_theme_validation();
+            app.state.profile.settings.theme_image_full = true;
+            app.state.refresh_theme_target();
+            app.state.theme = app.state.theme_target;
+        }
         // QA hook: trigger the online multi-source shuffle without UI automation.
         if let Ok(seed) = std::env::var("ECHOPORT_RANDOM_SEARCH") {
             if !app.demo || std::env::var("ECHOPORT_LIVE").is_ok() {
@@ -564,6 +571,9 @@ impl EchoPortApp {
                 self.mark_dirty();
             }
             Command::RenamePlaylist { id, name } => {
+                if id == crate::model::FAVORITES_PLAYLIST_ID {
+                    return;
+                }
                 if let Some(playlist) = self.state.profile.playlist_mut(&id) {
                     playlist.name = name;
                     playlist.touch();
@@ -571,6 +581,9 @@ impl EchoPortApp {
                 }
             }
             Command::SetPlaylistDescription { id, description } => {
+                if id == crate::model::FAVORITES_PLAYLIST_ID {
+                    return;
+                }
                 if let Some(playlist) = self.state.profile.playlist_mut(&id) {
                     playlist.description = description.trim().to_owned();
                     playlist.touch();
@@ -578,7 +591,9 @@ impl EchoPortApp {
                 }
             }
             Command::SetPlaylistCover { id, source } => {
-                self.apply_playlist_cover(&id, source);
+                if id != crate::model::FAVORITES_PLAYLIST_ID {
+                    self.apply_playlist_cover(&id, source);
+                }
             }
             Command::DeletePlaylist(id) => {
                 if self.state.profile.delete_playlist(&id) {
@@ -705,7 +720,17 @@ impl EchoPortApp {
                 self.state.refresh_theme_target();
                 self.mark_dirty();
             }
-            Command::RandomPlay { genre } => self.start_random_search(genre),
+            Command::SetThemeImageFull(enabled) => {
+                if enabled && !self.state.theme_image_full_ok {
+                    self.toast(ToastKind::Error, Key::ThemeImageTooSmall);
+                    return;
+                }
+                self.state.profile.settings.theme_image_full = enabled;
+                self.state.refresh_theme_target();
+                self.mark_dirty();
+                self.ctx.request_repaint();
+            }
+            Command::RandomPlay => self.start_random_search(None),
             Command::SetTrackGenre { track_id, genre } => {
                 self.state.profile.set_genre_override(&track_id, genre);
                 self.mark_dirty();
@@ -723,6 +748,11 @@ impl EchoPortApp {
                 }
                 self.state.theme_image_palette = None;
                 self.state.profile.settings.photo_theme = false;
+                self.state.profile.settings.theme_image_full = false;
+                self.state.theme_image_full_ok = false;
+                self.state.profile.settings.theme_image_original = None;
+                let _ = std::fs::remove_file(self.paths.data_dir.join("theme-image-original.img"));
+                self.state.refresh_full_theme_validation();
                 self.state.refresh_theme_target();
                 self.ui.invalidate_theme_image();
                 self.mark_dirty();
@@ -1359,12 +1389,8 @@ impl EchoPortApp {
                     self.mark_dirty();
                 }
             }
-            AppEvent::RandomTracksReady {
-                tracks,
-                error,
-                seed,
-            } => {
-                self.finish_random_search(tracks, error, seed);
+            AppEvent::RandomTracksReady { tracks, error } => {
+                self.finish_random_search(tracks, error);
             }
             AppEvent::ThemeImagePicked(path) => {
                 if let Some(path) = path {
@@ -2261,6 +2287,11 @@ impl EchoPortApp {
     }
 
     fn set_theme_image(&mut self, source: std::path::PathBuf) {
+        if let Err(err) = self.save_full_theme_original(&source) {
+            log::warn!("could not store full theme image: {err}");
+            self.toast(ToastKind::Error, Key::ThemeImageFailed);
+            return;
+        }
         const MAX_THEME_IMAGE: u64 = 32 * 1024 * 1024;
         let too_large = std::fs::metadata(&source)
             .map(|meta| meta.len() > MAX_THEME_IMAGE)
@@ -2294,6 +2325,17 @@ impl EchoPortApp {
         self.ctx.request_repaint();
     }
 
+    fn save_full_theme_original(&mut self, source: &std::path::Path) -> Result<(), String> {
+        let target = self.paths.data_dir.join("theme-image-original.img");
+        let temp = self.paths.data_dir.join("theme-image-original.img.tmp");
+        std::fs::copy(source, &temp).map_err(|err| err.to_string())?;
+        let _ = std::fs::remove_file(&target);
+        std::fs::rename(&temp, &target).map_err(|err| err.to_string())?;
+        self.state.profile.settings.theme_image_original = Some(target);
+        self.state.refresh_full_theme_validation();
+        Ok(())
+    }
+
     fn set_theme_image_cropped(
         &mut self,
         source: std::path::PathBuf,
@@ -2313,6 +2355,11 @@ impl EchoPortApp {
             self.toast(ToastKind::Error, Key::ThemeImageFailed);
             return;
         };
+        if let Err(err) = self.save_full_theme_original(&source) {
+            log::warn!("could not store full theme image: {err}");
+            self.toast(ToastKind::Error, Key::ThemeImageFailed);
+            return;
+        }
         let bytes = match crate::theme::crop_theme_image_png(&bytes, zoom, center_x, center_y) {
             Ok(bytes) => bytes,
             Err(err) => {
@@ -2342,15 +2389,15 @@ impl EchoPortApp {
         self.ctx.request_repaint();
     }
 
-    fn start_random_search(&mut self, genre: Option<String>) {
+    fn start_random_search(&mut self, query_override: Option<String>) {
         if self.state.random_loading {
             return;
         }
-        let seed = genre.clone().or_else(random_seed);
-        let Some(seed) = seed else {
-            return;
-        };
-        let query = seed.clone();
+        // Platform providers are query-based; a neutral random search word
+        // gives varied results without filtering by genre or popularity.
+        let query = query_override
+            .filter(|query| !query.trim().is_empty())
+            .unwrap_or_else(random_search_word);
         let platforms = vec![
             Platform::YouTube,
             Platform::SoundCloud,
@@ -2380,20 +2427,11 @@ impl EchoPortApp {
             } else {
                 None
             };
-            let _ = tx.send(AppEvent::RandomTracksReady {
-                tracks,
-                error,
-                seed: Some(seed),
-            });
+            let _ = tx.send(AppEvent::RandomTracksReady { tracks, error });
         });
     }
 
-    fn finish_random_search(
-        &mut self,
-        mut tracks: Vec<Track>,
-        error: Option<String>,
-        _seed: Option<String>,
-    ) {
+    fn finish_random_search(&mut self, mut tracks: Vec<Track>, error: Option<String>) {
         self.state.random_loading = false;
         if let Some(error) = error {
             log::warn!("random multi-source search failed: {error}");
@@ -2779,6 +2817,8 @@ impl EchoPortApp {
         if let Some(profile) = self.store.load(name) {
             let _ = self.store.remember_last_profile(&profile.name);
             self.state.lang = profile.settings.language;
+            let mut profile = profile;
+            profile.ensure_favorites_playlist();
             self.state.profile = profile;
             self.state.profiles = self.store.list();
             self.state.playback = PlaybackStatus {
@@ -2787,6 +2827,7 @@ impl EchoPortApp {
             };
             self.state.theme_mode = self.state.profile.settings.theme_mode;
             self.state.refresh_theme_image_palette();
+            self.state.refresh_full_theme_validation();
             self.state.now_playing = None;
             self.state.queue.clear();
             self.state.queue_pos = 0;
@@ -3617,16 +3658,19 @@ pub(crate) fn save_color_image(
     rgba.save(path).map_err(|err| err.to_string())
 }
 
-fn random_seed() -> Option<String> {
-    let seeds = crate::state::RANDOM_GENRE_SEEDS;
-    if seeds.is_empty() {
-        return None;
-    }
+fn random_search_word() -> String {
+    // Neutral, non-style vocabulary. Platform search needs a query, so this is
+    // the only way to get fresh results without a recommendation API.
+    const WORDS: &[&str] = &[
+        "love", "night", "dream", "summer", "rain", "light", "blue", "fire", "ocean", "city",
+        "moon", "stars", "time", "home", "fall", "run", "stay", "gold", "echo", "river", "heart",
+        "sky", "dance", "lost", "young", "holiday", "memory", "wind", "sun", "after",
+    ];
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.subsec_nanos() as usize)
         .unwrap_or(0);
-    Some(seeds[nanos % seeds.len()].to_owned())
+    format!("{} song", WORDS[nanos % WORDS.len()])
 }
 
 fn page_from_key(key: &str) -> Option<Page> {

@@ -579,42 +579,8 @@ fn random_card(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut 
                 };
                 let response = style::button(ui, theme, label, Variant::Primary);
                 if response.clicked() && !app.state.random_loading {
-                    pending.push(Command::RandomPlay {
-                        genre: app.ui.random_genre.clone(),
-                    });
+                    pending.push(Command::RandomPlay);
                 }
-                ui.add_space(4.0);
-                let genres = app.state.known_genres();
-                let selected = app
-                    .ui
-                    .random_genre
-                    .as_deref()
-                    .unwrap_or(app.state.tr(Key::RandomAll));
-                egui::ComboBox::from_id_salt("random-genre")
-                    .selected_text(RichText::new(selected).size(10.5).color(theme.text))
-                    .width(140.0)
-                    .show_ui(ui, |ui| {
-                        if ui
-                            .selectable_label(
-                                app.ui.random_genre.is_none(),
-                                app.state.tr(Key::RandomAll),
-                            )
-                            .clicked()
-                        {
-                            app.ui.random_genre = None;
-                        }
-                        for genre in genres {
-                            let selected = app
-                                .ui
-                                .random_genre
-                                .as_deref()
-                                .map(|current| current.eq_ignore_ascii_case(&genre))
-                                .unwrap_or(false);
-                            if ui.selectable_label(selected, &genre).clicked() {
-                                app.ui.random_genre = Some(genre.clone());
-                            }
-                        }
-                    });
             });
         });
     });

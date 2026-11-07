@@ -1002,14 +1002,15 @@ fn genre_card(
         });
         ui.add_space(6.0);
         ui.horizontal(|ui| {
-            if style::button(ui, theme, app.state.tr(Key::RandomPlay), Variant::Primary).clicked() {
-                let filter = if genre == app.state.tr(Key::UnknownGenre) {
-                    None
-                } else {
-                    Some(genre.clone())
-                };
-                app.ui.random_genre = filter.clone();
-                pending.push(Command::RandomPlay { genre: filter });
+            let label = if app.state.random_loading {
+                app.state.tr(Key::RandomSearching)
+            } else {
+                app.state.tr(Key::RandomPlay)
+            };
+            if style::button(ui, theme, label, Variant::Primary).clicked()
+                && !app.state.random_loading
+            {
+                pending.push(Command::RandomPlay);
             }
             if style::button(ui, theme, app.state.tr(Key::EditGenre), Variant::Ghost).clicked() {
                 app.ui.dialog = Some(Dialog::EditGenre {

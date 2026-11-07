@@ -137,9 +137,13 @@ fn profile_roundtrip_keeps_every_field() {
     assert_eq!(loaded.settings.volume, 0.33);
     assert_eq!(loaded.settings.results_per_platform, 7);
 
-    assert_eq!(loaded.playlists.len(), 1);
-    assert_eq!(loaded.playlists[0].name, "混合歌单 / Mixed");
-    assert_eq!(loaded.playlists[0].description, "from every source");
+    assert_eq!(loaded.playlists.len(), 2);
+    let mixed = loaded
+        .playlists
+        .iter()
+        .find(|playlist| playlist.name == "混合歌单 / Mixed")
+        .expect("mixed playlist");
+    assert_eq!(mixed.description, "from every source");
     assert_eq!(loaded.playlist_tracks(&playlist_id).len(), 3);
     assert_eq!(loaded.playlist_tracks(&playlist_id)[2].title, "海阔天空");
     assert!(loaded.is_favorite(&netease.id));

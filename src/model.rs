@@ -418,6 +418,13 @@ pub struct Settings {
     /// turns this off while keeping the saved image for later.
     #[serde(default = "default_true")]
     pub photo_theme: bool,
+    /// Second image-theme mode: cover the whole window instead of only the
+    /// sidebar. Requires a reasonably sized source image.
+    #[serde(default)]
+    pub theme_image_full: bool,
+    /// Uncropped, downscaled copy of the chosen image used by full-window mode.
+    #[serde(default)]
+    pub theme_image_original: Option<PathBuf>,
     pub download_format: DownloadFormat,
     pub download_dir: PathBuf,
     pub music_dirs: Vec<PathBuf>,
@@ -451,6 +458,8 @@ impl Default for Settings {
             lyrics_enabled: true,
             theme_image: None,
             photo_theme: true,
+            theme_image_full: false,
+            theme_image_original: None,
             download_format: DownloadFormat::Mp3,
             download_dir: music_dir.join("EchoPort"),
             music_dirs: vec![music_dir],
@@ -471,6 +480,11 @@ impl Settings {
             .unwrap_or_else(|| PathBuf::from("."))
     }
 }
+
+/// Stable id of the automatically maintained playlist. It is not deletable and
+/// its contents always mirror `Profile::favorites`.
+pub const FAVORITES_PLAYLIST_ID: &str = "pl-favourite-tracks-auto";
+pub const FAVORITES_PLAYLIST_NAME: &str = "Favourite Tracks";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Profile {
@@ -638,13 +652,49 @@ impl Profile {
     /// Returns `true` when the track is a favourite after the toggle.
     pub fn toggle_favorite(&mut self, track: &Track) -> bool {
         self.remember(track);
-        if let Some(pos) = self.favorites.iter().position(|id| id == &track.id) {
+        let favorite = if let Some(pos) = self.favorites.iter().position(|id| id == &track.id) {
             self.favorites.remove(pos);
             false
         } else {
             self.favorites.insert(0, track.id.clone());
             true
+        };
+        self.ensure_favorites_playlist();
+        favorite
+    }
+
+    /// Create/refresh the non-deletable "Favourite Tracks" playlist. The
+    /// playlist mirrors every favourited track in the same order as the heart
+    /// list, so a long favourites collection never disappears from the playlist
+    /// view because of list truncation in the UI.
+    pub fn ensure_favorites_playlist(&mut self) {
+        let description = match self.settings.language {
+            Language::En => "All favourited tracks, updated automatically.".to_owned(),
+            Language::Zh => "自动收录所有收藏歌曲，不可删除。".to_owned(),
+        };
+        let now = unix_now();
+        let favorites = self.favorites.clone();
+        if let Some(playlist) = self.playlist_mut(FAVORITES_PLAYLIST_ID) {
+            playlist.name = FAVORITES_PLAYLIST_NAME.to_owned();
+            playlist.description = description;
+            if playlist.track_ids != favorites {
+                playlist.track_ids = favorites;
+                playlist.updated_at = now;
+            }
+            return;
         }
+        self.playlists.insert(
+            0,
+            Playlist {
+                id: FAVORITES_PLAYLIST_ID.to_owned(),
+                name: FAVORITES_PLAYLIST_NAME.to_owned(),
+                description,
+                track_ids: self.favorites.clone(),
+                cover_path: None,
+                created_at: now,
+                updated_at: now,
+            },
+        );
     }
 
     pub fn playlist(&self, id: &str) -> Option<&Playlist> {
@@ -673,12 +723,18 @@ impl Profile {
     }
 
     pub fn delete_playlist(&mut self, id: &str) -> bool {
+        if id == FAVORITES_PLAYLIST_ID {
+            return false;
+        }
         let before = self.playlists.len();
         self.playlists.retain(|p| p.id != id);
         self.playlists.len() != before
     }
 
     pub fn add_to_playlist(&mut self, playlist_id: &str, track: &Track) -> bool {
+        if playlist_id == FAVORITES_PLAYLIST_ID {
+            return false;
+        }
         self.remember(track);
         let Some(playlist) = self.playlist_mut(playlist_id) else {
             return false;
@@ -702,6 +758,9 @@ impl Profile {
     }
 
     pub fn remove_from_playlist(&mut self, playlist_id: &str, track_id: &str) -> bool {
+        if playlist_id == FAVORITES_PLAYLIST_ID {
+            return false;
+        }
         let Some(playlist) = self.playlist_mut(playlist_id) else {
             return false;
         };
@@ -1306,6 +1365,27 @@ mod tests {
         assert_eq!(parsed.local_files.len(), 1);
         assert!(!parsed.toggle_favorite_album(&album));
         assert!(!parsed.is_favorite_album(&album.id));
+    }
+
+    #[test]
+    fn favourites_playlist_mirrors_favorites_and_is_protected() {
+        let mut profile = Profile::new("favourites-test", Settings::default());
+        profile.ensure_favorites_playlist();
+        assert!(profile.playlist(FAVORITES_PLAYLIST_ID).is_some());
+        let track = Track::new(Platform::YouTube, "fav-1", "Song", "Artist");
+        assert!(profile.toggle_favorite(&track));
+        let playlist = profile
+            .playlist(FAVORITES_PLAYLIST_ID)
+            .expect("auto playlist");
+        assert_eq!(playlist.name, FAVORITES_PLAYLIST_NAME);
+        assert_eq!(playlist.track_ids, vec![track.id.clone()]);
+        assert!(!profile.delete_playlist(FAVORITES_PLAYLIST_ID));
+        assert!(!profile.remove_from_playlist(FAVORITES_PLAYLIST_ID, &track.id));
+        assert!(!profile.toggle_favorite(&track));
+        assert!(profile
+            .playlist(FAVORITES_PLAYLIST_ID)
+            .expect("auto playlist")
+            .is_empty());
     }
 
     #[test]
