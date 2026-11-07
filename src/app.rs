@@ -677,6 +677,7 @@ impl EchoPortApp {
                 self.mark_dirty();
             }
             Command::SetThemeMode(mode) => {
+                self.state.profile.settings.photo_theme = false;
                 self.state.set_theme_mode(mode);
                 self.mark_dirty();
             }
@@ -690,7 +691,13 @@ impl EchoPortApp {
                 self.state.set_follow_cover_accent(follow);
                 self.mark_dirty();
             }
+            Command::PrepareThemeImage(path) => self.prepare_theme_image(path),
             Command::SetThemeImage(path) => self.set_theme_image(path),
+            Command::SetPhotoTheme(enabled) => {
+                self.state.profile.settings.photo_theme = enabled;
+                self.state.refresh_theme_target();
+                self.mark_dirty();
+            }
             Command::SetThemeImageCropped {
                 source,
                 zoom,
@@ -702,6 +709,7 @@ impl EchoPortApp {
                     let _ = std::fs::remove_file(path);
                 }
                 self.state.theme_image_palette = None;
+                self.state.profile.settings.photo_theme = false;
                 self.state.refresh_theme_target();
                 self.ui.invalidate_theme_image();
                 self.mark_dirty();
@@ -1336,6 +1344,19 @@ impl EchoPortApp {
                     self.prefetch_page_covers();
                     self.prefetch_album_covers();
                     self.mark_dirty();
+                }
+            }
+            AppEvent::ThemeImagePrepared { source, error } => {
+                if let Some(error) = error {
+                    log::warn!("theme image preparation failed: {error}");
+                    self.toast(ToastKind::Error, Key::ThemeImageFailed);
+                } else if let Some(source) = source {
+                    self.ui.crop_theme_image = Some(crate::ui::ThemeImageCrop {
+                        source,
+                        zoom: 1.0,
+                        center_x: 0.5,
+                        center_y: 0.5,
+                    });
                 }
             }
             AppEvent::AudioImported { path, error } => {
@@ -2235,6 +2256,7 @@ impl EchoPortApp {
             return;
         }
         self.state.profile.settings.theme_image = Some(target);
+        self.state.profile.settings.photo_theme = true;
         self.state.theme_image_palette = Some(palette);
         self.state.refresh_theme_target();
         self.ui.invalidate_theme_image();
@@ -2282,12 +2304,56 @@ impl EchoPortApp {
             return;
         }
         self.state.profile.settings.theme_image = Some(target);
+        self.state.profile.settings.photo_theme = true;
         self.state.theme_image_palette = Some(palette);
         self.state.refresh_theme_target();
         self.ui.invalidate_theme_image();
         self.mark_dirty();
         self.toast(ToastKind::Success, Key::ThemeImageApplied);
         self.ctx.request_repaint();
+    }
+
+    fn prepare_theme_image(&mut self, source: std::path::PathBuf) {
+        const MAX_INPUT_BYTES: u64 = 64 * 1024 * 1024;
+        const MAX_PIXELS: u64 = 80_000_000;
+        const MAX_EDGE: u32 = 4096;
+        let too_large = std::fs::metadata(&source)
+            .map(|meta| meta.len() > MAX_INPUT_BYTES)
+            .unwrap_or(true);
+        if too_large {
+            self.toast(ToastKind::Error, Key::ThemeImageFailed);
+            return;
+        }
+        let tx = self.tx.clone();
+        let cache_dir = self.paths.cache_dir.clone();
+        self.toast(ToastKind::Info, Key::ThemeImagePreparing);
+        std::thread::spawn(move || {
+            let outcome = (|| -> Result<std::path::PathBuf, String> {
+                let bytes = std::fs::read(&source).map_err(|err| err.to_string())?;
+                let reader = image::ImageReader::new(std::io::Cursor::new(&bytes))
+                    .with_guessed_format()
+                    .map_err(|err| err.to_string())?;
+                let (width, height) = reader.into_dimensions().map_err(|err| err.to_string())?;
+                if width == 0 || height == 0 || u64::from(width) * u64::from(height) > MAX_PIXELS {
+                    return Err("image dimensions are too large".to_owned());
+                }
+                let prepared = crate::theme::prepare_theme_image_png(&bytes, MAX_EDGE)?;
+                std::fs::create_dir_all(&cache_dir).map_err(|err| err.to_string())?;
+                let target = cache_dir.join("theme-crop-source.png");
+                let temp = cache_dir.join("theme-crop-source.png.tmp");
+                std::fs::write(&temp, prepared).map_err(|err| err.to_string())?;
+                std::fs::rename(&temp, &target).map_err(|err| err.to_string())?;
+                Ok(target)
+            })();
+            let (prepared, error) = match outcome {
+                Ok(path) => (Some(path), None),
+                Err(error) => (None, Some(error)),
+            };
+            let _ = tx.send(AppEvent::ThemeImagePrepared {
+                source: prepared,
+                error,
+            });
+        });
     }
 
     fn ensure_android_music_dir(&mut self) {

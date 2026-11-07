@@ -320,9 +320,23 @@ impl AppState {
             .or_else(|| profile.settings.theme_image.clone())
             .as_deref()
             .and_then(crate::theme::extract_palette_file);
-        let theme = theme_image_palette
-            .map(|palette| Theme::from_image_palette(&palette))
-            .unwrap_or_else(|| Theme::for_mode(theme_mode, None));
+        let photo_theme = std::env::var_os("ECHOPORT_THEME_IMAGE")
+            .map(std::path::PathBuf::from)
+            .filter(|path| path.is_file())
+            .is_some()
+            || (profile.settings.photo_theme
+                && profile
+                    .settings
+                    .theme_image
+                    .as_ref()
+                    .is_some_and(|path| path.is_file()));
+        let theme = if photo_theme {
+            theme_image_palette
+                .map(|palette| Theme::from_image_palette(&palette))
+                .unwrap_or_else(|| Theme::for_mode(theme_mode, None))
+        } else {
+            Theme::for_mode(theme_mode, None)
+        };
         Self {
             lang: profile.settings.language,
             page: Page::Home,
@@ -380,7 +394,25 @@ impl AppState {
             .and_then(crate::theme::extract_palette_file);
     }
 
-    pub fn theme_image_path(&self) -> Option<std::path::PathBuf> {
+    /// Whether the image palette is currently the active full theme.
+    pub fn photo_theme_active(&self) -> bool {
+        if let Some(path) = std::env::var_os("ECHOPORT_THEME_IMAGE") {
+            if std::path::Path::new(&path).is_file() {
+                return true;
+            }
+        }
+        self.profile.settings.photo_theme
+            && self
+                .profile
+                .settings
+                .theme_image
+                .as_ref()
+                .is_some_and(|path| path.is_file())
+    }
+
+    /// Saved image path, even when a preset theme is active. Used by Settings
+    /// for the preview and by the photo-theme tile.
+    pub fn saved_theme_image_path(&self) -> Option<std::path::PathBuf> {
         if let Some(path) = std::env::var_os("ECHOPORT_THEME_IMAGE") {
             let path = std::path::PathBuf::from(path);
             if path.is_file() {
@@ -393,6 +425,13 @@ impl AppState {
             .as_ref()
             .filter(|path| path.is_file())
             .cloned()
+    }
+
+    /// Image path used for the sidebar; only active in the photo theme.
+    pub fn theme_image_path(&self) -> Option<std::path::PathBuf> {
+        self.photo_theme_active()
+            .then(|| self.saved_theme_image_path())
+            .flatten()
     }
 
     pub fn set_language(&mut self, lang: Language) {
@@ -413,10 +452,13 @@ impl AppState {
         } else {
             None
         };
-        let mut target = self
-            .theme_image_palette
-            .map(|image_palette| Theme::from_image_palette(&image_palette))
-            .unwrap_or_else(|| Theme::for_mode(self.theme_mode, palette));
+        let mut target = if self.photo_theme_active() {
+            self.theme_image_palette
+                .map(|image_palette| Theme::from_image_palette(&image_palette))
+                .unwrap_or_else(|| Theme::for_mode(self.theme_mode, palette))
+        } else {
+            Theme::for_mode(self.theme_mode, palette)
+        };
         if let Some(accent) = self.accent_override {
             target = target.with_accent(accent);
         }
@@ -603,7 +645,9 @@ pub enum Command {
     SetUiScale(f32),
     SetFollowCoverAccent(bool),
     SetLyricsEnabled(bool),
+    PrepareThemeImage(std::path::PathBuf),
     SetThemeImage(std::path::PathBuf),
+    SetPhotoTheme(bool),
     SetThemeImageCropped {
         source: std::path::PathBuf,
         zoom: f32,
@@ -666,6 +710,10 @@ pub enum AppEvent {
     /// Album page data (metadata + ordered tracks + same-artist albums).
     AlbumDetailReady(Box<crate::model::AlbumDetail>),
     /// Lyrics fetched for a track (stale results are ignored by track id).
+    ThemeImagePrepared {
+        source: Option<std::path::PathBuf>,
+        error: Option<String>,
+    },
     AudioImported {
         path: Option<std::path::PathBuf>,
         error: Option<String>,

@@ -12,7 +12,7 @@ use crate::state::{Command, Page};
 use crate::theme::{self, Palette, Theme, ThemeMode};
 use crate::ui::style::{self, Icon, Variant};
 use crate::ui::widgets;
-use crate::ui::{theme_mode_hint, theme_mode_label, ThemeImageCrop};
+use crate::ui::{theme_mode_hint, theme_mode_label};
 
 pub fn draw(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec<Command>) {
     widgets::page_scroll(ui, |ui| {
@@ -174,35 +174,58 @@ fn appearance(
         );
         ui.add_space(8.0);
         let inner_w = width - 32.0;
-        let gap = 10.0;
-        let tile_w = (inner_w - gap * 2.0) / 3.0;
+        let gap = 8.0;
+        let tile_w = (inner_w - gap * 3.0) / 4.0;
+        let photo_active = app.state.photo_theme_active();
+        let saved_image = app.state.saved_theme_image_path();
+        let photo_texture = saved_image
+            .as_ref()
+            .and_then(|path| app.ui.theme_image_texture(ui.ctx(), path));
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 0.0;
             for (index, mode) in ThemeMode::ALL.into_iter().enumerate() {
                 if index > 0 {
                     ui.add_space(gap);
                 }
-                let selected = app.state.theme_mode == mode;
+                let selected = !photo_active && app.state.theme_mode == mode;
                 let label = theme_mode_label(&app.state, mode);
                 let clicked =
                     theme_tile(ui, theme, mode, label, selected, tile_w, palette).clicked();
-                if clicked && !selected && app.state.theme_image_palette.is_none() {
+                if clicked && !selected {
                     pending.push(Command::SetThemeMode(mode));
+                }
+            }
+            ui.add_space(gap);
+            let clicked = photo_theme_tile(
+                ui,
+                theme,
+                app.state.tr(Key::PhotoTheme),
+                photo_active,
+                tile_w,
+                photo_texture.as_ref(),
+                app.state.theme_image_palette.as_ref(),
+            )
+            .clicked();
+            if clicked && !photo_active {
+                if saved_image.is_some() {
+                    pending.push(Command::SetPhotoTheme(true));
+                } else {
+                    begin_theme_image_pick(app, pending);
                 }
             }
         });
         ui.add_space(8.0);
-        ui.label(
-            RichText::new(theme_mode_hint(&app.state, app.state.theme_mode))
-                .size(10.5)
-                .color(theme.text_weak),
-        );
-        if app.state.theme_image_palette.is_some() {
-            ui.add_space(4.0);
+        if photo_active {
             ui.label(
                 RichText::new(app.state.tr(Key::ThemeImageAutoHint))
                     .size(10.0)
                     .color(theme.accent),
+            );
+        } else {
+            ui.label(
+                RichText::new(theme_mode_hint(&app.state, app.state.theme_mode))
+                    .size(10.5)
+                    .color(theme.text_weak),
             );
         }
         ui.add_space(14.0);
@@ -274,21 +297,11 @@ fn appearance(
                     )
                     .clicked()
                     {
-                        if let Some(path) = crate::platform::pick_file(
-                            app.state.tr(Key::ThemeImage),
-                            &[("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])],
-                        ) {
-                            app.ui.crop_theme_image = Some(ThemeImageCrop {
-                                source: path,
-                                zoom: 1.0,
-                                center_x: 0.5,
-                                center_y: 0.5,
-                            });
-                        }
+                        begin_theme_image_pick(app, pending);
                     }
                 },
             );
-            let current = app.state.theme_image_path();
+            let current = app.state.saved_theme_image_path();
             if let Some(path) = current {
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
@@ -456,6 +469,114 @@ fn changelog(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, width: f32) {
             }
         }
     });
+}
+
+fn begin_theme_image_pick(app: &mut EchoPortApp, pending: &mut Vec<Command>) {
+    if let Some(path) = crate::platform::pick_file(
+        app.state.tr(Key::ThemeImage),
+        &[("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])],
+    ) {
+        pending.push(Command::PrepareThemeImage(path));
+    }
+}
+
+fn photo_theme_tile(
+    ui: &mut Ui,
+    theme: &Theme,
+    label: &str,
+    selected: bool,
+    width: f32,
+    texture: Option<&egui::TextureHandle>,
+    palette: Option<&Palette>,
+) -> egui::Response {
+    let height = 72.0;
+    let label_h = 20.0;
+    let (rect, response) =
+        ui.allocate_exact_size(Vec2::new(width, height + label_h), Sense::click());
+    let hover =
+        ui.ctx()
+            .animate_bool_with_time(response.id.with("hover"), response.hovered(), 0.12);
+    let tile = Rect::from_min_size(rect.min, Vec2::new(width, height));
+    let base = palette
+        .map(|palette| theme::mix(palette.soft, theme.surface, 0.25))
+        .unwrap_or(theme.surface);
+    ui.painter()
+        .rect_filled(tile, CornerRadius::same(style::R_MD), base);
+    if let Some(texture) = texture {
+        let size = texture.size_vec2();
+        if size.x > 0.0 && size.y > 0.0 {
+            let tile_aspect = tile.width() / tile.height();
+            let image_aspect = size.x / size.y;
+            let mut uv = Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0));
+            if image_aspect > tile_aspect {
+                let visible = tile_aspect / image_aspect;
+                uv.min.x = (1.0 - visible) * 0.5;
+                uv.max.x = 1.0 - uv.min.x;
+            } else {
+                let visible = image_aspect / tile_aspect;
+                uv.min.y = (1.0 - visible) * 0.5;
+                uv.max.y = 1.0 - uv.min.y;
+            }
+            ui.painter().image(texture.id(), tile, uv, Color32::WHITE);
+            ui.painter().rect_filled(
+                tile,
+                CornerRadius::same(style::R_MD),
+                Color32::from_black_alpha(28),
+            );
+        }
+    } else {
+        style::paint_icon(
+            ui.painter(),
+            Icon::Plus,
+            Rect::from_center_size(tile.center(), Vec2::splat(22.0)),
+            theme.text_weak,
+        );
+    }
+    ui.painter().rect_stroke(
+        tile,
+        CornerRadius::same(style::R_MD),
+        Stroke::new(
+            if selected { 2.0_f32 } else { 1.0_f32 },
+            if selected {
+                theme.accent
+            } else if hover > 0.01 {
+                theme::mix(theme.border, theme.accent, 0.45)
+            } else {
+                theme.border
+            },
+        ),
+        StrokeKind::Inside,
+    );
+    if selected {
+        let badge = Rect::from_center_size(
+            Pos2::new(tile.right() - 11.0, tile.top() + 11.0),
+            Vec2::splat(14.0),
+        );
+        ui.painter()
+            .circle_filled(badge.center(), 7.0, theme.accent);
+        style::paint_icon(
+            ui.painter(),
+            Icon::Check,
+            badge.shrink(3.0),
+            theme.on_accent,
+        );
+    }
+    style::paint_elided(
+        ui.painter(),
+        Pos2::new(rect.left() + 2.0, tile.bottom() + 11.0),
+        label,
+        style::font(10.5),
+        if selected {
+            theme.accent
+        } else {
+            theme.text_weak
+        },
+        width - 4.0,
+    );
+    if response.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    response
 }
 
 /// A miniature mock window that shows the actual palette of `mode`:
