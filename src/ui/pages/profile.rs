@@ -50,11 +50,6 @@ fn header(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme) {
                     .size(26.0)
                     .color(theme.text),
             );
-            ui.label(
-                RichText::new(app.state.tr(Key::PrivacyNote))
-                    .size(11.5)
-                    .color(theme.text_weak),
-            );
         });
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             if style::button_icon(
