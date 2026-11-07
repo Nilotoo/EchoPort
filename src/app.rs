@@ -1351,12 +1351,16 @@ impl EchoPortApp {
                     log::warn!("theme image preparation failed: {error}");
                     self.toast(ToastKind::Error, Key::ThemeImageFailed);
                 } else if let Some(source) = source {
+                    // The prepared source always uses the same cache filename;
+                    // drop the previous texture so the crop dialog sees the new one.
+                    self.ui.invalidate_theme_image();
                     self.ui.crop_theme_image = Some(crate::ui::ThemeImageCrop {
                         source,
                         zoom: 1.0,
                         center_x: 0.5,
                         center_y: 0.5,
                     });
+                    self.ctx.request_repaint();
                 }
             }
             AppEvent::AudioImported { path, error } => {
@@ -2315,7 +2319,7 @@ impl EchoPortApp {
 
     fn prepare_theme_image(&mut self, source: std::path::PathBuf) {
         const MAX_INPUT_BYTES: u64 = 64 * 1024 * 1024;
-        const MAX_PIXELS: u64 = 80_000_000;
+        const MAX_PIXELS: u64 = 100_000_000;
         const MAX_EDGE: u32 = 4096;
         let too_large = std::fs::metadata(&source)
             .map(|meta| meta.len() > MAX_INPUT_BYTES)
@@ -2342,6 +2346,7 @@ impl EchoPortApp {
                 let target = cache_dir.join("theme-crop-source.png");
                 let temp = cache_dir.join("theme-crop-source.png.tmp");
                 std::fs::write(&temp, prepared).map_err(|err| err.to_string())?;
+                let _ = std::fs::remove_file(&target);
                 std::fs::rename(&temp, &target).map_err(|err| err.to_string())?;
                 Ok(target)
             })();

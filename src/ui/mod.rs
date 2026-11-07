@@ -809,6 +809,29 @@ fn theme_image_crop_dialog(
                     crop.center_x = (crop.center_x + delta.x / image_rect.width()).clamp(0.0, 1.0);
                     crop.center_y = (crop.center_y + delta.y / image_rect.height()).clamp(0.0, 1.0);
                 }
+                // Arrow keys nudge the crop by one source pixel for fine control.
+                let (left, right, up, down) = ctx.input(|input| {
+                    (
+                        input.key_pressed(egui::Key::ArrowLeft),
+                        input.key_pressed(egui::Key::ArrowRight),
+                        input.key_pressed(egui::Key::ArrowUp),
+                        input.key_pressed(egui::Key::ArrowDown),
+                    )
+                });
+                let dx = 1.0 / image_size.x.max(1.0);
+                let dy = 1.0 / image_size.y.max(1.0);
+                if left {
+                    crop.center_x = (crop.center_x - dx).clamp(0.0, 1.0);
+                }
+                if right {
+                    crop.center_x = (crop.center_x + dx).clamp(0.0, 1.0);
+                }
+                if up {
+                    crop.center_y = (crop.center_y - dy).clamp(0.0, 1.0);
+                }
+                if down {
+                    crop.center_y = (crop.center_y + dy).clamp(0.0, 1.0);
+                }
                 if response.hovered() {
                     ctx.set_cursor_icon(egui::CursorIcon::Grab);
                 }
