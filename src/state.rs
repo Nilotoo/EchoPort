@@ -573,6 +573,15 @@ impl AppState {
         } else {
             Theme::for_mode(self.theme_mode, palette)
         };
+        // In full-window photo mode, follow-cover-accent should tint the
+        // controls (accent/highlight/macaron/glow) just like the default
+        // themes, while keeping the photo-derived readability surfaces.
+        // Sidebar-only photo mode deliberately keeps the image palette.
+        if full_active {
+            if let (true, Some(cover_palette)) = (self.follow_cover_accent, palette) {
+                target = target.apply_cover_palette(cover_palette);
+            }
+        }
         if let Some(accent) = self.accent_override {
             target = target.with_accent(accent);
         }

@@ -44,6 +44,7 @@ pub const RELEASES: &[ReleaseNote] = &[
             "Errors now show a bottom-right toast with a View & copy logs action; the runtime log is written to disk. If the previous launch ended unexpectedly, the next start offers to open and copy the crash log.",
             "The last playing track, queue, seek position, repeat/shuffle mode, volume and page are saved on exit and restored paused on the next launch.",
             "Photo-theme contrast: weaker captions were strengthened globally, dark photo themes use the readable Ink surface baseline, and dialog description boxes now share the name field style with proper inner cursor padding. Multiline description fields request IME explicitly for Chinese input.",
+            "Full-window photo mode now follows the playing cover's accent colour (when Follow cover accent is on), while sidebar-only photo mode keeps the image palette.",
         ],
         items_zh: &[
             "Favourite Tracks 自动歌单：按顺序镜像全部收藏歌曲，不可删除、不可重命名、不可换封面、不可手动增删。",
@@ -54,6 +55,7 @@ pub const RELEASES: &[ReleaseNote] = &[
             "错误会在右下角弹出提示，并提供“查看并复制日志”；运行日志写入本地文件。上次异常退出后，下次启动会询问是否打开并复制日志。",
             "退出时保存当前歌曲、队列、进度、循环/随机模式、音量和页面，下次启动恢复为暂停状态。",
             "照片主题对比度：说明文字整体加深，暗色照片主题改用与墨蓝一致的表面基色；歌单/资料描述框与名称框样式统一，增加内边距，并显式请求输入法以支持中文。",
+            "全屏照片模式开启“跟随封面强调色”后，会像默认主题一样用正在播放的封面给控件染色；仅侧栏图片模式保持图片自身调色板。",
         ],
     },
     ReleaseNote {
