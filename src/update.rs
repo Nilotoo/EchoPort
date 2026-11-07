@@ -8,7 +8,25 @@ use crate::net::Http;
 
 /// Public repository used for update checks. Overridable at runtime for forks.
 pub const DEFAULT_REPO: &str = "Nilotoo/EchoPort";
+/// Mainland-China mirror used for release downloads. The app never embeds a
+/// Gitee token: public releases are read anonymously.
+pub const DEFAULT_GITEE_REPO: &str = "nilotoo_art/echo-port";
 const CHECK_INTERVAL_HOURS: u64 = 6;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UpdateSource {
+    GitHub,
+    Gitee,
+}
+
+impl UpdateSource {
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::GitHub => "github",
+            Self::Gitee => "gitee",
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UpdateAsset {
@@ -69,6 +87,28 @@ pub fn trusted_github_url(url: &str) -> bool {
         && parsed.password().is_none()
 }
 
+/// Release assets/pages may come from GitHub or the Gitee mirror. Gitee asset
+/// downloads redirect to `*.gitee.com`, so the whole official domain is trusted
+/// only after an HTTPS URL check.
+pub fn trusted_update_url(url: &str) -> bool {
+    if url.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return false;
+    }
+    let Ok(parsed) = url::Url::parse(url) else {
+        return false;
+    };
+    parsed.scheme() == "https"
+        && parsed.host_str().is_some_and(|host| {
+            let host = host.to_ascii_lowercase();
+            matches!(
+                host.as_str(),
+                "github.com" | "objects.githubusercontent.com" | "gitee.com"
+            ) || host.ends_with(".gitee.com")
+        })
+        && parsed.username().is_empty()
+        && parsed.password().is_none()
+}
+
 /// The `.sha256` sibling asset for a downloaded asset, if published.
 pub fn checksum_asset<'a>(info: &'a UpdateInfo, asset: &'a UpdateAsset) -> Option<&'a UpdateAsset> {
     let wanted = format!("{}.sha256", asset.name);
@@ -87,6 +127,100 @@ pub fn repo() -> String {
     } else {
         DEFAULT_REPO.to_owned()
     }
+}
+
+pub fn gitee_repo() -> String {
+    let candidate = std::env::var("ECHOPORT_GITEE_REPO")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_GITEE_REPO.to_owned());
+    if valid_repo(&candidate) {
+        candidate
+    } else {
+        DEFAULT_GITEE_REPO.to_owned()
+    }
+}
+
+fn forced_source() -> Option<UpdateSource> {
+    let value = std::env::var("ECHOPORT_UPDATE_SOURCE").ok()?;
+    match value.trim().to_ascii_lowercase().as_str() {
+        "github" | "gh" => Some(UpdateSource::GitHub),
+        "gitee" | "cn" => Some(UpdateSource::Gitee),
+        _ => None,
+    }
+}
+
+fn timezone_is_china(value: &str) -> bool {
+    let value = value.trim().to_ascii_lowercase();
+    value.contains("asia/shanghai")
+        || value.contains("asia/chongqing")
+        || value.contains("asia/harbin")
+        || value.contains("asia/urumqi")
+        || value.contains("asia/kashgar")
+        || value.contains("china standard time")
+        || value.contains("prc")
+        || value.contains("cst-8")
+}
+
+fn timezone_hint() -> Option<String> {
+    if let Ok(tz) = std::env::var("TZ") {
+        if !tz.trim().is_empty() {
+            return Some(tz);
+        }
+    }
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        if let Ok(tz) = std::fs::read_to_string("/etc/timezone") {
+            if !tz.trim().is_empty() {
+                return Some(tz);
+            }
+        }
+        if let Ok(path) = std::fs::read_link("/etc/localtime") {
+            return Some(path.to_string_lossy().into_owned());
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(output) = std::process::Command::new("reg")
+            .args([
+                "query",
+                r"HKLM\SYSTEM\CurrentControlSet\Control\TimeZoneInformation",
+                "/v",
+                "TimeZoneKeyName",
+            ])
+            .output()
+        {
+            let text = String::from_utf8_lossy(&output.stdout);
+            if !text.trim().is_empty() {
+                return Some(text.into_owned());
+            }
+        }
+    }
+    None
+}
+
+/// Approximate Mainland-China detection without an external geo-IP call.
+/// Timezone/locale are local-only; `ECHOPORT_UPDATE_SOURCE` is a manual
+/// override for edge cases (VPNs, custom images, Windows locale mismatches).
+pub fn mainland_china() -> bool {
+    if let Some(tz) = timezone_hint() {
+        return timezone_is_china(&tz);
+    }
+    let locale = std::env::var("LC_ALL")
+        .or_else(|_| std::env::var("LANG"))
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    locale.starts_with("zh_cn") || locale.starts_with("zh-cn")
+}
+
+pub fn preferred_source() -> UpdateSource {
+    forced_source().unwrap_or_else(|| {
+        if mainland_china() {
+            UpdateSource::Gitee
+        } else {
+            UpdateSource::GitHub
+        }
+    })
 }
 
 /// Only `owner/name` with GitHub-safe characters is accepted; this keeps an
@@ -115,8 +249,7 @@ fn safe_version(value: &str) -> bool {
 }
 
 fn safe_release_url(url: &str) -> bool {
-    url.starts_with("https://github.com/")
-        && !url.chars().any(|c| c.is_whitespace() || c.is_control())
+    trusted_update_url(url)
 }
 
 /// Only expose versions we can display and compare safely.
@@ -153,8 +286,39 @@ pub fn is_newer(latest: &str, current: &str) -> bool {
     latest > current
 }
 
-/// Query GitHub for the latest release. Returns `None` when up to date.
+/// Query the preferred release source. Mainland-China installs use the Gitee
+/// mirror; other regions use GitHub. An explicit `ECHOPORT_UPDATE_SOURCE`
+/// disables automatic choice/fallback.
 pub fn check(http: &Http, current_version: &str) -> Result<Option<UpdateInfo>, String> {
+    let primary = preferred_source();
+    let forced = forced_source().is_some();
+    match primary {
+        UpdateSource::GitHub => {
+            log::info!("update source: github");
+            let result = check_github(http, current_version);
+            // GitHub is often unreachable from Mainland China, including on
+            // machines whose timezone was configured to another region. Fail
+            // over to the anonymous Gitee mirror instead of losing updates.
+            if !forced && result.is_err() {
+                log::info!("GitHub update check failed; trying Gitee mirror");
+                return check_gitee(http, current_version);
+            }
+            result
+        }
+        UpdateSource::Gitee => {
+            log::info!("update source: gitee");
+            let result = check_gitee(http, current_version);
+            if !forced && result.is_err() {
+                log::info!("Gitee update check failed; trying GitHub");
+                return check_github(http, current_version);
+            }
+            result
+        }
+    }
+}
+
+/// Query GitHub for the latest release. Returns `None` when up to date.
+fn check_github(http: &Http, current_version: &str) -> Result<Option<UpdateInfo>, String> {
     let repo = repo();
     let release_url = format!("https://api.github.com/repos/{repo}/releases/latest");
     let headers = [
@@ -230,6 +394,105 @@ pub fn check(http: &Http, current_version: &str) -> Result<Option<UpdateInfo>, S
     }
 }
 
+fn check_gitee(http: &Http, current_version: &str) -> Result<Option<UpdateInfo>, String> {
+    let repo = gitee_repo();
+    let release_url = format!("https://gitee.com/api/v5/repos/{repo}/releases/latest");
+    match http.get_text(&release_url, &[("Accept", "application/json")]) {
+        Ok(text) => {
+            let value: serde_json::Value =
+                serde_json::from_str(&text).map_err(|err| err.to_string())?;
+            let tag = value
+                .get("tag_name")
+                .and_then(|value| value.as_str())
+                .unwrap_or_default();
+            if tag.is_empty() || !is_newer(tag, current_version) {
+                return Ok(None);
+            }
+            let Some(latest) = sanitized_latest(tag) else {
+                return Ok(None);
+            };
+            let url = value
+                .get("html_url")
+                .and_then(|value| value.as_str())
+                .filter(|url| safe_release_url(url))
+                .map(str::to_owned)
+                .unwrap_or_else(|| format!("https://gitee.com/{repo}/releases/tag/{tag}"));
+            let title = value
+                .get("name")
+                .and_then(|value| value.as_str())
+                .filter(|name| !name.trim().is_empty())
+                .unwrap_or(tag)
+                .to_owned();
+            let notes = value
+                .get("body")
+                .and_then(|value| value.as_str())
+                .unwrap_or_default()
+                .to_owned();
+            let published_at = value
+                .get("created_at")
+                .or_else(|| value.get("published_at"))
+                .and_then(|value| value.as_str())
+                .map(str::to_owned);
+            let assets = value
+                .get("assets")
+                .and_then(|value| value.as_array())
+                .map(|assets| {
+                    assets
+                        .iter()
+                        .filter_map(|asset| {
+                            Some(UpdateAsset {
+                                name: asset.get("name")?.as_str()?.to_owned(),
+                                url: asset.get("browser_download_url")?.as_str()?.to_owned(),
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            Ok(Some(UpdateInfo {
+                current: current_version.to_owned(),
+                latest,
+                title,
+                url,
+                notes,
+                published_at,
+                assets,
+            }))
+        }
+        Err(err) if err.is_status(404) || err.is_status(403) => {
+            check_gitee_version_file(http, &repo, current_version)
+        }
+        Err(err) => Err(err.to_string()),
+    }
+}
+
+fn check_gitee_version_file(
+    http: &Http,
+    repo: &str,
+    current_version: &str,
+) -> Result<Option<UpdateInfo>, String> {
+    for branch in ["main", "master"] {
+        let url = format!("https://gitee.com/{repo}/raw/{branch}/VERSION");
+        if let Ok(text) = http.get_text(&url, &[]) {
+            let Some(latest) = sanitized_latest(text.trim()) else {
+                return Ok(None);
+            };
+            if is_newer(&latest, current_version) {
+                return Ok(Some(UpdateInfo {
+                    current: current_version.to_owned(),
+                    latest: latest.clone(),
+                    title: format!("EchoPort {latest}"),
+                    url: format!("https://gitee.com/{repo}/releases"),
+                    notes: String::new(),
+                    published_at: None,
+                    assets: Vec::new(),
+                }));
+            }
+            return Ok(None);
+        }
+    }
+    Ok(None)
+}
+
 fn check_version_file(
     http: &Http,
     repo: &str,
@@ -289,6 +552,17 @@ mod tests {
         ));
         assert!(!trusted_github_url("https://github.com.evil/a.tar.gz"));
         assert!(!trusted_github_url("http://github.com/a.tar.gz"));
+        assert!(trusted_update_url(
+            "https://gitee.com/nilotoo_art/echo-port/releases/download/v1/a.tar.gz"
+        ));
+        assert!(trusted_update_url(
+            "https://foruda.gitee.com/attach_file/1/a.tar.gz?token=x"
+        ));
+        assert!(!trusted_update_url("https://gitee.com.evil/a.tar.gz"));
+        assert!(timezone_is_china("Asia/Shanghai"));
+        assert!(timezone_is_china("Asia/Urumqi"));
+        assert!(timezone_is_china("China Standard Time"));
+        assert!(!timezone_is_china("Europe/London"));
     }
 
     #[test]

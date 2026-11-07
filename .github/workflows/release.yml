@@ -109,6 +109,9 @@ jobs:
     needs: [quality, linux, windows-setup]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -134,3 +137,47 @@ jobs:
         with:
           files: artifacts/**/*
           generate_release_notes: true
+
+      - name: Mirror repository and publish Gitee Release
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_OWNER: ${{ vars.GITEE_OWNER }}
+          GITEE_REPO: ${{ vars.GITEE_REPO }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          owner="${GITEE_OWNER:-nilotoo_art}"
+          repo="${GITEE_REPO:-echo-port}"
+          if [ -z "${GITEE_TOKEN:-}" ]; then
+            echo "::notice::GITEE_TOKEN is not configured; skipping Gitee mirror."
+            exit 0
+          fi
+
+          git config user.name "EchoPort CI"
+          git config user.email "ci@echoport.local"
+          git remote add gitee "https://${owner}:${GITEE_TOKEN}@gitee.com/${owner}/${repo}.git"
+          git push gitee HEAD:refs/heads/main --tags --force
+
+          api="https://gitee.com/api/v5/repos/${owner}/${repo}"
+          release_json=$(curl -fsS -X POST "${api}/releases"             --data-urlencode "access_token=${GITEE_TOKEN}"             --data-urlencode "tag_name=${TAG}"             --data-urlencode "name=EchoPort ${TAG}"             --data-urlencode "target_commitish=main"             --data-urlencode "body=EchoPort release ${TAG}") || true
+          release_id=$(printf '%s' "${release_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))' 2>/dev/null || true)
+          if [ -z "${release_id}" ]; then
+            releases_json=$(curl -fsS "${api}/releases?access_token=${GITEE_TOKEN}&per_page=100")
+            release_id=$(printf '%s' "${releases_json}" | TAG="${TAG}" python3 -c 'import json,os,sys; tag=os.environ["TAG"]; print(next((r.get("id","") for r in json.load(sys.stdin) if r.get("tag_name")==tag),""))' 2>/dev/null || true)
+          fi
+          if [ -z "${release_id}" ]; then
+            echo "::error::Could not create or find Gitee release ${TAG}"
+            exit 1
+          fi
+
+          failed=0
+          while IFS= read -r -d '' file; do
+            echo "Uploading $(basename "$file") to Gitee ${TAG}"
+            if ! curl -fsS -X POST "${api}/releases/${release_id}/attach_files"               -F "access_token=${GITEE_TOKEN}"               -F "file=@${file}"; then
+              echo "::warning::Failed to upload ${file} to Gitee"
+              failed=1
+            fi
+          done < <(find artifacts -type f \( -name '*.exe' -o -name '*.tar.gz' -o -name '*.tar.gz.sha256' -o -name '*.exe.sha256' \) -print0)
+          if [ "${failed}" -ne 0 ]; then
+            exit 1
+          fi
