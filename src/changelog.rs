@@ -33,9 +33,10 @@ pub const RELEASES: &[ReleaseNote] = &[
     ReleaseNote {
         version: "0.4.1",
         date: "2026-11-07",
-        title_en: "Favourite Tracks, full-window photo and UI polish",
-        title_zh: "Favourite Tracks、全屏照片与 UI 修正",
+        title_en: "Favourite Tracks, full-window photo, Gitee updates and UI polish",
+        title_zh: "Favourite Tracks、全屏照片、Gitee 更新源与 UI 修正",
         items_en: &[
+            "Update source: Mainland-China installs prefer the Gitee release mirror (nilotoo_art/echo-port); other regions use GitHub, with automatic fallback when the preferred source is unreachable.",
             "Favourite Tracks: a protected auto-playlist mirrors every favourite in order and cannot be deleted, renamed, re-covered or edited manually.",
             "Image theme second layout: full-window photo mode with translucent panels. It uses the uncropped image and rejects sources below 960 × 480 (both sides at least 480 px).",
             "Full-window photos are decoded off the UI thread, stored as bounded JPEGs, and rendered with the full-image palette and stronger scrims, eliminating the first-switch freeze and keeping text readable over light or dark photos.",
@@ -45,9 +46,9 @@ pub const RELEASES: &[ReleaseNote] = &[
             "The last playing track, queue, seek position, repeat/shuffle mode, volume and page are saved on exit and restored paused on the next launch.",
             "Photo-theme contrast: weaker captions were strengthened globally, dark photo themes use the readable Ink surface baseline, and dialog description boxes now share the name field style with proper inner cursor padding. Multiline description fields request IME explicitly for Chinese input.",
             "Full-window photo mode now follows the playing cover's accent colour (when Follow cover accent is on), while sidebar-only photo mode keeps the image palette.",
-            "Update source: Mainland-China installs prefer the Gitee release mirror (nilotoo_art/echo-port); other regions use GitHub, with automatic fallback when the preferred source is unreachable.",
         ],
         items_zh: &[
+            "更新源：中国大陆优先使用 Gitee 发行版镜像（nilotoo_art/echo-port），其他地区使用 GitHub；首选源不可用时自动回退。",
             "Favourite Tracks 自动歌单：按顺序镜像全部收藏歌曲，不可删除、不可重命名、不可换封面、不可手动增删。",
             "图片主题新增全屏照片布局：使用未裁剪原图覆盖整个应用，面板半透明；低于 960×480（两边至少 480px）的图片不允许使用。",
             "全屏照片改为后台解码、保存为受限制的 JPEG，并使用全图调色板和更强的遮罩；首次切换不再卡顿，亮/暗照片上的文字都保持可读。",
@@ -57,7 +58,6 @@ pub const RELEASES: &[ReleaseNote] = &[
             "退出时保存当前歌曲、队列、进度、循环/随机模式、音量和页面，下次启动恢复为暂停状态。",
             "照片主题对比度：说明文字整体加深，暗色照片主题改用与墨蓝一致的表面基色；歌单/资料描述框与名称框样式统一，增加内边距，并显式请求输入法以支持中文。",
             "全屏照片模式开启“跟随封面强调色”后，会像默认主题一样用正在播放的封面给控件染色；仅侧栏图片模式保持图片自身调色板。",
-            "更新源：中国大陆优先使用 Gitee 发行版镜像（nilotoo_art/echo-port），其他地区使用 GitHub；首选源不可用时自动回退。",
         ],
     },
     ReleaseNote {
@@ -152,5 +152,11 @@ mod tests {
             assert!(!release.items(Language::Zh).is_empty());
         }
         assert!(RELEASES.iter().any(|release| release.version == "0.4.1"));
+        let latest = RELEASES
+            .iter()
+            .find(|release| release.version == "0.4.1")
+            .unwrap();
+        assert!(latest.items_en.iter().any(|item| item.contains("Gitee")));
+        assert!(latest.items_zh.iter().any(|item| item.contains("Gitee")));
     }
 }
