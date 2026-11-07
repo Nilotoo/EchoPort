@@ -184,10 +184,9 @@ fn appearance(
                 }
                 let selected = app.state.theme_mode == mode;
                 let label = theme_mode_label(&app.state, mode);
-                if !app.state.theme_image_palette.is_some()
-                    && theme_tile(ui, theme, mode, label, selected, tile_w, palette).clicked()
-                    && !selected
-                {
+                let clicked =
+                    theme_tile(ui, theme, mode, label, selected, tile_w, palette).clicked();
+                if clicked && !selected && app.state.theme_image_palette.is_none() {
                     pending.push(Command::SetThemeMode(mode));
                 }
             }
