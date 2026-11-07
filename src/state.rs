@@ -275,6 +275,10 @@ pub struct AppState {
 
     /// Colours extracted from the optional custom theme image.
     pub theme_image_palette: Option<Palette>,
+    /// Palette extracted from the uncropped full-window source. The crop and
+    /// the full photo can have very different brightness, so full mode must not
+    /// inherit text colours from the sidebar crop.
+    pub full_theme_palette: Option<Palette>,
     /// Accent colours currently follow cover art (user toggle).
     pub follow_cover_accent: bool,
     /// Keyboard step sizes (overridable from Lua config later).
@@ -342,6 +346,26 @@ impl AppState {
             .or_else(|| profile.settings.theme_image.clone())
             .as_deref()
             .and_then(crate::theme::extract_palette_file);
+        let full_theme_source = std::env::var_os("ECHOPORT_THEME_IMAGE")
+            .map(std::path::PathBuf::from)
+            .filter(|path| path.is_file())
+            .or_else(|| {
+                profile
+                    .settings
+                    .theme_image_original
+                    .clone()
+                    .filter(|path| path.is_file())
+            })
+            .or_else(|| {
+                profile
+                    .settings
+                    .theme_image
+                    .clone()
+                    .filter(|path| path.is_file())
+            });
+        let full_theme_palette = full_theme_source
+            .as_deref()
+            .and_then(crate::theme::extract_palette_file);
         let photo_theme = std::env::var_os("ECHOPORT_THEME_IMAGE")
             .map(std::path::PathBuf::from)
             .filter(|path| path.is_file())
@@ -352,16 +376,14 @@ impl AppState {
                     .theme_image
                     .as_ref()
                     .is_some_and(|path| path.is_file()));
-        let full_theme = photo_theme
-            && profile.settings.theme_image_full
-            && full_theme_image_ok
-            && profile
-                .settings
-                .theme_image_original
-                .as_ref()
-                .is_some_and(|path| path.is_file());
-        let theme = if photo_theme {
+        let full_theme = photo_theme && profile.settings.theme_image_full && full_theme_image_ok;
+        let active_palette = if full_theme {
+            full_theme_palette.or(theme_image_palette)
+        } else {
             theme_image_palette
+        };
+        let theme = if photo_theme {
+            active_palette
                 .map(|palette| Theme::from_image_palette(&palette))
                 .unwrap_or_else(|| Theme::for_mode(theme_mode, None))
         } else {
@@ -395,6 +417,7 @@ impl AppState {
             tooling: ToolingStatus::default(),
             script: ScriptStatus::default(),
             theme_image_palette,
+            full_theme_palette,
             follow_cover_accent,
             seek_step: 5.0,
             volume_step: 0.05,
@@ -426,6 +449,10 @@ impl AppState {
             .profile
             .settings
             .theme_image
+            .as_deref()
+            .and_then(crate::theme::extract_palette_file);
+        self.full_theme_palette = self
+            .full_theme_image_source()
             .as_deref()
             .and_then(crate::theme::extract_palette_file);
     }
@@ -472,7 +499,13 @@ impl AppState {
 
     /// Best source for full-window mode: uncropped copy, QA override, then the
     /// saved crop for profiles created before the original was retained.
-    fn full_theme_image_source(&self) -> Option<std::path::PathBuf> {
+    pub fn full_theme_image_source(&self) -> Option<std::path::PathBuf> {
+        if let Some(path) = std::env::var_os("ECHOPORT_THEME_IMAGE") {
+            let path = std::path::PathBuf::from(path);
+            if path.is_file() {
+                return Some(path);
+            }
+        }
         if let Some(path) = self.profile.settings.theme_image_original.clone() {
             if path.is_file() {
                 return Some(path);
@@ -495,11 +528,14 @@ impl AppState {
 
     /// Re-evaluate the full-theme minimum size after a new image/profile.
     pub fn refresh_full_theme_validation(&mut self) {
-        self.theme_image_full_ok = self
-            .full_theme_image_source()
+        let source = self.full_theme_image_source();
+        self.theme_image_full_ok = source
             .as_deref()
             .map(crate::theme::theme_image_meets_full_min)
             .unwrap_or(false);
+        self.full_theme_palette = source
+            .as_deref()
+            .and_then(crate::theme::extract_palette_file);
         if !self.theme_image_full_ok {
             self.profile.settings.theme_image_full = false;
         }
@@ -524,8 +560,14 @@ impl AppState {
         } else {
             None
         };
-        let mut target = if self.photo_theme_active() {
+        let full_active = self.full_theme_image_active();
+        let image_palette = if full_active {
+            self.full_theme_palette.or(self.theme_image_palette)
+        } else {
             self.theme_image_palette
+        };
+        let mut target = if self.photo_theme_active() {
+            image_palette
                 .map(|image_palette| Theme::from_image_palette(&image_palette))
                 .unwrap_or_else(|| Theme::for_mode(self.theme_mode, palette))
         } else {
@@ -540,7 +582,7 @@ impl AppState {
         if let Some(macaron) = self.macaron_override {
             target = target.with_macaron(macaron);
         }
-        if self.full_theme_image_active() {
+        if full_active {
             target = target.translucent();
         }
         self.theme_target = target;

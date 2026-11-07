@@ -22,8 +22,8 @@ use crate::i18n::Key;
 use crate::library;
 use crate::model::{
     format_duration, DownloadJob, DownloadProgress, JobState, Platform, PlaybackState,
-    PlaybackStatus, PlaylistShare, Profile, ProfileShare, RepeatMode, SearchResults, Settings,
-    SongBackground, Track, PLAYLIST_SHARE_FORMAT, PROFILE_SHARE_FORMAT,
+    PlaybackStatus, PlaylistShare, Profile, ProfileShare, RepeatMode, SearchResults, SessionState,
+    Settings, SongBackground, Track, PLAYLIST_SHARE_FORMAT, PROFILE_SHARE_FORMAT,
 };
 use crate::net::Http;
 use crate::providers;
@@ -40,6 +40,9 @@ use crate::theme::{self, Theme, ThemeMode};
 use crate::ui;
 use base64::Engine as _;
 use sha2::{Digest, Sha256};
+
+#[derive(Clone, Debug)]
+pub struct CrashNotice;
 
 struct ShotPlan {
     path: PathBuf,
@@ -82,6 +85,16 @@ pub struct EchoPortApp {
     pub splash_done: bool,
     fake_update_sent: bool,
     quitting: bool,
+    /// Shown bottom-right on the first frame after an unclean shutdown.
+    pub crash_notice: Option<CrashNotice>,
+    /// Last time the session snapshot was marked dirty while playing.
+    last_session_mark: Instant,
+    /// Seek target applied once a restored or explicitly resumed track is loaded.
+    resume_after_load: f64,
+    /// True between restoring a paused session and the first playback command.
+    /// The audio engine is intentionally empty at this point, so its Idle status
+    /// must not overwrite the restored position.
+    restored_session: bool,
     /// Low-res cover files fetched for the current search results.
     search_cover_paths: Vec<PathBuf>,
     search_generation: u64,
@@ -205,6 +218,20 @@ impl EchoPortApp {
             requested: false,
         });
 
+        // A marker present before this launch means the previous process did
+        // not reach `on_exit` (panic, SIGKILL, power loss). Demo screenshots do
+        // not touch this state.
+        let previous_crash = paths.crash_marker().is_file();
+        let crash_notice = if demo {
+            None
+        } else if previous_crash {
+            Some(CrashNotice)
+        } else {
+            None
+        };
+        if !demo {
+            let _ = std::fs::write(paths.crash_marker(), b"running\n");
+        }
         let plugins = PluginRegistry::with_sender(tx.clone());
         let splash_env = std::env::var("ECHOPORT_SPLASH").is_ok();
         let skip_splash = std::env::var("ECHOPORT_NO_SPLASH").is_ok()
@@ -235,6 +262,10 @@ impl EchoPortApp {
             splash_done: skip_splash,
             fake_update_sent: false,
             quitting: false,
+            crash_notice,
+            last_session_mark: Instant::now(),
+            resume_after_load: 0.0,
+            restored_session: false,
             search_cover_paths: Vec::new(),
             search_generation: 0,
             last_page: Page::Home,
@@ -244,6 +275,16 @@ impl EchoPortApp {
 
         app.ensure_android_music_dir();
         app.merge_local_files_into_library();
+        app.restore_last_session();
+        // Warm the full-window texture while startup is already busy. Without
+        // this, the first switch to Full-window decodes and uploads the photo
+        // on the UI thread, which looks like a multi-second freeze on large
+        // JPEGs/PNGs.
+        if app.state.theme_image_full_ok {
+            if let Some(path) = app.state.full_theme_image_source() {
+                app.ui.request_full_theme_image(&path);
+            }
+        }
         if std::env::var("ECHOPORT_PROFILE_EDIT").is_ok() {
             app.ui.profile_editing = true;
             app.ui.profile_bio = app.state.profile.bio.clone();
@@ -413,6 +454,7 @@ impl EchoPortApp {
                     return;
                 }
                 self.player.pause();
+                self.mark_dirty();
                 self.fire_script(ScriptEvent::PlaybackPaused);
             }
             Command::Resume => {
@@ -420,6 +462,7 @@ impl EchoPortApp {
                     return;
                 }
                 self.player.play();
+                self.mark_dirty();
                 self.fire_script(ScriptEvent::PlaybackResumed);
             }
             Command::Stop => {
@@ -436,10 +479,12 @@ impl EchoPortApp {
             }
             Command::Seek(position) => {
                 self.player.seek(position.max(0.0));
+                self.mark_dirty();
             }
             Command::SeekRelative(delta) => {
                 let target = self.state.playback.position_secs + delta;
                 self.player.seek(target.max(0.0));
+                self.mark_dirty();
             }
             Command::SetVolume(volume) => {
                 let volume = volume.clamp(0.0, 1.0);
@@ -450,9 +495,11 @@ impl EchoPortApp {
             }
             Command::CycleRepeat => {
                 self.state.repeat = self.state.repeat.next();
+                self.mark_dirty();
             }
             Command::ToggleShuffle => {
                 self.state.shuffle = !self.state.shuffle;
+                self.mark_dirty();
             }
             Command::ToggleFavorite(track) => {
                 let track = *track;
@@ -733,6 +780,11 @@ impl EchoPortApp {
                     return;
                 }
                 self.state.profile.settings.theme_image_full = enabled;
+                if enabled {
+                    if let Some(path) = self.state.full_theme_image_source() {
+                        self.ui.request_full_theme_image(&path);
+                    }
+                }
                 self.state.refresh_theme_target();
                 self.mark_dirty();
                 self.ctx.request_repaint();
@@ -1012,7 +1064,9 @@ impl EchoPortApp {
             // soon as the engine reports anything real we start syncing again.
             let resolving = self.state.playback.state == PlaybackState::Loading
                 && status.state == PlaybackState::Idle;
-            if !resolving {
+            if !resolving
+                && !(self.restored_session && self.state.playback.state == PlaybackState::Idle)
+            {
                 let volume = self.state.playback.volume;
                 self.state.playback = status;
                 if self.state.playback.volume == 0.0 {
@@ -1034,6 +1088,16 @@ impl EchoPortApp {
         }
         ctx.set_visuals(self.state.theme.to_visuals());
         self.state.prune_toasts(now);
+
+        // Persist the seek position periodically while playing so a crash or
+        // power loss does not rewind the restored song to where it started.
+        if !self.demo
+            && self.state.playback.state.is_playing()
+            && self.last_session_mark.elapsed() >= Duration::from_secs(5)
+        {
+            self.last_session_mark = Instant::now();
+            self.mark_dirty();
+        }
 
         if let Some(since) = self.dirty_since {
             if since.elapsed() > Duration::from_millis(1200) {
@@ -1240,8 +1304,16 @@ impl EchoPortApp {
                 for platform in &results.results {
                     self.state.profile.remember_many(&platform.tracks);
                 }
+                let all_failed = !results.results.is_empty()
+                    && results
+                        .results
+                        .iter()
+                        .all(|platform| platform.tracks.is_empty() && platform.error.is_some());
                 self.state.search.query = results.query.clone();
                 self.state.search.results = Some(results);
+                if all_failed {
+                    self.toast(ToastKind::Error, Key::SearchError);
+                }
                 self.prefetch_search_covers();
                 self.prefetch_artist_images();
                 self.prefetch_album_covers();
@@ -1264,6 +1336,11 @@ impl EchoPortApp {
                 self.current_cache_path = Some(path.clone());
                 match self.player.load(&path) {
                     Ok(()) => {
+                        if self.resume_after_load > 0.0 {
+                            self.player.seek(self.resume_after_load);
+                            self.state.playback.position_secs = self.resume_after_load;
+                        }
+                        self.resume_after_load = 0.0;
                         self.player.play();
                         self.state.playback.state = PlaybackState::Playing;
                         if self.state.playback.duration_secs.is_none() {
@@ -1588,6 +1665,18 @@ impl EchoPortApp {
     // -----------------------------------------------------------------------
 
     fn start_track(&mut self, track: Track) {
+        self.restored_session = false;
+        self.resume_after_load = 0.0;
+        self.start_track_inner(track);
+    }
+
+    fn start_track_at(&mut self, track: Track, position_secs: f64) {
+        self.restored_session = false;
+        self.resume_after_load = position_secs.max(0.0);
+        self.start_track_inner(track);
+    }
+
+    fn start_track_inner(&mut self, track: Track) {
         // Pressing play repeatedly while a track is still resolving must not
         // spawn another resolve job or restart playback.
         if self.same_track_loading(&track) {
@@ -1635,6 +1724,11 @@ impl EchoPortApp {
             match self.player.load(&path) {
                 Ok(()) => {
                     let status = self.player.status();
+                    if self.resume_after_load > 0.0 {
+                        self.player.seek(self.resume_after_load);
+                        self.state.playback.position_secs = self.resume_after_load;
+                    }
+                    self.resume_after_load = 0.0;
                     self.player.play();
                     self.state.playback.state = PlaybackState::Playing;
                     if status.duration_secs.is_some() {
@@ -1858,9 +1952,33 @@ impl EchoPortApp {
             }
             _ => {
                 if let Some(track) = self.state.queue.get(self.state.queue_pos).cloned() {
-                    self.start_track(track);
+                    let resume = if self.state.playback.state == PlaybackState::Idle
+                        && self
+                            .state
+                            .now_playing
+                            .as_ref()
+                            .is_some_and(|current| current.id == track.id)
+                    {
+                        self.state.playback.position_secs.max(0.0)
+                    } else {
+                        0.0
+                    };
+                    if resume > 0.0 {
+                        self.start_track_at(track, resume);
+                    } else {
+                        self.start_track(track);
+                    }
                 } else if let Some(track) = self.state.now_playing.clone() {
-                    self.start_track(track);
+                    let resume = if self.state.playback.state == PlaybackState::Idle {
+                        self.state.playback.position_secs.max(0.0)
+                    } else {
+                        0.0
+                    };
+                    if resume > 0.0 {
+                        self.start_track_at(track, resume);
+                    } else {
+                        self.start_track(track);
+                    }
                 }
             }
         }
@@ -2325,24 +2443,29 @@ impl EchoPortApp {
         self.state.theme_image_palette = Some(palette);
         self.state.refresh_theme_target();
         self.ui.invalidate_theme_image();
+        if let Some(path) = self.state.full_theme_image_source() {
+            self.ui.request_full_theme_image(&path);
+        }
         self.mark_dirty();
         self.toast(ToastKind::Success, Key::ThemeImageApplied);
         self.ctx.request_repaint();
     }
 
     fn save_full_theme_original(&mut self, source: &std::path::Path) -> Result<(), String> {
-        const MAX_FULL_IMAGE_EDGE: u32 = 1920;
+        const MAX_FULL_IMAGE_EDGE: u32 = 1600;
         let bytes = std::fs::read(source).map_err(|err| err.to_string())?;
-        // Full-window mode paints the photo every frame; keeping a 4-8K source
-        // here caused visible stutter and large GPU uploads. Compress it once.
-        let prepared = crate::theme::prepare_theme_image_png(&bytes, MAX_FULL_IMAGE_EDGE)?;
+        // Full-window mode paints the photo every frame. Keep a JPEG source:
+        // it is much faster to decode/upload than PNG on first activation and
+        // 1600px is plenty for a background.
+        let prepared = crate::theme::prepare_theme_image_jpeg(&bytes, MAX_FULL_IMAGE_EDGE, 86)?;
         let target = self.paths.data_dir.join("theme-image-original.img");
         let temp = self.paths.data_dir.join("theme-image-original.img.tmp");
         std::fs::write(&temp, prepared).map_err(|err| err.to_string())?;
         let _ = std::fs::remove_file(&target);
         std::fs::rename(&temp, &target).map_err(|err| err.to_string())?;
-        self.state.profile.settings.theme_image_original = Some(target);
+        self.state.profile.settings.theme_image_original = Some(target.clone());
         self.state.refresh_full_theme_validation();
+        self.ui.request_full_theme_image(&target);
         Ok(())
     }
 
@@ -2394,6 +2517,9 @@ impl EchoPortApp {
         self.state.theme_image_palette = Some(palette);
         self.state.refresh_theme_target();
         self.ui.invalidate_theme_image();
+        if let Some(path) = self.state.full_theme_image_source() {
+            self.ui.request_full_theme_image(&path);
+        }
         self.mark_dirty();
         self.toast(ToastKind::Success, Key::ThemeImageApplied);
         self.ctx.request_repaint();
@@ -3368,6 +3494,109 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
     }
 
     // -----------------------------------------------------------------------
+    // Session restore / diagnostics
+    // -----------------------------------------------------------------------
+
+    /// Reopen the last song, queue, seek position and last page after a clean
+    /// exit or a crash. Playback deliberately starts paused: restoring volume is
+    /// expected, auto-playing audio on launch is not.
+    fn restore_last_session(&mut self) {
+        if self.demo || std::env::var("ECHOPORT_NO_RESTORE").is_ok() {
+            return;
+        }
+        let session = self.state.profile.session.clone();
+        let Some(track) = session.now_playing.clone() else {
+            return;
+        };
+        let mut queue = session.queue;
+        if queue.is_empty() {
+            queue.push(track.clone());
+        }
+        let queue_pos = session.queue_pos.min(queue.len().saturating_sub(1));
+        self.state.queue = queue;
+        self.state.queue_pos = queue_pos;
+        self.state.now_playing = Some(track.clone());
+        self.state.playback = PlaybackStatus {
+            state: PlaybackState::Idle,
+            position_secs: session.position_secs.max(0.0),
+            duration_secs: track.duration_secs,
+            volume: self.state.playback.volume,
+            error: None,
+            ended: false,
+        };
+        self.state.repeat = session.repeat;
+        self.state.shuffle = session.shuffle;
+        self.restored_session = true;
+        self.state.now_playing_tab = NowPlayingTab::Track;
+        if std::env::var("ECHOPORT_PAGE").is_err() {
+            if let Some(page) = session.page.as_deref().and_then(page_from_key) {
+                // Artist/Album need a selected entity we do not persist.
+                self.state.page = if matches!(page, Page::Artist | Page::Album) {
+                    Page::Home
+                } else {
+                    page
+                };
+            }
+        }
+        self.state.cover = CoverView {
+            track_id: Some(track.id.clone()),
+            loading: true,
+            ..Default::default()
+        };
+        self.load_cover(track);
+        log::info!("restored last playback session");
+    }
+
+    fn session_snapshot(&self) -> SessionState {
+        let queue_len = self.state.queue.len();
+        let pos = self.state.queue_pos.min(queue_len.saturating_sub(1));
+        let (queue, queue_pos) = if queue_len > 500 {
+            let start = pos.saturating_sub(250).min(queue_len - 500);
+            (
+                self.state.queue[start..start + 500].to_vec(),
+                pos.saturating_sub(start),
+            )
+        } else {
+            (self.state.queue.clone(), pos)
+        };
+        SessionState {
+            now_playing: self.state.now_playing.clone(),
+            queue,
+            queue_pos,
+            position_secs: self.state.playback.position_secs.max(0.0),
+            repeat: self.state.repeat,
+            shuffle: self.state.shuffle,
+            page: Some(page_key(self.state.page).to_owned()),
+        }
+    }
+
+    /// Copy the runtime log to the clipboard and open it in the desktop viewer.
+    /// Used by error toasts and the post-crash prompt.
+    pub fn open_logs(&mut self) {
+        let log_path = self.paths.log_file();
+        let mut text = String::new();
+        if let Ok(bytes) = std::fs::read(&log_path) {
+            let start = bytes.len().saturating_sub(96 * 1024);
+            text.push_str(&String::from_utf8_lossy(&bytes[start..]));
+        }
+        if let Ok(crash) = std::fs::read_to_string(self.paths.data_dir.join("crash.log")) {
+            if !crash.is_empty() {
+                text.push_str("\n--- crash.log ---\n");
+                text.push_str(&crash);
+            }
+        }
+        if text.trim().is_empty() {
+            text = "(EchoPort log is empty)".to_owned();
+        }
+        self.ctx.copy_text(text);
+        if let Err(err) = open::that(&log_path) {
+            log::warn!("could not open log file: {err}");
+            let _ = open::that(self.paths.data_dir.join("logs"));
+        }
+        self.toast(ToastKind::Info, Key::LogsCopied);
+    }
+
+    // -----------------------------------------------------------------------
     // Persistence
     // -----------------------------------------------------------------------
 
@@ -3385,6 +3614,7 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
         self.last_save_attempt = Instant::now();
         self.state.profile.settings.language = self.state.lang;
         self.state.profile.settings.theme_mode = self.state.theme_mode;
+        self.state.profile.session = self.session_snapshot();
         if let Err(err) = self.store.save(&self.state.profile) {
             log::warn!("failed to save profile: {err}");
             self.toast(ToastKind::Error, Key::ProfileSaveFailed);
@@ -3393,6 +3623,9 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
 
     fn toast(&mut self, kind: ToastKind, text: impl IntoToast) {
         let text = text.into_text(&self.state);
+        if kind == ToastKind::Error {
+            log::warn!("UI error: {text}");
+        }
         let now = self.ctx.input(|input| input.time);
         self.state.toast(kind, text, now);
         self.ctx.request_repaint();
@@ -3535,6 +3768,13 @@ impl eframe::App for EchoPortApp {
         self.update_frame(ctx);
     }
 
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.save_now();
+        // A surviving marker means the previous process did not reach a clean
+        // shutdown; only remove it after the normal eframe shutdown hook.
+        let _ = std::fs::remove_file(self.paths.crash_marker());
+    }
+
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
         let color = self.state.theme.bg;
         [
@@ -3587,6 +3827,21 @@ pub(crate) fn save_color_image(
     let rgba = image::RgbaImage::from_raw(width, height, buffer)
         .ok_or_else(|| "invalid screenshot buffer".to_owned())?;
     rgba.save(path).map_err(|err| err.to_string())
+}
+
+fn page_key(page: Page) -> &'static str {
+    match page {
+        Page::Home => "home",
+        Page::Search => "search",
+        Page::Library => "library",
+        Page::Playlists => "playlists",
+        Page::Downloads => "downloads",
+        Page::NowPlaying => "now_playing",
+        Page::Artist => "artist",
+        Page::Album => "album",
+        Page::Profile => "profile",
+        Page::Settings => "settings",
+    }
 }
 
 fn page_from_key(key: &str) -> Option<Page> {

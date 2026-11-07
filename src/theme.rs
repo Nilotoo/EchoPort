@@ -193,6 +193,33 @@ pub fn prepare_theme_image_png(bytes: &[u8], max_edge: u32) -> Result<Vec<u8>, S
     Ok(output.into_inner())
 }
 
+/// Prepare the full-window background. JPEG is deliberate: a 1600px JPEG
+/// decodes and uploads much faster than the equivalent lossless PNG, which
+/// removes the first-switch stutter on large photos while keeping plenty of
+/// resolution for a window background.
+pub fn prepare_theme_image_jpeg(
+    bytes: &[u8],
+    max_edge: u32,
+    quality: u8,
+) -> Result<Vec<u8>, String> {
+    let mut image = image::load_from_memory(bytes).map_err(|err| err.to_string())?;
+    let longest = image.width().max(image.height());
+    if longest > max_edge.max(1) {
+        let scale = max_edge as f32 / longest as f32;
+        image = image.resize(
+            (image.width() as f32 * scale).round().max(1.0) as u32,
+            (image.height() as f32 * scale).round().max(1.0) as u32,
+            image::imageops::FilterType::Lanczos3,
+        );
+    }
+    let mut output = Vec::new();
+    let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut output, quality);
+    encoder
+        .encode_image(&image)
+        .map_err(|err| err.to_string())?;
+    Ok(output)
+}
+
 /// Full-window backgrounds need enough pixels to cover a desktop without
 /// turning into a blurry smear. Both dimensions must be at least 480 px and the
 /// long edge at least 960 px; tiny placeholder images are rejected.
@@ -492,12 +519,40 @@ impl Theme {
     /// Make the large surfaces translucent so a full-window photo can show
     /// through while cards and panels remain readable over the image veil.
     pub fn translucent(self) -> Self {
+        // Full-photo mode keeps the image visible, but foreground text must
+        // stay readable over arbitrary photos. Image-derived palette colours
+        // can be mid-tone even in a "light" theme (dark hair/clothes skew the
+        // palette), so clamp every large surface toward a neutral light/dark
+        // backing before applying translucency.
+        let neutral = if self.dark {
+            Color32::from_rgb(0x08, 0x0B, 0x11)
+        } else {
+            Color32::from_rgb(0xF7, 0xF8, 0xFB)
+        };
+        let panel = if self.dark {
+            mix(self.panel, neutral, 0.62)
+        } else {
+            mix(self.panel, neutral, 0.78)
+        };
+        let surface = if self.dark {
+            mix(self.surface, neutral, 0.52)
+        } else {
+            mix(self.surface, neutral, 0.68)
+        };
+        let bg = if self.dark {
+            mix(self.bg, neutral, 0.50)
+        } else {
+            mix(self.bg, neutral, 0.62)
+        };
         Self {
-            bg: with_alpha(self.bg, 88),
-            panel: with_alpha(self.panel, 148),
-            surface: with_alpha(self.surface, 176),
-            surface_hover: with_alpha(self.surface_hover, 200),
-            border: with_alpha(self.border, 200),
+            bg: with_alpha(bg, 132),
+            panel: with_alpha(panel, 216),
+            surface: with_alpha(surface, 234),
+            surface_hover: with_alpha(surface, 240),
+            border: with_alpha(self.border, 225),
+            // Secondary copy sits on a photo-backed surface; bias it toward
+            // the primary text colour so captions do not disappear.
+            text_weak: mix(self.text_weak, self.text, 0.28),
             ..self
         }
     }
@@ -1071,6 +1126,35 @@ mod tests {
         let decoded = image::load_from_memory(&prepared).expect("decode prepared");
         assert_eq!(decoded.width(), 4096);
         assert_eq!(decoded.height(), 98);
+    }
+
+    #[test]
+    fn full_theme_jpeg_is_bounded() {
+        let mut source = image::RgbImage::new(4200, 100);
+        for (x, _, pixel) in source.enumerate_pixels_mut() {
+            *pixel = image::Rgb([(x % 255) as u8, 40, 80]);
+        }
+        let mut encoded = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgb8(source)
+            .write_to(&mut encoded, image::ImageFormat::Png)
+            .expect("encode source");
+        let prepared =
+            prepare_theme_image_jpeg(encoded.get_ref(), 1600, 86).expect("prepare should succeed");
+        let decoded = image::load_from_memory(&prepared).expect("decode prepared");
+        assert!(decoded.width() <= 1600 && decoded.height() <= 1600);
+        assert!(decoded.width() >= 1500);
+    }
+
+    #[test]
+    fn translucent_theme_keeps_text_readable() {
+        for theme in [
+            Theme::pulse().translucent(),
+            Theme::tide().translucent(),
+            Theme::ink().translucent(),
+        ] {
+            assert!(contrast(theme.text, theme.surface) >= 4.0);
+            assert!(contrast(theme.text, theme.panel) >= 4.0);
+        }
     }
 
     #[test]

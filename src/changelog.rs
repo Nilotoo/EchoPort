@@ -38,16 +38,20 @@ pub const RELEASES: &[ReleaseNote] = &[
         items_en: &[
             "Favourite Tracks: a protected auto-playlist mirrors every favourite in order and cannot be deleted, renamed, re-covered or edited manually.",
             "Image theme second layout: full-window photo mode with translucent panels. It uses the uncropped image and rejects sources below 960 × 480 (both sides at least 480 px).",
-            "Full-window images are downscaled before being stored and uploaded, and theme textures are capped, reducing memory and frame-time cost with high-resolution photos.",
+            "Full-window photos are decoded off the UI thread, stored as bounded JPEGs, and rendered with the full-image palette and stronger scrims, eliminating the first-switch freeze and keeping text readable over light or dark photos.",
             "Now Playing palette dots align with the release date; the download path and playlist action rows were adjusted to remove overlap.",
             "Audio output stream failures retry once; cover blur generation and cover decoding remain lazy/budgeted for smoother scrolling.",
+            "Errors now show a bottom-right toast with a View & copy logs action; the runtime log is written to disk. If the previous launch ended unexpectedly, the next start offers to open and copy the crash log.",
+            "The last playing track, queue, seek position, repeat/shuffle mode, volume and page are saved on exit and restored paused on the next launch.",
         ],
         items_zh: &[
             "Favourite Tracks 自动歌单：按顺序镜像全部收藏歌曲，不可删除、不可重命名、不可换封面、不可手动增删。",
             "图片主题新增全屏照片布局：使用未裁剪原图覆盖整个应用，面板半透明；低于 960×480（两边至少 480px）的图片不允许使用。",
-            "全屏图片在保存和上传前会压缩，主题纹理也有限制，降低高分辨率照片的内存占用和掉帧。",
+            "全屏照片改为后台解码、保存为受限制的 JPEG，并使用全图调色板和更强的遮罩；首次切换不再卡顿，亮/暗照片上的文字都保持可读。",
             "正在播放封面的五个色点与发行日期对齐；下载目录和歌单操作行修正重叠。",
             "音频输出流失败自动重试一次；封面模糊图按需生成、封面解码按帧限额，滚动更稳定。",
+            "错误会在右下角弹出提示，并提供“查看并复制日志”；运行日志写入本地文件。上次异常退出后，下次启动会询问是否打开并复制日志。",
+            "退出时保存当前歌曲、队列、进度、循环/随机模式、音量和页面，下次启动恢复为暂停状态。",
         ],
     },
     ReleaseNote {

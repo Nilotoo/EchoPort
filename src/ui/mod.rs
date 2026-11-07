@@ -118,6 +118,13 @@ pub struct UiState {
     pub lyrics_scroll_pos: f32,
     /// Decoded optional theme image shown behind the sidebar.
     theme_image: Option<(String, egui::TextureHandle)>,
+    /// Full-window background texture, decoded off the UI thread.
+    full_theme_image: Option<(String, egui::TextureHandle)>,
+    /// In-flight full-window decode. The UI never blocks on a large photo.
+    full_theme_loading: Option<(
+        String,
+        std::sync::mpsc::Receiver<Result<egui::ColorImage, String>>,
+    )>,
     /// Pending crop selection for a newly chosen theme image.
     pub crop_theme_image: Option<ThemeImageCrop>,
     /// Whether release notes older than the latest three are expanded.
@@ -130,6 +137,96 @@ impl UiState {
     /// Drop a decoded theme image after it was replaced or removed.
     pub fn invalidate_theme_image(&mut self) {
         self.theme_image = None;
+        self.full_theme_image = None;
+        self.full_theme_loading = None;
+    }
+
+    /// Kick off background decoding for the full-window photo. Called during
+    /// startup so the first switch to Full-window does not freeze the UI while
+    /// a multi-megabyte JPEG/PNG is decoded and uploaded.
+    pub fn request_full_theme_image(&mut self, path: &std::path::Path) {
+        let key = path.to_string_lossy().into_owned();
+        if self.full_theme_image.as_ref().map(|(key, _)| key) == Some(&key) {
+            return;
+        }
+        if self
+            .full_theme_loading
+            .as_ref()
+            .is_some_and(|(loading, _)| loading == &key)
+        {
+            return;
+        }
+        let (tx, rx) = std::sync::mpsc::channel();
+        let path = path.to_path_buf();
+        std::thread::spawn(move || {
+            let result = (|| -> Result<egui::ColorImage, String> {
+                let bytes = std::fs::read(&path).map_err(|err| err.to_string())?;
+                let mut image = image::load_from_memory(&bytes).map_err(|err| err.to_string())?;
+                if image.width() > 8_000
+                    || image.height() > 8_000
+                    || u64::from(image.width()) * u64::from(image.height()) > 24_000_000
+                {
+                    return Err("theme image is too large".to_owned());
+                }
+                if image.width() > 1600 || image.height() > 1600 {
+                    image = image.thumbnail(1600, 1600);
+                }
+                let rgba = image.to_rgba8();
+                Ok(egui::ColorImage::from_rgba_unmultiplied(
+                    [rgba.width() as usize, rgba.height() as usize],
+                    rgba.as_raw(),
+                ))
+            })();
+            let _ = tx.send(result);
+        });
+        self.full_theme_loading = Some((key, rx));
+    }
+
+    /// Poll the background decode and upload the texture when it is ready.
+    pub fn full_theme_image_texture(
+        &mut self,
+        ctx: &egui::Context,
+        path: &std::path::Path,
+    ) -> Option<egui::TextureHandle> {
+        let key = path.to_string_lossy().into_owned();
+        if let Some((cached_key, texture)) = self.full_theme_image.as_ref() {
+            if cached_key == &key {
+                return Some(texture.clone());
+            }
+        }
+        if let Some((loading_key, rx)) = self.full_theme_loading.as_ref() {
+            if loading_key != &key {
+                self.full_theme_loading = None;
+            } else {
+                match rx.try_recv() {
+                    Ok(Ok(image)) => {
+                        let texture = ctx.load_texture(
+                            format!("theme-full:{key}"),
+                            image,
+                            egui::TextureOptions::LINEAR,
+                        );
+                        self.full_theme_image = Some((key.clone(), texture.clone()));
+                        self.full_theme_loading = None;
+                        return Some(texture);
+                    }
+                    Ok(Err(err)) => {
+                        log::warn!("could not decode full theme image: {err}");
+                        self.full_theme_loading = None;
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        self.full_theme_loading = None;
+                    }
+                }
+            }
+        }
+        if self.full_theme_image.is_none() && self.full_theme_loading.is_none() {
+            self.request_full_theme_image(path);
+        }
+        if self.full_theme_loading.is_some() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(30));
+        }
+        None
     }
 
     pub fn theme_image_texture(
@@ -149,8 +246,8 @@ impl UiState {
             }
             // The sidebar is only a few hundred px wide; uploading a full
             // 24 MP camera frame wastes GPU memory and slows resize redraws.
-            let image = if image.width() > 1920 || image.height() > 1920 {
-                image.thumbnail(1920, 1920)
+            let image = if image.width() > 1600 || image.height() > 1600 {
+                image.thumbnail(1600, 1600)
             } else {
                 image
             };
@@ -190,6 +287,8 @@ impl UiState {
             lyrics_track: None,
             lyrics_scroll_pos: 0.0,
             theme_image: None,
+            full_theme_image: None,
+            full_theme_loading: None,
             crop_theme_image: None,
             changelog_expanded: false,
         }
@@ -334,7 +433,13 @@ pub fn layout(ctx: &egui::Context, app: &mut EchoPortApp) {
         queue_panel(ctx, app, &theme, player_height, &mut pending);
     }
 
-    toasts(ctx, app, &theme, player_height);
+    crash_prompt(ctx, app, &theme, player_height);
+    let toast_lift = if app.crash_notice.is_some() {
+        170.0
+    } else {
+        0.0
+    };
+    toasts(ctx, app, &theme, player_height, toast_lift);
     drop_prompt(ctx, app, &theme, player_height, &mut pending);
     dialogs(ctx, app, &theme, &mut pending);
     theme_image_crop_dialog(ctx, app, &theme, &mut pending);
@@ -420,7 +525,7 @@ fn mobile_layout(
     if app.state.queue_panel_open {
         queue_panel(ctx, app, theme, player_height + nav_height, pending);
     }
-    toasts(ctx, app, theme, player_height + nav_height);
+    toasts(ctx, app, theme, player_height + nav_height, 0.0);
     drop_prompt(ctx, app, theme, player_height + nav_height, pending);
     dialogs(ctx, app, theme, pending);
     handle_escape(ctx, app);
@@ -650,7 +755,7 @@ fn paint_full_theme_image(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Th
     let Some(path) = app.state.full_theme_image_path() else {
         return;
     };
-    let Some(texture) = app.ui.theme_image_texture(ctx, &path) else {
+    let Some(texture) = app.ui.full_theme_image_texture(ctx, &path) else {
         return;
     };
     let screen = ctx.screen_rect();
@@ -673,7 +778,9 @@ fn paint_full_theme_image(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Th
     }
     let painter = ctx.layer_painter(egui::LayerId::background());
     painter.image(texture.id(), screen, uv, egui::Color32::WHITE);
-    let veil = theme::with_alpha(theme.panel, if theme.dark { 112 } else { 82 });
+    // A real scrim, not just a tint: text must stay readable over arbitrary
+    // bright/dark areas of a photo in full-window mode.
+    let veil = theme::with_alpha(theme.panel, if theme.dark { 164 } else { 146 });
     painter.rect_filled(screen, 0.0, veil);
 }
 
@@ -1770,28 +1877,107 @@ fn drop_prompt(
     }
 }
 
-fn toasts(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, player_height: f32) {
+fn crash_prompt(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, player_height: f32) {
+    if app.crash_notice.is_none() {
+        return;
+    }
+    let mut open_logs = false;
+    let mut dismiss = false;
+    egui::Area::new(Id::new("crash-prompt"))
+        .order(Order::Foreground)
+        .anchor(
+            Align2::RIGHT_BOTTOM,
+            Vec2::new(-18.0, -(player_height + 16.0)),
+        )
+        .interactable(true)
+        .show(ctx, |ui| {
+            Frame::new()
+                .fill(theme.surface)
+                .stroke(Stroke::new(1.0_f32, style::danger_color(theme)))
+                .corner_radius(CornerRadius::same(style::R_MD))
+                .inner_margin(Margin::symmetric(14, 12))
+                .shadow(style::shadow(theme))
+                .show(ui, |ui| {
+                    ui.set_width(360.0);
+                    ui.label(
+                        RichText::new(app.state.tr(Key::CrashDetected))
+                            .size(12.5)
+                            .strong()
+                            .color(theme.text),
+                    );
+                    ui.add_space(4.0);
+                    ui.label(
+                        RichText::new(app.state.tr(Key::CrashDetectedBody))
+                            .size(11.0)
+                            .color(theme.text_weak),
+                    );
+                    ui.add_space(9.0);
+                    ui.horizontal(|ui| {
+                        if style::button(
+                            ui,
+                            theme,
+                            app.state.tr(Key::OpenLogsAndCopy),
+                            style::Variant::Primary,
+                        )
+                        .clicked()
+                        {
+                            open_logs = true;
+                        }
+                        if style::button(ui, theme, app.state.tr(Key::Close), style::Variant::Ghost)
+                            .clicked()
+                        {
+                            dismiss = true;
+                        }
+                    });
+                });
+        });
+    if open_logs {
+        app.open_logs();
+    }
+    if open_logs || dismiss {
+        app.crash_notice = None;
+    }
+}
+
+fn toasts(
+    ctx: &egui::Context,
+    app: &mut EchoPortApp,
+    theme: &Theme,
+    player_height: f32,
+    lift: f32,
+) {
     if app.state.toasts.is_empty() {
         return;
     }
+    let has_error = app
+        .state
+        .toasts
+        .iter()
+        .any(|toast| toast.kind == ToastKind::Error);
     let now = ctx.input(|input| input.time);
     let mut dismiss = None;
+    let mut open_logs = false;
     egui::Area::new(Id::new("toasts"))
         .order(Order::Foreground)
         .anchor(
             Align2::RIGHT_BOTTOM,
-            Vec2::new(-18.0, -(player_height + 14.0)),
+            Vec2::new(-18.0, -(player_height + 14.0 + lift)),
         )
-        // Toasts are informational only: never intercept clicks on the app
-        // underneath (auto-fade handles dismissal).
-        .interactable(false)
+        // Info/success toasts let clicks pass through; error toasts expose a
+        // "view logs" action and therefore must be interactive.
+        .interactable(has_error)
         .show(ctx, |ui| {
             ui.set_width(310.0);
             ui.with_layout(Layout::bottom_up(Align::Max), |ui| {
                 for (index, toast) in app.state.toasts.iter().enumerate().rev() {
                     let age = (now - toast.created_at).max(0.0);
-                    let alpha = if age > 3.4 {
-                        (1.0 - ((age - 3.4) / 0.8) as f32).clamp(0.0, 1.0)
+                    let ttl = if toast.kind == ToastKind::Error {
+                        8.0
+                    } else {
+                        3.4
+                    };
+                    let alpha = if age > ttl {
+                        (1.0 - ((age - ttl) / 0.8) as f32).clamp(0.0, 1.0)
                     } else {
                         1.0
                     };
@@ -1836,12 +2022,31 @@ fn toasts(ctx: &egui::Context, app: &mut EchoPortApp, theme: &Theme, player_heig
                                         dismiss = Some(index);
                                     }
                                 });
+                                if toast.kind == ToastKind::Error {
+                                    ui.add_space(5.0);
+                                    ui.horizontal(|ui| {
+                                        if style::button(
+                                            ui,
+                                            theme,
+                                            app.state.tr(Key::ViewLogs),
+                                            style::Variant::Ghost,
+                                        )
+                                        .clicked()
+                                        {
+                                            open_logs = true;
+                                            dismiss = Some(index);
+                                        }
+                                    });
+                                }
                             });
                     });
                     ui.add_space(6.0);
                 }
             });
         });
+    if open_logs {
+        app.open_logs();
+    }
     if let Some(index) = dismiss {
         if index < app.state.toasts.len() {
             app.state.toasts.remove(index);

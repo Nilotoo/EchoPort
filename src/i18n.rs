@@ -456,6 +456,11 @@ pub enum Key {
     ResultsHint,
     GoBack,
     DemoMode,
+    ViewLogs,
+    LogsCopied,
+    CrashDetected,
+    CrashDetectedBody,
+    OpenLogsAndCopy,
 }
 
 impl Key {
@@ -1013,6 +1018,20 @@ impl Key {
             ),
             GoBack => ("Back", "返回"),
             DemoMode => ("Demo", "演示模式"),
+            ViewLogs => ("View & copy logs", "查看并复制日志"),
+            LogsCopied => (
+                "Log copied to clipboard and opened.",
+                "日志已复制到剪贴板并打开。",
+            ),
+            CrashDetected => (
+                "EchoPort closed unexpectedly last time",
+                "检测到上次异常退出",
+            ),
+            CrashDetectedBody => (
+                "Open the log to see what happened? The log will be copied to your clipboard as well.",
+                "是否打开日志查看原因？日志同时会复制到剪贴板。",
+            ),
+            OpenLogsAndCopy => ("Open & copy logs", "打开并复制日志"),
         }
     }
 }
