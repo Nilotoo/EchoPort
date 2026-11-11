@@ -1695,11 +1695,14 @@ pub fn callout(ui: &mut Ui, theme: &Theme, icon: Icon, text: &str, accent: bool)
     }
     frame.show(ui, |ui| {
         ui.set_width(width - 24.0);
+        ui.set_max_width(width - 24.0);
         ui.horizontal_top(|ui| {
             let (rect, _) = ui.allocate_exact_size(Vec2::new(15.0, 18.0), Sense::hover());
             style::paint_icon(ui.painter(), icon, rect, theme.accent);
             ui.add_space(3.0);
-            ui.label(RichText::new(text).size(11.5).color(theme.text_weak));
+            // Labels do not wrap by default; long network/search hints were
+            // running past the right edge on the portrait Android layout.
+            ui.add(egui::Label::new(RichText::new(text).size(11.5).color(theme.text_weak)).wrap());
         });
     });
 }

@@ -1105,10 +1105,14 @@ fn empty_state(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme) {
             });
             ui.add_space(10.0);
             ui.vertical_centered(|ui| {
-                ui.label(
-                    RichText::new(app.state.tr(Key::ImportLinkHint))
-                        .size(11.0)
-                        .color(theme.text_weak),
+                ui.set_max_width(width);
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(app.state.tr(Key::ImportLinkHint))
+                            .size(11.0)
+                            .color(theme.text_weak),
+                    )
+                    .wrap(),
                 );
             });
         });
