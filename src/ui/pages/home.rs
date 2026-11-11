@@ -524,8 +524,14 @@ fn card_shell<R>(ui: &mut Ui, theme: &Theme, add_contents: impl FnOnce(&mut Ui) 
     style::card(theme)
         .show(ui, |ui| {
             ui.set_min_width(ui.available_width());
-            let tall = (ui.ctx().screen_rect().height() - 800.0) * 0.17;
-            ui.set_min_height((166.0 + tall).clamp(160.0, 290.0));
+            let mobile = ui.ctx().screen_rect().width() < 700.0;
+            let min_height = if mobile {
+                110.0
+            } else {
+                let tall = (ui.ctx().screen_rect().height() - 800.0) * 0.17;
+                (166.0 + tall).clamp(160.0, 290.0)
+            };
+            ui.set_min_height(min_height);
             add_contents(ui)
         })
         .inner

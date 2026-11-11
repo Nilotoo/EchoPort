@@ -19,6 +19,15 @@ pub fn draw(ui: &mut Ui, app: &mut EchoPortApp, theme: &Theme, pending: &mut Vec
         let mobile = available < 600.0;
         if mobile {
             let playlists = app.state.profile.playlists.clone();
+            // Mobile shows the list and the detail stacked; without a selected
+            // row it rendered the "No playlists yet" empty state underneath a
+            // non-empty list. Select the first playlist on first entry.
+            if app.state.selected_playlist.is_none() {
+                if let Some(first) = playlists.first() {
+                    app.state.selected_playlist = Some(first.id.clone());
+                    app.ui.selected_playlist = Some(first.id.clone());
+                }
+            }
             let selected = app.state.selected_playlist().cloned();
             let tracks = selected
                 .as_ref()
