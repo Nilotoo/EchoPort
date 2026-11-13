@@ -485,12 +485,36 @@ fn mobile_layout(
 
     let page_fade = app.ui.page_fade;
     let player_height = 118.0;
-    let nav_height = 58.0;
-    let status_inset = if cfg!(target_os = "android") {
-        28.0
-    } else {
-        14.0
+    let nav_height = 64.0;
+    #[cfg(target_os = "android")]
+    let (status_inset, android_bottom_inset) = {
+        let (top, bottom) = crate::android::current_system_insets().unwrap_or((0.0, 0.0));
+        let top = std::env::var("ECHOPORT_ANDROID_TOP_INSET")
+            .ok()
+            .and_then(|value| value.parse::<f32>().ok())
+            .map(|value| value.clamp(0.0, 72.0))
+            .unwrap_or(top);
+        let bottom = std::env::var("ECHOPORT_ANDROID_BOTTOM_INSET")
+            .ok()
+            .and_then(|value| value.parse::<f32>().ok())
+            .map(|value| value.clamp(0.0, 160.0))
+            .unwrap_or(bottom);
+        (top, bottom)
     };
+    #[cfg(not(target_os = "android"))]
+    let (status_inset, android_bottom_inset) = (14.0_f32, 0.0_f32);
+    // NativeActivity is edge-to-edge on Android: the navigation bar is painted
+    // over the bottom of the window. Reserve the current system inset (queried
+    // through JNI) so the player is never under the system buttons.
+    let bottom_system_inset = android_bottom_inset;
+    if bottom_system_inset > 0.0 {
+        egui::TopBottomPanel::bottom("echoport-mobile-system-inset")
+            .exact_height(bottom_system_inset)
+            .resizable(false)
+            .show_separator_line(false)
+            .frame(Frame::new().fill(theme.bg))
+            .show(ctx, |_ui| {});
+    }
 
     // Player sits directly above the bottom navigation.
     egui::TopBottomPanel::bottom("echoport-mobile-player")
@@ -522,11 +546,12 @@ fn mobile_layout(
             pages::draw(ui, app, theme, pending);
         });
 
+    let overlay_lift = player_height + nav_height + bottom_system_inset;
     if app.state.queue_panel_open {
-        queue_panel(ctx, app, theme, player_height + nav_height, pending);
+        queue_panel(ctx, app, theme, overlay_lift, pending);
     }
-    toasts(ctx, app, theme, player_height + nav_height, 0.0);
-    drop_prompt(ctx, app, theme, player_height + nav_height, pending);
+    toasts(ctx, app, theme, overlay_lift, 0.0);
+    drop_prompt(ctx, app, theme, overlay_lift, pending);
     dialogs(ctx, app, theme, pending);
     handle_escape(ctx, app);
     splash::draw(ctx, app, pending);
@@ -567,13 +592,13 @@ fn mobile_nav(ui: &mut egui::Ui, app: &mut EchoPortApp, theme: &Theme) {
                 ui.painter(),
                 icon,
                 Rect::from_center_size(
-                    Pos2::new(rect.center().x, rect.center().y - 7.0),
+                    Pos2::new(rect.center().x, rect.center().y - 6.0),
                     Vec2::splat(19.0),
                 ),
                 color,
             );
             ui.painter().text(
-                Pos2::new(rect.center().x, rect.center().y + 14.0),
+                Pos2::new(rect.center().x, rect.center().y + 15.0),
                 Align2::CENTER_CENTER,
                 app.state.tr(key),
                 style::font(9.5),
@@ -594,6 +619,10 @@ fn mobile_player(
     pending: &mut Vec<Command>,
 ) {
     let full = ui.max_rect();
+    ui.painter().line_segment(
+        [full.left_top(), full.right_top()],
+        Stroke::new(1.0_f32, theme.border),
+    );
     let cover = 44.0;
     let cover_rect = Rect::from_min_size(
         Pos2::new(full.left() + 12.0, full.top() + 10.0),
