@@ -56,6 +56,7 @@ winit = { version = "0.30", default-features = false, features = [
 ] }
 android_logger = "0.15"
 robius-file-picker = "0.3"
+jni = "0.22"
 
 [features]
 default = ["scripting", "image-gif-bmp"]

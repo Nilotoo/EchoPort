@@ -12,7 +12,7 @@
 #![allow(clippy::too_many_arguments)]
 
 #[cfg(target_os = "android")]
-mod android;
+pub(crate) mod android;
 pub mod app;
 pub mod art;
 pub mod audio;

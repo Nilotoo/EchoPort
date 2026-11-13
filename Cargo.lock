@@ -803,6 +803,7 @@ dependencies = [
  "egui",
  "env_logger",
  "image",
+ "jni 0.22.4",
  "lofty",
  "log",
  "mlua",
