@@ -484,8 +484,12 @@ fn mobile_layout(
     }
 
     let page_fade = app.ui.page_fade;
-    let player_height = 118.0;
-    let nav_height = 64.0;
+    // Taller than the original 118: the scrubber now sits directly under the
+    // title row (as in the annotated portrait reference) instead of hugging
+    // the system navigation area. The extra height also extends the player's
+    // top boundary away from the bottom navigation.
+    let player_height = 136.0;
+    let nav_height = 72.0;
     #[cfg(target_os = "android")]
     let (status_inset, android_bottom_inset) = {
         let (top, bottom) = crate::android::current_system_insets().unwrap_or((0.0, 0.0));
@@ -558,6 +562,11 @@ fn mobile_layout(
 }
 
 fn mobile_nav(ui: &mut egui::Ui, app: &mut EchoPortApp, theme: &Theme) {
+    let full = ui.max_rect();
+    ui.painter().line_segment(
+        [full.left_top(), full.right_top()],
+        Stroke::new(1.0_f32, theme.border),
+    );
     let nav: [(Page, Key, Icon); 5] = [
         (Page::Home, Key::Home, Icon::Home),
         (Page::Search, Key::SearchNav, Icon::Search),
@@ -737,8 +746,8 @@ fn mobile_player(
         .scrub_preview
         .unwrap_or(app.state.playback.position_secs);
     let scrub_rect = Rect::from_min_max(
-        Pos2::new(full.left() + 12.0, full.bottom() - 34.0),
-        Pos2::new(full.right() - 12.0, full.bottom() - 18.0),
+        Pos2::new(full.left() + 12.0, full.top() + 70.0),
+        Pos2::new(full.right() - 12.0, full.top() + 86.0),
     );
     let mut scrub_ui = ui.new_child(
         egui::UiBuilder::new()
@@ -769,7 +778,7 @@ fn mobile_player(
         String::new()
     };
     ui.painter().text(
-        Pos2::new(full.left() + 12.0, full.bottom() - 8.0),
+        Pos2::new(full.left() + 12.0, full.top() + 98.0),
         Align2::LEFT_CENTER,
         time,
         style::font(9.5),
