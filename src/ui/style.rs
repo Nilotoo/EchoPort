@@ -1200,8 +1200,8 @@ pub fn scrubber(
     let (rect, response) = ui.allocate_exact_size(Vec2::new(width, 18.0), Sense::click_and_drag());
     let center_y = rect.center().y;
     let track = Rect::from_min_max(
-        Pos2::new(rect.left(), center_y - 2.0),
-        Pos2::new(rect.right(), center_y + 2.0),
+        Pos2::new(rect.left(), center_y - 2.5),
+        Pos2::new(rect.right(), center_y + 2.5),
     );
     let fraction = if duration > 0.0 {
         (position / duration).clamp(0.0, 1.0) as f32
@@ -1209,7 +1209,7 @@ pub fn scrubber(
         0.0
     };
     ui.painter()
-        .rect_filled(track, CornerRadius::same(2), with_alpha(theme.border, 200));
+        .rect_filled(track, CornerRadius::same(3), with_alpha(theme.border, 235));
     let filled = Rect::from_min_max(
         track.min,
         Pos2::new(track.left() + track.width() * fraction, track.max.y),
@@ -1264,7 +1264,7 @@ pub fn volume_slider(ui: &mut Ui, theme: &Theme, volume: f32, width: f32) -> Opt
     );
     let fraction = volume.clamp(0.0, 1.0);
     ui.painter()
-        .rect_filled(track, CornerRadius::same(2), with_alpha(theme.border, 200));
+        .rect_filled(track, CornerRadius::same(3), with_alpha(theme.border, 235));
     let filled = Rect::from_min_max(
         track.min,
         Pos2::new(track.left() + track.width() * fraction, track.max.y),

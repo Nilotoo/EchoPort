@@ -489,7 +489,7 @@ fn mobile_layout(
     // the system navigation area. The extra height also extends the player's
     // top boundary away from the bottom navigation.
     let player_height = 136.0;
-    let nav_height = 72.0;
+    let nav_height = 76.0;
     #[cfg(target_os = "android")]
     let (status_inset, android_bottom_inset) = {
         let (top, bottom) = crate::android::current_system_insets().unwrap_or((0.0, 0.0));
@@ -529,6 +529,14 @@ fn mobile_layout(
         .show(ctx, |ui| {
             mobile_player(ui, app, theme, player_height, pending);
         });
+    // A small background gap makes the two app bars read as separate regions
+    // rather than one continuous bar that looks overlapped.
+    egui::TopBottomPanel::bottom("echoport-mobile-bar-gap")
+        .exact_height(5.0)
+        .resizable(false)
+        .show_separator_line(false)
+        .frame(Frame::new().fill(theme.bg))
+        .show(ctx, |_ui| {});
     egui::TopBottomPanel::bottom("echoport-mobile-nav")
         .exact_height(nav_height)
         .resizable(false)
@@ -746,8 +754,8 @@ fn mobile_player(
         .scrub_preview
         .unwrap_or(app.state.playback.position_secs);
     let scrub_rect = Rect::from_min_max(
-        Pos2::new(full.left() + 12.0, full.top() + 70.0),
-        Pos2::new(full.right() - 12.0, full.top() + 86.0),
+        Pos2::new(full.left() + 12.0, full.top() + 60.0),
+        Pos2::new(full.right() - 12.0, full.top() + 76.0),
     );
     let mut scrub_ui = ui.new_child(
         egui::UiBuilder::new()
@@ -778,7 +786,7 @@ fn mobile_player(
         String::new()
     };
     ui.painter().text(
-        Pos2::new(full.left() + 12.0, full.top() + 98.0),
+        Pos2::new(full.left() + 12.0, full.top() + 88.0),
         Align2::LEFT_CENTER,
         time,
         style::font(9.5),
