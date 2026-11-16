@@ -3639,7 +3639,10 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
     fn toast(&mut self, kind: ToastKind, text: impl IntoToast) {
         let text = text.into_text(&self.state);
         if kind == ToastKind::Error {
-            log::warn!("UI error: {text}");
+            // Do not write localized/UI text to the diagnostic log: it made
+            // the log depend on the user's interface language. Technical
+            // details are logged by the operation that failed.
+            log::warn!("UI error toast displayed");
         }
         let now = self.ctx.input(|input| input.time);
         self.state.toast(kind, text, now);

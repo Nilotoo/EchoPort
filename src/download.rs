@@ -65,7 +65,29 @@ pub fn download_track(
             fraction: Some(0.0),
             stage: "starting".to_owned(),
         });
-        match run_download(&ytdlp, track, config, options, source.argument(), progress) {
+        let result = run_download(&ytdlp, track, config, options, source.argument(), progress);
+        let result = match result {
+            Err(err) if options.embed_metadata && should_retry_without_metadata(&err) => {
+                log::warn!(
+                    "download post-processing failed for {}; retrying without metadata/thumbnail: {err}",
+                    track.title
+                );
+                let fallback = DownloadOptions {
+                    embed_metadata: false,
+                    ..options.clone()
+                };
+                run_download(
+                    &ytdlp,
+                    track,
+                    config,
+                    &fallback,
+                    source.argument(),
+                    progress,
+                )
+            }
+            other => other,
+        };
+        match result {
             Ok(path) => {
                 progress(DownloadProgress {
                     fraction: Some(1.0),
@@ -178,8 +200,13 @@ fn run_download(
     source: &str,
     progress: &mut dyn FnMut(DownloadProgress),
 ) -> Result<PathBuf, String> {
-    let temp_dir = options.dir.join(format!(
-        ".echoport-tmp-{}-{}",
+    // Use the OS temp directory and an ASCII-only intermediate filename. The
+    // final file is moved into the user's download folder afterwards. This
+    // avoids Windows `OSError: [Errno 22] Invalid argument` failures caused by
+    // long paths, reserved characters in the video title, or AV scanners
+    // watching the download directory during ffmpeg post-processing.
+    let temp_dir = std::env::temp_dir().join(format!(
+        "echoport-dl-{}-{}",
         track.cache_key(),
         unique_suffix()
     ));
@@ -187,10 +214,9 @@ fn run_download(
         .map_err(|err| format!("cannot create temporary download folder: {err}"))?;
     let guard = TempDirGuard::new(temp_dir.clone());
 
-    // The [%(id)s] component keeps different tracks from overwriting each other;
-    // yt-dlp sanitises filesystem-unsafe characters while keeping non-ASCII
-    // titles intact.
-    let output_template = temp_dir.join("%(title)s [%(id)s].%(ext)s");
+    // Keep yt-dlp's own output name extremely short and ASCII-only. The final
+    // user-facing filename is applied after the download has completed.
+    let output_template = temp_dir.join("download.%(ext)s");
     let mut command = process::quiet(ytdlp);
     command.args(download_args(
         options.format,
@@ -310,16 +336,24 @@ fn run_download(
         return Err("download timed out".to_owned());
     }
     if !status.map(|status| status.success()).unwrap_or(false) {
-        let detail = stderr_tail
-            .last()
-            .cloned()
-            .unwrap_or_else(|| "yt-dlp failed".to_owned());
+        let detail = if stderr_tail.is_empty() {
+            "yt-dlp failed".to_owned()
+        } else {
+            stderr_tail
+                .iter()
+                .rev()
+                .take(8)
+                .rev()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(" | ")
+        };
         return Err(format!("download failed: {detail}"));
     }
 
     let downloaded = resolver::find_downloaded_file(&temp_dir)
         .ok_or_else(|| "yt-dlp finished but produced no audio file".to_owned())?;
-    let final_path = unique_destination(&options.dir, &downloaded)?;
+    let final_path = unique_destination_for_track(&options.dir, track, &downloaded)?;
     move_file(&downloaded, &final_path)?;
     drop(guard);
     Ok(final_path)
@@ -355,12 +389,17 @@ fn stage_for_line(line: &str) -> Option<&'static str> {
     }
 }
 
-/// Keep Unicode titles readable but replace path separators / control chars.
+/// Keep Unicode titles readable but make the name safe for Windows/macOS/Linux.
 fn sanitize_filename(name: &str) -> String {
     let mut out: String = name
         .chars()
         .map(|character| {
-            if character.is_control() || matches!(character, '/' | '\\' | ':' | '\0') {
+            if character.is_control()
+                || matches!(
+                    character,
+                    '/' | '\\' | ':' | '<' | '>' | '"' | '|' | '?' | '*' | '\0'
+                )
+            {
                 '_'
             } else {
                 character
@@ -368,16 +407,80 @@ fn sanitize_filename(name: &str) -> String {
         })
         .collect();
     out = out.trim().trim_end_matches('.').trim().to_owned();
+    // Windows reserved device names are invalid even with an extension.
+    let upper = out.to_ascii_uppercase();
+    let reserved = matches!(
+        upper.as_str(),
+        "CON"
+            | "PRN"
+            | "AUX"
+            | "NUL"
+            | "COM1"
+            | "COM2"
+            | "COM3"
+            | "COM4"
+            | "COM5"
+            | "COM6"
+            | "COM7"
+            | "COM8"
+            | "COM9"
+            | "LPT1"
+            | "LPT2"
+            | "LPT3"
+            | "LPT4"
+            | "LPT5"
+            | "LPT6"
+            | "LPT7"
+            | "LPT8"
+            | "LPT9"
+    );
+    if reserved {
+        out.insert(0, '_');
+    }
     if out.is_empty() {
         out = "track".to_owned();
     }
-    if out.chars().count() > 120 {
-        out = out.chars().take(120).collect();
+    if out.chars().count() > 90 {
+        out = out.chars().take(90).collect();
     }
     out
 }
 
-/// Final path in the download folder, avoiding overwrites (` (2)`, ` (3)`, ...).
+fn should_retry_without_metadata(error: &str) -> bool {
+    let lowered = error.to_ascii_lowercase();
+    lowered.contains("errno 22")
+        || lowered.contains("invalid argument")
+        || lowered.contains("embedthumbnail")
+        || lowered.contains("metadata")
+        || lowered.contains("postprocess")
+        || lowered.contains("thumbnail")
+}
+
+fn unique_destination_for_track(
+    dir: &Path,
+    track: &Track,
+    downloaded: &Path,
+) -> Result<PathBuf, String> {
+    let extension = downloaded
+        .extension()
+        .map(|extension| extension.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "mp3".to_owned());
+    let stem = sanitize_filename(&track.title);
+    let mut candidate = dir.join(format!("{stem}.{extension}"));
+    let mut counter = 2;
+    while candidate.exists() {
+        candidate = dir.join(format!("{stem} ({counter}).{extension}"));
+        counter += 1;
+        if counter > 1_000 {
+            return Err("cannot find a free download file name".to_owned());
+        }
+    }
+    Ok(candidate)
+}
+
+/// Legacy stem helper used by the filename tests; production downloads use the
+/// track-title variant so the yt-dlp intermediate name never reaches the user.
+#[cfg(test)]
 fn unique_destination(dir: &Path, downloaded: &Path) -> Result<PathBuf, String> {
     let stem = downloaded
         .file_stem()
@@ -536,6 +639,15 @@ mod tests {
         assert_eq!(sanitize_filename("  ..  "), "track");
         assert_eq!(sanitize_filename(""), "track");
         assert_eq!(sanitize_filename("line\nbreak"), "line_break");
+        assert_eq!(sanitize_filename("CON"), "_CON");
+        assert_eq!(sanitize_filename("a<b>c|d?e*f"), "a_b_c_d_e_f");
+        assert!(sanitize_filename(&"x".repeat(200)).chars().count() <= 90);
+        assert!(should_retry_without_metadata(
+            "download failed: OSError: [Errno 22] Invalid argument"
+        ));
+        assert!(should_retry_without_metadata(
+            "ERROR: Postprocessing: Unable to embed thumbnail"
+        ));
     }
 
     #[test]
