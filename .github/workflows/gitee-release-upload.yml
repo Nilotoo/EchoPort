@@ -16,7 +16,7 @@ jobs:
       - name: Download assets from GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: v0.4.1
+          TAG: v0.4.2
         run: |
           set -euo pipefail
           mkdir -p assets
@@ -30,7 +30,7 @@ jobs:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           GITEE_OWNER: ${{ vars.GITEE_OWNER }}
           GITEE_REPO: ${{ vars.GITEE_REPO }}
-          TAG: v0.4.1
+          TAG: v0.4.2
         run: |
           set -euo pipefail
           owner="${GITEE_OWNER:-nilotoo_art}"

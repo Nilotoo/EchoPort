@@ -31,6 +31,26 @@ impl ReleaseNote {
 /// Newest first. Add a new entry for every public release.
 pub const RELEASES: &[ReleaseNote] = &[
     ReleaseNote {
+        version: "0.4.2",
+        date: "2026-11-16",
+        title_en: "Android portrait polish, reliable downloads and clearer logs",
+        title_zh: "安卓竖屏适配、下载稳定性与日志修正",
+        items_en: &[
+            "Downloads: use a short OS temp path and an ASCII-only intermediate filename, then move the file into the user download folder. This addresses Windows OSError Errno 22 failures caused by long or unsafe paths during yt-dlp/ffmpeg post-processing.",
+            "Downloads: retry once without metadata/thumbnail embedding when post-processing fails, sanitize Windows-reserved/invalid final filenames, and keep more yt-dlp stderr lines in the diagnostic log.",
+            "Logs: localized toast text is no longer written to the diagnostic log; technical failures stay in English, while Chinese/Unicode is reserved for user data such as track titles and search queries.",
+            "Android: portrait mobile port with x86_64 and arm64 builds, real WindowInsets navigation-bar safe area, separated bottom navigation/player bars, and the playback progress row moved below the title row.",
+            "Android: added the mobile playlist/search-layout fixes from the Android port, including playlist auto-selection and wrapped search hints.",
+        ],
+        items_zh: &[
+            "下载：使用较短的系统临时路径和纯 ASCII 中间文件名，完成后再移动到用户下载目录；解决 yt-dlp/ffmpeg 后处理时长路径或非法路径导致的 Windows OSError Errno 22。",
+            "下载：后处理失败时自动重试一次并跳过元数据/封面嵌入；最终文件名会清理 Windows 非法字符和保留名称，日志保留更多 yt-dlp stderr 行。",
+            "日志：不再把本地化弹窗文案写入诊断日志；技术错误保持英文，中文/Unicode 只用于歌曲名、搜索词等用户数据。",
+            "安卓：竖屏移动端正式包，提供 x86_64 与 arm64 构建；通过真实 WindowInsets 预留系统导航栏安全区，底部导航与播放器分层，播放进度条移动到标题行下方。",
+            "安卓：合入移动端歌单自动选中、搜索提示自动换行等竖屏布局修正。",
+        ],
+    },
+    ReleaseNote {
         version: "0.4.1",
         date: "2026-11-07",
         title_en: "Favourite Tracks, full-window photo, Gitee updates and UI polish",
