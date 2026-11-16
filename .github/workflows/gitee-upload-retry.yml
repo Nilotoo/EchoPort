@@ -20,7 +20,7 @@ jobs:
         if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RUN_ID: "43802266694"
+          RUN_ID: "43803092361"
         run: |
           set -euo pipefail
           code=$(curl -sS -o /tmp/cancel.json -w '%{http_code}' -X POST \
@@ -102,7 +102,7 @@ jobs:
                   prefix = assets_dir / (path.name + ".part")
                   for old_part in assets_dir.glob(path.name + ".part*"):
                       old_part.unlink()
-                  subprocess.run(["split", "-b", "25M", "-d", "-a", "2",
+                  subprocess.run(["split", "-b", "5M", "-d", "-a", "2",
                                   str(path), str(prefix)], check=True)
                   parts = sorted(assets_dir.glob(path.name + ".part[0-9][0-9]"))
                   part_names[path.name] = [p.name for p in parts]
@@ -112,7 +112,7 @@ jobs:
                   upload_files.append(path)
           readme = assets_dir / "README-Windows-installer-parts.txt"
           readme.write_text(
-              "Gitee uploads the two large Windows installers in 25 MiB parts.\n"
+              "Gitee uploads the two large Windows installers in 5 MiB parts.\n"
               "Download every .part00/.part01/... file for the installer, then join them:\n"
               "  Windows: copy /b echoport-...-setup.exe.part* echoport-...-setup.exe\n"
               "  Linux/macOS: cat echoport-...-setup.exe.part* > echoport-...-setup.exe\n"
@@ -177,6 +177,7 @@ jobs:
           raises=[r for r in json.load(urllib.request.urlopen(req,timeout=60)) if r.get("tag_name")==tag]
           assets=[a.get("name") for a in raises[0].get("assets",[])] if raises else []
           print("Gitee assets:", len(assets), assets)
+          missing = []
           expected=[
             "echoport-0.4.2-linux-x86_64.tar.gz",
             "echoport-0.4.2-linux-x86_64.tar.gz.sha256",
