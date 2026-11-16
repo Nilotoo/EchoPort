@@ -20,7 +20,7 @@ jobs:
         if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RUN_ID: "43800423237"
+          RUN_ID: "43802266694"
         run: |
           set -euo pipefail
           code=$(curl -sS -o /tmp/cancel.json -w '%{http_code}' -X POST \
@@ -92,19 +92,48 @@ jobs:
 
           assets_dir = pathlib.Path("assets")
           files = sorted(p for p in assets_dir.iterdir() if p.is_file())
+          # Gitee stalls on some very large release attachments. Upload the two
+          # Windows installers as <=25 MiB parts so the release page still has
+          # a usable mirror; the GitHub release keeps the single-file originals.
+          upload_files = []
+          part_names = {}
+          for path in files:
+              if path.suffix.lower() == ".exe" and path.stat().st_size > 40_000_000:
+                  prefix = assets_dir / (path.name + ".part")
+                  for old_part in assets_dir.glob(path.name + ".part*"):
+                      old_part.unlink()
+                  subprocess.run(["split", "-b", "25M", "-d", "-a", "2",
+                                  str(path), str(prefix)], check=True)
+                  parts = sorted(assets_dir.glob(path.name + ".part[0-9][0-9]"))
+                  part_names[path.name] = [p.name for p in parts]
+                  upload_files.extend(parts)
+                  print("split", path.name, "into", len(parts), "parts", flush=True)
+              else:
+                  upload_files.append(path)
+          readme = assets_dir / "README-Windows-installer-parts.txt"
+          readme.write_text(
+              "Gitee uploads the two large Windows installers in 25 MiB parts.\n"
+              "Download every .part00/.part01/... file for the installer, then join them:\n"
+              "  Windows: copy /b echoport-...-setup.exe.part* echoport-...-setup.exe\n"
+              "  Linux/macOS: cat echoport-...-setup.exe.part* > echoport-...-setup.exe\n"
+              "Verify with the matching .exe.sha256 file. The single-file installers are also on GitHub.\n",
+              encoding="utf-8",
+          )
+          upload_files.append(readme)
+          expected_names = [p.name for p in upload_files]
           for attempt in range(1, 4):
               existing = {a.get("name") for a in get(
                   f"{api}/releases/{release_id}?access_token={urllib.parse.quote(token)}"
               ).get("assets", [])}
-              missing = [p for p in files if p.name not in existing]
-              print(f"attempt {attempt}: existing={len(existing)} missing={[p.name for p in missing]}")
+              missing = [p for p in upload_files if p.name not in existing]
+              print(f"attempt {attempt}: existing={len(existing)} missing={[p.name for p in missing]}", flush=True)
               if not missing:
                   break
               failed = []
               for path in missing:
                   print("uploading", path.name, path.stat().st_size, "bytes", flush=True)
                   cmd = [
-                      "curl", "-fS", "--http1.1", "-H", "Expect:", "--max-time", "1800", "--retry", "2",
+                      "curl", "-fS", "--http1.1", "-H", "Expect:", "--max-time", "300", "--retry", "2",
                       "--retry-delay", "10", "-X", "POST",
                       f"{api}/releases/{release_id}/attach_files",
                       "-F", f"access_token={token}",
@@ -121,10 +150,11 @@ jobs:
                   break
               print("retrying failed:", failed, flush=True)
           else:
-              missing = [p.name for p in files if p.name not in existing]
+              missing = [p.name for p in upload_files if p.name not in existing]
               print("upload incomplete:", missing, flush=True)
               sys.exit(1)
           print("all assets uploaded", flush=True)
+          print("parts:", part_names, flush=True)
           PY
 
       - name: Verify Gitee assets
@@ -152,11 +182,19 @@ jobs:
             "echoport-0.4.2-linux-x86_64.tar.gz.sha256",
             "echoport-0.4.2-linux-x86_64-lean.tar.gz",
             "echoport-0.4.2-linux-x86_64-lean.tar.gz.sha256",
-            "echoport-0.4.2-windows-x86_64-setup.exe",
             "echoport-0.4.2-windows-x86_64-setup.exe.sha256",
-            "echoport-0.4.2-windows-x86_64-lean-installer.exe",
             "echoport-0.4.2-windows-x86_64-lean-installer.exe.sha256",
+            "README-Windows-installer-parts.txt",
           ]
+          for installer in [
+            "echoport-0.4.2-windows-x86_64-setup.exe",
+            "echoport-0.4.2-windows-x86_64-lean-installer.exe",
+          ]:
+            parts=[a for a in assets if a.startswith(installer + ".part")]
+            if installer in assets:
+              continue
+            if not parts:
+              missing.append(installer + " or its .partNN files")
           missing=[name for name in expected if name not in assets]
           if missing:
             print("missing:", missing); exit(1)
