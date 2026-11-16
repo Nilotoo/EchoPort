@@ -20,7 +20,7 @@ jobs:
         if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RUN_ID: "43797801141"
+          RUN_ID: "43800423237"
         run: |
           set -euo pipefail
           code=$(curl -sS -o /tmp/cancel.json -w '%{http_code}' -X POST \
@@ -104,7 +104,7 @@ jobs:
               for path in missing:
                   print("uploading", path.name, path.stat().st_size, "bytes", flush=True)
                   cmd = [
-                      "curl", "-fS", "--max-time", "1800", "--retry", "2",
+                      "curl", "-fS", "--http1.1", "-H", "Expect:", "--max-time", "1800", "--retry", "2",
                       "--retry-delay", "10", "-X", "POST",
                       f"{api}/releases/{release_id}/attach_files",
                       "-F", f"access_token={token}",
