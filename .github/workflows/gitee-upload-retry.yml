@@ -1,0 +1,164 @@
+name: Retry Gitee release assets
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/gitee-upload-trigger
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cancel the stuck release upload if still running
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: "43797801141"
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/cancel.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/cancel" || true)
+          echo "cancel HTTP ${code}"
+          cat /tmp/cancel.json || true
+          for _ in $(seq 1 30); do
+            status=$(curl -sS -H "Authorization: Bearer ${GH_TOKEN}" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))' 2>/dev/null || true)
+            echo "release run status: ${status}"
+            [ "$status" = "completed" ] && break
+            sleep 5
+          done
+
+      - name: Download published GitHub assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: v0.4.2
+        run: |
+          set -euo pipefail
+          mkdir -p assets
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir assets --clobber
+          ls -lh assets
+
+      - name: Upload missing assets to Gitee
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_OWNER: ${{ vars.GITEE_OWNER }}
+          GITEE_REPO: ${{ vars.GITEE_REPO }}
+          TAG: v0.4.2
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import subprocess
+          import sys
+          import time
+          import urllib.parse
+          import urllib.request
+
+          owner = os.environ.get("GITEE_OWNER") or "nilotoo_art"
+          repo = os.environ.get("GITEE_REPO") or "echo-port"
+          token = os.environ["GITEE_TOKEN"]
+          tag = os.environ["TAG"]
+          api = f"https://gitee.com/api/v5/repos/{owner}/{repo}"
+
+          def get(url):
+              req = urllib.request.Request(url, headers={"User-Agent": "EchoPort-release"})
+              return json.load(urllib.request.urlopen(req, timeout=60))
+
+          releases = get(f"{api}/releases?access_token={urllib.parse.quote(token)}&per_page=100")
+          release = next((r for r in releases if r.get("tag_name") == tag), None)
+          if release is None:
+              data = urllib.parse.urlencode({
+                  "access_token": token, "tag_name": tag,
+                  "name": f"EchoPort {tag}", "target_commitish": "main",
+                  "body": f"EchoPort release {tag}",
+              }).encode()
+              req = urllib.request.Request(f"{api}/releases", data=data,
+                                           headers={"User-Agent": "EchoPort-release"})
+              release = json.load(urllib.request.urlopen(req, timeout=60))
+          release_id = release["id"]
+          print("Gitee release", tag, "id", release_id)
+
+          assets_dir = pathlib.Path("assets")
+          files = sorted(p for p in assets_dir.iterdir() if p.is_file())
+          for attempt in range(1, 4):
+              existing = {a.get("name") for a in get(
+                  f"{api}/releases/{release_id}?access_token={urllib.parse.quote(token)}"
+              ).get("assets", [])}
+              missing = [p for p in files if p.name not in existing]
+              print(f"attempt {attempt}: existing={len(existing)} missing={[p.name for p in missing]}")
+              if not missing:
+                  break
+              failed = []
+              for path in missing:
+                  print("uploading", path.name, path.stat().st_size, "bytes", flush=True)
+                  cmd = [
+                      "curl", "-fS", "--max-time", "1800", "--retry", "2",
+                      "--retry-delay", "10", "-X", "POST",
+                      f"{api}/releases/{release_id}/attach_files",
+                      "-F", f"access_token={token}",
+                      "-F", f"file=@{path}",
+                  ]
+                  result = subprocess.run(cmd, capture_output=True, text=True)
+                  if result.returncode != 0:
+                      print("failed:", result.stdout[-1000:], result.stderr[-1000:], flush=True)
+                      failed.append(path.name)
+                  else:
+                      print("ok:", path.name, flush=True)
+                  time.sleep(2)
+              if not failed:
+                  break
+              print("retrying failed:", failed, flush=True)
+          else:
+              missing = [p.name for p in files if p.name not in existing]
+              print("upload incomplete:", missing, flush=True)
+              sys.exit(1)
+          print("all assets uploaded", flush=True)
+          PY
+
+      - name: Verify Gitee assets
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_OWNER: ${{ vars.GITEE_OWNER }}
+          GITEE_REPO: ${{ vars.GITEE_REPO }}
+          TAG: v0.4.2
+        run: |
+          set -euo pipefail
+          owner="${GITEE_OWNER:-nilotoo_art}"
+          repo="${GITEE_REPO:-echo-port}"
+          python3 - <<'PY'
+          import json, os, urllib.parse, urllib.request
+          owner=os.environ.get("GITEE_OWNER") or "nilotoo_art"
+          repo=os.environ.get("GITEE_REPO") or "echo-port"
+          token=os.environ["GITEE_TOKEN"]; tag=os.environ["TAG"]
+          api=f"https://gitee.com/api/v5/repos/{owner}/{repo}"
+          req=urllib.request.Request(f"{api}/releases?access_token={urllib.parse.quote(token)}&per_page=100",headers={"User-Agent":"EchoPort-release"})
+          raises=[r for r in json.load(urllib.request.urlopen(req,timeout=60)) if r.get("tag_name")==tag]
+          assets=[a.get("name") for a in raises[0].get("assets",[])] if raises else []
+          print("Gitee assets:", len(assets), assets)
+          expected=[
+            "echoport-0.4.2-linux-x86_64.tar.gz",
+            "echoport-0.4.2-linux-x86_64.tar.gz.sha256",
+            "echoport-0.4.2-linux-x86_64-lean.tar.gz",
+            "echoport-0.4.2-linux-x86_64-lean.tar.gz.sha256",
+            "echoport-0.4.2-windows-x86_64-setup.exe",
+            "echoport-0.4.2-windows-x86_64-setup.exe.sha256",
+            "echoport-0.4.2-windows-x86_64-lean-installer.exe",
+            "echoport-0.4.2-windows-x86_64-lean-installer.exe.sha256",
+          ]
+          missing=[name for name in expected if name not in assets]
+          if missing:
+            print("missing:", missing); exit(1)
+          print("all expected Windows/Linux assets present")
+          PY
