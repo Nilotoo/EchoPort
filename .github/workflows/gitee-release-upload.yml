@@ -2,9 +2,6 @@ name: Upload release assets to Gitee
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - .github/workflows/gitee-release-upload.yml
 
 permissions:
   contents: read
